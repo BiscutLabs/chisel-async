@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 import chisel3._
-import chiselasync.bundled.{FourPhaseBuffer, TimedCapture}
+import chiselasync.bundled.{FourPhaseBuffer, FourPhaseStage, StructuralFourPhaseBuffer, TimedCapture}
 import chiselasync.core.AsyncModule
 import chiselasync.metadata.{DelayPolicy, ExportDesign, ModelTime}
 import chiselasync.primitives.{DelayLine, Latch}
 import java.nio.file.Paths
 
 class BufferExample extends FourPhaseBuffer(UInt(8.W))
+class StructuralBufferExample extends StructuralFourPhaseBuffer(UInt(8.W))
+class TransformExample extends FourPhaseStage(UInt(8.W), (value: UInt) => value ^ 0x55.U(8.W))
 
 class ConsumerDelay(policy: DelayPolicy) extends AsyncModule {
   val d = IO(Input(UInt(9.W)))
@@ -40,6 +42,8 @@ class ConsumerLatch extends AsyncModule {
 object Consumer {
   def main(args: Array[String]): Unit = {
     ExportDesign.emit(new BufferExample, Paths.get("generated/buffer"))
+    ExportDesign.emit(new StructuralBufferExample, Paths.get("generated/structural"))
+    ExportDesign.emit(new TransformExample, Paths.get("generated/transform"))
     ExportDesign.emit(new ConsumerDelay(DelayPolicy.Transport), Paths.get("generated/transport"))
     ExportDesign.emit(new ConsumerDelay(DelayPolicy.Inertial), Paths.get("generated/inertial"))
     ExportDesign.emit(new ConsumerLatch, Paths.get("generated/latch"))

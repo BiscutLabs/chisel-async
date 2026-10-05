@@ -2,7 +2,7 @@
 
 A Chisel library for asynchronous hardware, developed independently under Apache 2.0.
 
-**Status: functional and digital timing foundation, not the complete library.** Typed four-phase channels, a behavioral buffer, C-element, latch, captured-value delay models, and a checked compiler export run on native Windows. Linux and macOS CI is configured; results on those hosts remain pending.
+**Status: functional and digital timing foundation, not the complete library.** Typed four-phase channels, behavioral and structural storage, C-element, latch, captured-value delay models, and checked compiler export run on native Windows. Windows/Linux CI and a separate WSL Ubuntu run qualify the foundation. macOS qualification is explicitly deferred; see [exact evidence](docs/qualification.md).
 
 The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip implementation. This library works with an existing simulator and does not depend on Chiselator, Yosys, a PDK, ACT or a GPU.
 
@@ -12,13 +12,14 @@ The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip im
 - `FourPhase[T]`: request/data toward the consumer, acknowledgement toward the producer. Supports sized UInt/SInt/Bool and nested Bundle/Vec payloads.
 - `FourPhase.connect`: rejects incompatible shapes, implicit resizing and different reset-domain objects. Exported channels must share their owner's `ResetDomain`.
 - `FourPhaseBuffer[T]`: one captured token, backpressure, stable output data through return to idle, and coordinated reset flushing.
+- `FourPhaseStage[T]`, `StructuralFourPhaseBuffer[T]`: explicit latch composition with a shape-preserving pure transform or identity; zero-delay functional mode.
 - `CElement`: unanimity updates the output; disagreement holds state; reset forces zero. An external four-state diagnostic test checks unknown propagation.
 - `Latch`, `DelayLine`, `ModelTime`: explicit reset, transparent storage, transport/inertial delay, captured values and reset cancellation, with exact integer femtoseconds.
 - `TimedCapture[T]`: pure transform, independent data/control delays and a latch, with transaction identity and observed setup/hold checks.
 - `ExportDesign`: versioned manifest, scoped semantic IDs, payload layouts, reset domains, primitive parameters/resources and timing obligations. Actual RTL elaboration and active bit probes validate the retained endpoints.
-- Packaged SV behavioral views, executable examples, Scala API tests, passive protocol monitors, independent token accounting and six deliberately corrupted-model controls.
+- Packaged SV behavioral views, executable examples, Scala API tests, passive protocol monitors, independent token accounting and eight deliberately corrupted-model controls.
 
-The buffer uses a zero-delay **behavioral storage model**. `TimedCapture` separately exercises declared digital delays; it is not a handshake controller. Structural controllers, physical delay matching, independent-reset bridges, two-phase, QDI, arbitration and memories remain in the [roadmap](docs/roadmap.md).
+`FourPhaseBuffer` retains its zero-delay **behavioral storage model** as a separate integration target. The structural alternatives compose resettable latches but do not establish physical capture pulse widths, delay matching or hazard freedom. `TimedCapture` separately exercises declared digital delays; it does not qualify stage timing. Timed controllers, independent-reset bridges, two-phase, QDI, arbitration and memories remain in the [roadmap](docs/roadmap.md).
 
 ## Build and test
 
@@ -32,6 +33,7 @@ Activate with `.venv\Scripts\Activate.ps1` on Windows or `source .venv/bin/activ
 
 ```text
 python -m pip install --require-hashes -r verification/requirements.txt
+python tools/bootstrap_jdk.py
 python tools/bootstrap.py
 python tools/sbt.py --bootstrap test "examples/runMain chiselasync.examples.EmitFixtures target/generated"
 python tools/check_export.py
@@ -41,9 +43,11 @@ python verification/run_timing.py
 python tools/consumer_smoke.py
 ```
 
-For native Windows simulation, install `mingw-w64-ucrt-x86_64-iverilog` in an [MSYS2 UCRT64 environment](https://www.msys2.org/) and add its `ucrt64/bin` directory to PATH in the shell running Python. This runs Windows executables and does not require WSL. On Linux/macOS, install the build dependencies listed in the CI workflow, run `python tools/build_iverilog.py`, then add `.tools/iverilog/bin` to PATH. The runner checks the engine version rather than silently using another simulator.
+`bootstrap_jdk.py` verifies the exact Temurin 21.0.12.1+1 archive and installs it under `.tools/jdk21`. Outside CI, set `JAVA_HOME` to `.tools/jdk21/jdk-21.0.12.1+1` afterward. It supports Windows/Linux x86-64; macOS setup is deferred. CI pins CPython 3.12.10 on Windows and 3.12.13 on Linux because setup-python has no Windows binary for 3.12.13. Reports retain actual interpreter identities.
 
-`tools/consumer_smoke.py` publishes to the local Ivy cache, creates a separate consumer project under `target/consumers`, and runs its buffer, latch, delays and timing fixtures through the same export/event checks. The proposed Maven coordinates are `io.github.biscutlabs:chisel-async_2.13:0.1.0-SNAPSHOT`; publication namespace ownership remains to be established.
+For native Windows simulation, install `mingw-w64-ucrt-x86_64-iverilog` in an [MSYS2 UCRT64 environment](https://www.msys2.org/) and add its `ucrt64/bin` directory to PATH in the shell running Python. This runs Windows executables and does not require WSL. On Linux, install the build dependencies listed in the CI workflow, run `python tools/build_iverilog.py`, then add `.tools/iverilog/bin` to PATH. The runner checks the engine version rather than silently using another simulator.
+
+`tools/consumer_smoke.py` publishes to the local Ivy cache, creates a separate consumer project under `target/consumers`, and runs its behavioral buffer, structural buffer/transform, latch, delays and timing fixtures through the same export/event checks. The proposed Maven coordinates are `io.github.biscutlabs:chisel-async_2.13:0.1.0-SNAPSHOT`; publication namespace ownership remains to be established.
 
 ## A clockless buffer
 
@@ -65,7 +69,7 @@ Run `python tools/check_export.py generated` to resolve and validate the export.
 
 ## Evidence and limits
 
-The native Windows functional campaign retains its 24 positive event tests and six fault controls. The timing campaign adds seven passing cases, two intended setup/hold violations and five corrupted-model controls. Scala and Python checks cover API misuse, deterministic export, compiler corruption, exact time, independent reference models and harness failures. An unrelated assertion, crash or timeout cannot count as successful rejection.
+The expanded functional campaign requires 52 positive event tests and eight fault controls. The timing campaign adds seven passing cases, two intended setup/hold violations and five corrupted-model controls. Scala and Python checks cover API misuse, deterministic export, compiler corruption, exact time, independent reference models and harness failures. An unrelated assertion, crash or timeout cannot count as successful rejection.
 
 Passive observers enforce handshake order and data hold while independent transaction accounting checks capacity, delivery and reset abortion. Tests include walking-one/walking-zero patterns for every payload bit, full-pipeline reset with a pending request, and completed post-reset transfers. Each single-buffer fixture runs 18 legal two-token orders with both equal and distinct payloads, 68 reset prefixes, and six coincident/one-picosecond boundary cases. The C-element checks 1,024 Boolean transitions. These are bounded functional experiments; see the [verification method and acceptance criteria](docs/verification.md).
 

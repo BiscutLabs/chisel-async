@@ -37,7 +37,7 @@ class Evidence:
 
 
 class BufferMonitor:
-    def __init__(self, dut, read_payload, fields, evidence, capacity):
+    def __init__(self, dut, read_payload, fields, evidence, capacity, transform=lambda value: value):
         self.dut, self.read_payload, self.fields, self.evidence = dut, read_payload, fields, evidence
         self.channels = {name: FourPhaseContract() for name in ("in", "out")}
         self.ledger = TokenLedger(capacity)
@@ -45,6 +45,7 @@ class BufferMonitor:
         self.launched = {"in": None, "out": None}
         self.tasks = []
         self.failure = None
+        self.transform = transform
 
     def start(self):
         self.ledger.reset()
@@ -96,7 +97,7 @@ class BufferMonitor:
         elif (signal, value) == ("ack", 1):
             value = self.read_payload(self.dut, port)
             if port == "in":
-                self.ledger.accept(value)
+                self.ledger.accept(self.transform(value))
             else:
                 self.ledger.deliver(value)
             self.evidence.record("accepted" if port == "in" else "delivered",

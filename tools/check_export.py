@@ -285,7 +285,8 @@ def main():
     parser.add_argument("directories", type=Path, nargs="*")
     args = parser.parse_args()
     fixtures = ("buffer", "wide", "packet", "pipeline", "celement", "latch", "transport", "inertial",
-                "timed_early", "timed_equal", "timed_late")
+                "timed_early", "timed_equal", "timed_late", "structural", "structural_wide",
+                "structural_packet", "structural_pipeline", "transform")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

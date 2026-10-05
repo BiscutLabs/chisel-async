@@ -17,7 +17,14 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = {
     "buffer": "BufferExample", "wide": "WideBufferExample",
     "packet": "PacketBufferExample", "pipeline": "PipelineExample", "celement": "CElementExample",
+    "structural": "StructuralBufferExample", "structural_wide": "StructuralWideExample",
+    "structural_packet": "StructuralPacketExample", "structural_pipeline": "StructuralPipelineExample",
+    "transform": "TransformExample",
 }
+WIDTHS = {"buffer": 8, "wide": 65, "packet": 22, "pipeline": 8,
+          "structural": 8, "structural_wide": 65, "structural_packet": 22,
+          "structural_pipeline": 8, "transform": 8}
+PIPELINES = {"pipeline", "structural_pipeline"}
 CONTROLS = {
     "payload-invert": ("transaction_stream", "PAYLOAD_MISMATCH", "out_bits <= in_bits;", "out_bits <= ~in_bits;"),
     "request-glitch": ("transaction_stream", "REQUEST_WITHDRAWN", "out_req <= 1'b1;",
@@ -31,6 +38,14 @@ CONTROLS = {
     "wide-bit-swap": ("payload_bit_coverage", "PAYLOAD_MISMATCH", "out_bits <= in_bits;",
         "out_bits <= {in_bits[64:34], in_bits[32], in_bits[33], in_bits[31:0]};"),
 }
+STRUCTURAL_CONTROLS = {
+    # Permanent regression for a stale transparent acknowledgement enable.
+    "ack-reopen": ("pending_request_and_capacity", "CAPACITY_EXCEEDED",
+        ".enable (take | ack)", ".enable (take | ~in_req_0)"),
+    "transform-bypass": ("transaction_stream", "PAYLOAD_MISMATCH",
+        "in_bits_0 ^ 8'h55", "in_bits_0"),
+}
+ALL_CONTROLS = {**CONTROLS, **STRUCTURAL_CONTROLS}
 
 
 def run_name(fixture, control):
@@ -41,7 +56,7 @@ def case_names(fixture: str) -> set[str]:
     if fixture == "celement":
         return {"celement_exhaustive_boolean_sequences", "celement_unknowns_and_reset_dominance"}
     result = {"transaction_stream", "reset_aborts_and_restarts", "payload_bit_coverage", "reset_full_capacity"}
-    if fixture != "pipeline":
+    if fixture not in PIPELINES:
         result.add("pending_request_and_capacity")
         result.add("bounded_handshake_schedules")
     return result
@@ -80,7 +95,7 @@ def verify_results(xml: Path, expected: set[str], diagnostic: str | None, log: P
 
 
 def check_activity(fixture: str, case: str, record: dict):
-    widths = {"buffer": 8, "wide": 65, "packet": 22, "pipeline": 8}
+    widths = WIDTHS
     required = {
         "transaction_stream": {"stream_transactions": 40},
         "reset_aborts_and_restarts": {"reset_phases": 5},
@@ -97,7 +112,7 @@ def check_activity(fixture: str, case: str, record: dict):
     if fixture == "celement":
         return
     tokens = record.get("tokens", {})
-    capacity = 2 if fixture == "pipeline" else 1
+    capacity = 2 if fixture in PIPELINES else 1
     expected = {
         "transaction_stream": (40, 40, 40, 0),
         "payload_bit_coverage": (2 * widths[fixture],) * 3 + (0,),
@@ -156,9 +171,11 @@ def run_one(fixture: str, control: str | None, output: Path, generated_root: Pat
         targets = 0
         for source in sources:
             contents = source.read_text(encoding="utf-8")
-            if source.name == "ChiselAsyncFourPhaseStorage_v1.sv":
+            target_name = (f"{FIXTURES[fixture]}.sv" if control in STRUCTURAL_CONTROLS
+                           else "ChiselAsyncFourPhaseStorage_v1.sv")
+            if source.name == target_name:
                 targets += 1
-                _, _, old, replacement = CONTROLS[control]
+                _, _, old, replacement = ALL_CONTROLS[control]
                 if contents.count(old) != 1:
                     raise RuntimeError("Negative-control mutation target missing or ambiguous")
                 contents = contents.replace(old, replacement)
@@ -168,8 +185,8 @@ def run_one(fixture: str, control: str | None, output: Path, generated_root: Pat
         sources = copies
         if targets != 1:
             raise RuntimeError("Negative-control model missing or ambiguous")
-    expected = {CONTROLS[control][0]} if control else case_names(fixture)
-    diagnostic = CONTROLS[control][1] if control else None
+    expected = {ALL_CONTROLS[control][0]} if control else case_names(fixture)
+    diagnostic = ALL_CONTROLS[control][1] if control else None
     # Invalidate every expected evidence file, not just the aggregate report.
     for case in expected:
         (build_dir / f"{case}.evidence.json").write_text('{"status":"RUNNING"}\n', encoding="utf-8")
@@ -235,11 +252,13 @@ def execute_campaign(runs: list[tuple[str, str | None]], output: Path, generated
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--fixture", choices=FIXTURES)
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--fixture", choices=FIXTURES)
+    selection.add_argument("--fixtures", choices=FIXTURES, nargs="+")
     parser.add_argument("--output", type=Path, default=ROOT / "target" / "verification")
     parser.add_argument("--generated", type=Path, default=ROOT / "target" / "generated")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
-    parser.add_argument("--control", choices=CONTROLS, help=argparse.SUPPRESS)
+    parser.add_argument("--control", choices=ALL_CONTROLS, help=argparse.SUPPRESS)
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -258,11 +277,17 @@ def main() -> int:
         name = run_name(args.fixture, args.control)
         (output / f"{name}.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
         return 0
-    selected = [args.fixture] if args.fixture else list(FIXTURES)
+    selected = args.fixtures or ([args.fixture] if args.fixture else list(FIXTURES))
+    if len(set(selected)) != len(selected):
+        parser.error("duplicate fixture selection")
     runs = [(fixture, None) for fixture in selected]
     runs += [("buffer", control) for control in CONTROLS if control != "wide-bit-swap"]
     if "wide" in selected:
         runs.append(("wide", "wide-bit-swap"))
+    if "structural" in selected:
+        runs.append(("structural", "ack-reopen"))
+    if "transform" in selected:
+        runs.append(("transform", "transform-bypass"))
     import cocotb
     metadata = {"platform": platform.platform(), "machine": platform.machine(),
               "python": sys.version, "cocotb": cocotb.__version__, "simulator": version,

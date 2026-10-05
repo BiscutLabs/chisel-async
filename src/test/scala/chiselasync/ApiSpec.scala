@@ -2,7 +2,7 @@
 package chiselasync
 
 import chisel3._
-import chiselasync.bundled.FourPhaseBuffer
+import chiselasync.bundled.{FourPhaseBuffer, FourPhaseStage, StructuralFourPhaseBuffer}
 import chiselasync.core.AsyncModule
 import chiselasync.primitives.CElement
 import chiselasync.protocol.FourPhase
@@ -38,6 +38,21 @@ class ApiSpec extends AnyFunSuite {
     assert(emitted.contains("ChiselAsyncCElement_v1"))
     assert(getClass.getResource("/chiselasync/sv/ChiselAsyncCElement_v1.sv") != null)
     assert(getClass.getResource("/chiselasync/sv/ChiselAsyncFourPhaseStorage_v1.sv") != null)
+  }
+
+  test("structural storage preserves nested payloads without a behavioral controller or clock") {
+    val emitted = ChiselStage.emitCHIRRTL(new StructuralFourPhaseBuffer(new Packet))
+    assert(emitted.contains("ChiselAsyncLatch_v1"))
+    assert(emitted.contains("parameter WIDTH = 76"))
+    assert(!emitted.contains("ChiselAsyncFourPhaseStorage_v1"))
+    assert(!emitted.contains("input clock"))
+  }
+
+  test("stage transform rejects an implicit payload resize") {
+    val error = intercept[IllegalArgumentException] {
+      ChiselStage.emitCHIRRTL(new FourPhaseStage(UInt(8.W), (value: UInt) => value.pad(9)))
+    }
+    assert(error.getMessage.contains("identical field types, widths and shape"))
   }
 
   test("unknown and zero widths are rejected before emission") {

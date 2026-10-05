@@ -40,7 +40,7 @@ def main():
                "-Dsbt.override.build.repos=true", f"-Dsbt.repository.config={ROOT / 'project/repositories'}",
                "-jar", str(ROOT / ".tools/sbt-launch-1.12.4.jar"), "run"]
     subprocess.run(command, cwd=consumer, env=environment, check=True, timeout=180)
-    subprocess.run([sys.executable, str(ROOT / "verification/run.py"), "--fixture", "buffer",
+    subprocess.run([sys.executable, str(ROOT / "verification/run.py"), "--fixtures", "buffer", "structural", "transform",
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification")],
                    cwd=ROOT, check=True, timeout=180)
     subprocess.run([sys.executable, str(ROOT / "verification/run_timing.py"),

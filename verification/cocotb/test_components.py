@@ -10,9 +10,15 @@ from cocotb.triggers import ReadOnly, Timer, with_timeout
 from observers import BufferMonitor, Evidence
 from reference import reset_prefixes, two_token_schedules
 
-IS_CELEMENT = os.environ.get("FIXTURE") == "celement"
-IS_PACKET = os.environ.get("FIXTURE") == "packet"
-IS_SINGLE = os.environ.get("FIXTURE") in ("buffer", "wide", "packet")
+FIXTURE = os.environ["FIXTURE"]
+IS_CELEMENT = FIXTURE == "celement"
+IS_PACKET = FIXTURE in ("packet", "structural_packet")
+IS_SINGLE = FIXTURE not in ("pipeline", "structural_pipeline", "celement")
+
+
+def expected_payload(value):
+    # Independent integer oracle for the fixture's declared byte-wise transform.
+    return value ^ 0x55 if FIXTURE == "transform" else value
 
 
 def observed_test(*, single=False):
@@ -21,7 +27,7 @@ def observed_test(*, single=False):
         async def run(dut):
             evidence = Evidence(test.__name__)
             monitor = BufferMonitor(dut, payload, lambda port: payload_fields(dut, port),
-                                    evidence, 1 if IS_SINGLE else 2)
+                                    evidence, 1 if IS_SINGLE else 2, expected_payload)
             try:
                 await reset_buffer(dut, evidence)
                 monitor.start()
@@ -142,14 +148,14 @@ async def transaction_stream(dut, monitor):
         for value in expected:
             await wait_value(dut.out_req, 1)
             await ReadOnly()
-            assert payload(dut, "out") == value, "PAYLOAD_MISMATCH"
+            assert payload(dut, "out") == expected_payload(value), "PAYLOAD_MISMATCH"
             await tick(sink_rng.randint(2, 9))
             assert int(dut.out_req.value) == 1, "REQUEST_WITHDRAWN"
-            assert payload(dut, "out") == value, "DATA_CHANGED_UNDER_BACKPRESSURE"
+            assert payload(dut, "out") == expected_payload(value), "DATA_CHANGED_UNDER_BACKPRESSURE"
             dut.out_ack.value = 1
             await wait_value(dut.out_req, 0)
             await tick(sink_rng.randint(1, 3))
-            assert payload(dut, "out") == value, "DATA_CHANGED_BEFORE_RETURN_IDLE"
+            assert payload(dut, "out") == expected_payload(value), "DATA_CHANGED_BEFORE_RETURN_IDLE"
             dut.out_ack.value = 0
             completed += 1
             await tick()
@@ -181,16 +187,16 @@ async def pending_request_and_capacity(dut, monitor):
     dut.in_req.value = 1
     await tick(5)
     assert int(dut.in_ack.value) == 0, "CAPACITY_EXCEEDED"
-    assert payload(dut, "out") == first, "OVERWROTE_FULL_BUFFER"
+    assert payload(dut, "out") == expected_payload(first), "OVERWROTE_FULL_BUFFER"
     dut.out_ack.value = 1
     await tick()
     assert int(dut.out_req.value) == 0
-    assert payload(dut, "out") == first
+    assert payload(dut, "out") == expected_payload(first)
     assert int(dut.in_ack.value) == 0
     dut.out_ack.value = 0
     await tick()
     assert int(dut.in_ack.value) == int(dut.out_req.value) == 1
-    assert payload(dut, "out") == second, "PENDING_REQUEST_LOST"
+    assert payload(dut, "out") == expected_payload(second), "PENDING_REQUEST_LOST"
     dut.in_req.value = 0
     await tick()
     dut.out_ack.value = 1
@@ -230,7 +236,7 @@ async def reset_aborts_and_restarts(dut, monitor):
         dut.in_req.value = 1
         await tick()
         assert int(dut.out_req.value) == 1, "RESET_PREVENTED_PROGRESS"
-        assert payload(dut, "out") == fresh, "PAYLOAD_MISMATCH"
+        assert payload(dut, "out") == expected_payload(fresh), "PAYLOAD_MISMATCH"
         dut.in_req.value = 0
         await tick()
         dut.out_ack.value = 1
@@ -248,7 +254,7 @@ async def transfer(dut, value):
     await wait_value(dut.in_ack, 1)
     await wait_value(dut.out_req, 1)
     await tick()
-    assert payload(dut, "out") == value, "PAYLOAD_MISMATCH"
+    assert payload(dut, "out") == expected_payload(value), "PAYLOAD_MISMATCH"
     dut.in_req.value = 0
     await wait_value(dut.in_ack, 0)
     await tick()
@@ -316,7 +322,7 @@ async def apply_event(dut, event, tokens):
         dut.in_req.value = 0
     elif action == "a":
         assert int(dut.out_req.value) == 1, "EXPECTED_OFFER"
-        assert payload(dut, "out") == tokens[index], "PAYLOAD_MISMATCH"
+        assert payload(dut, "out") == expected_payload(tokens[index]), "PAYLOAD_MISMATCH"
         dut.out_ack.value = 1
     else:
         assert int(dut.out_req.value) == 0, "EXPECTED_OUTPUT_RETURN"

@@ -20,6 +20,25 @@ For verification accounting, input acknowledgement rising accepts a token and ou
 
 The SV view updates data and request in the same zero-delay scheduling interval; sample offered payloads after settling. Passive control listeners remain armed on value changes. The data-hold observer allows initial settling at the request timestamp, then checks subsequent changes throughout the handshake. It is not a gate-level delta-glitch or setup/hold checker. No setup/hold guarantee follows. This is a functional storage primitive used to establish interfaces and a reference corpus before structural controller implementation.
 
+## Structural four-phase stage (functional model)
+
+`FourPhaseStage[T]` applies a pure, shape-preserving transform and implements the same one-entry contract using four explicit resettable latch instances. `StructuralFourPhaseBuffer[T]` selects the identity transform. These are zero-delay digital compositions, not mapped asynchronous cells.
+
+The control specification is independent of the implementation equations:
+
+| Condition | Required action |
+| --- | --- |
+| Empty, input acknowledgement low, request high, output acknowledgement low | Capture the transformed payload, acknowledge input, reserve storage and offer output. |
+| Input request falls | Lower input acknowledgement, even while output is stalled. |
+| Offered output is acknowledged | Withdraw output request; retain payload and reservation. |
+| Output acknowledgement falls after delivery | Release reservation; a pending new input may then be accepted. |
+| Original input request remains high after output completes | Retain input acknowledgement; do not accept that request again. |
+| Coordinated reset | Clear every latch and handshake output; abort undelivered tokens. |
+
+Control latches remember occupancy, output return and input acknowledgement independently. The output-return guard must clear before a fresh capture can start; clearing occupancy alone is insufficient. Capture enables close through zero-delay feedback in the declared latch view. Inputs and outputs are observed after settling, and external drivers obey the channel contract above. No minimum pulse width or arbitrary gate-delay tolerance is specified. A physical implementation requires a separately qualified controller and bundled-data timing constraints; the independent `TimedCapture` tests do not establish these properties for this stage.
+
+This is our functional decomposition, not a reproduction of a published controller. For the distinction between handshake correctness and physical bundled-data delay matching, see Sparsø, [Introduction to Asynchronous Circuit Design](https://backend.orbit.dtu.dk/ws/portalfiles/portal/215895041/JSPA_async_book_2020_PDF.pdf), §2.4.1 and chapter 10. The existing transaction ledger, bounded event orders and reset prefixes remain the external oracle; they do not duplicate latch equations.
+
 ## C-element
 
 The two-input element starts only after explicit reset. Reset forces output zero regardless of inputs. After release, `(0,0)` forces zero, `(1,1)` forces one, and disagreement retains the previous output. No implicit initialization is assumed.

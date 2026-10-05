@@ -2,7 +2,7 @@
 package chiselasync.examples
 
 import chisel3._
-import chiselasync.bundled.FourPhaseBuffer
+import chiselasync.bundled.{FourPhaseBuffer, FourPhaseStage, StructuralFourPhaseBuffer}
 import chiselasync.core.AsyncModule
 import chiselasync.primitives.CElement
 import chiselasync.metadata.{DelayPolicy, ExportDesign}
@@ -22,11 +22,33 @@ class Packet extends Bundle {
 
 class PacketBufferExample extends FourPhaseBuffer(new Packet)
 
+class StructuralBufferExample extends StructuralFourPhaseBuffer(UInt(8.W))
+class StructuralWideExample extends StructuralFourPhaseBuffer(UInt(65.W))
+class StructuralPacketExample extends StructuralFourPhaseBuffer(new Packet)
+class TransformExample extends FourPhaseStage(UInt(8.W), (value: UInt) => value ^ 0x55.U(8.W))
+
 class PipelineExample extends AsyncModule {
   val in = IO(Flipped(new FourPhase(UInt(8.W), Some(resetDomain))))
   val out = IO(new FourPhase(UInt(8.W), Some(resetDomain)))
   private val first = Module(new FourPhaseBuffer(UInt(8.W), resetDomain))
   private val second = Module(new FourPhaseBuffer(UInt(8.W), resetDomain))
+  first.reset := reset
+  second.reset := reset
+  FourPhase.connect(first.in, in)
+  FourPhase.connect(second.in, first.out)
+  FourPhase.connect(out, second.out)
+  contract.capacity(2)
+  contract.channel("in", in, "input")
+  contract.channel("out", out, "output")
+  contract.child("first", first)
+  contract.child("second", second)
+}
+
+class StructuralPipelineExample extends AsyncModule {
+  val in = IO(Flipped(new FourPhase(UInt(8.W), Some(resetDomain))))
+  val out = IO(new FourPhase(UInt(8.W), Some(resetDomain)))
+  private val first = Module(new StructuralFourPhaseBuffer(UInt(8.W), resetDomain))
+  private val second = Module(new StructuralFourPhaseBuffer(UInt(8.W), resetDomain))
   first.reset := reset
   second.reset := reset
   FourPhase.connect(first.in, in)
@@ -62,6 +84,11 @@ object EmitFixtures {
       "wide" -> (() => new WideBufferExample),
       "packet" -> (() => new PacketBufferExample),
       "pipeline" -> (() => new PipelineExample),
+      "structural" -> (() => new StructuralBufferExample),
+      "structural_wide" -> (() => new StructuralWideExample),
+      "structural_packet" -> (() => new StructuralPacketExample),
+      "structural_pipeline" -> (() => new StructuralPipelineExample),
+      "transform" -> (() => new TransformExample),
       "celement" -> (() => new CElementExample),
       "latch" -> (() => new LatchExample),
       "transport" -> (() => new DelayExample(DelayPolicy.Transport)),
