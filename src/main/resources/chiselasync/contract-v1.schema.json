@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:chisel-async:contract:v1",
+  "title": "chisel-async qualified behavioral export v1",
+  "type": "object",
+  "required": ["semantic_sha256", "manifest"],
+  "additionalProperties": false,
+  "properties": {
+    "semantic_sha256": {"$ref": "#/$defs/hash"},
+    "manifest": {
+      "type": "object",
+      "required": ["schema", "time_unit", "time_range", "top", "toolchain", "resources", "rtl_semantic_sha256", "design"],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {"const": "chisel-async-contract-v1"},
+        "time_unit": {"const": "fs"},
+        "time_range": {"const": "0..9223372036854775807"},
+        "top": {"$ref": "#/$defs/id"},
+        "toolchain": {"type": "object", "required": ["chisel", "scala", "firtool", "options"]},
+        "resources": {"type": "object", "additionalProperties": {"$ref": "#/$defs/hash"}},
+        "rtl_semantic_sha256": {"type": "object", "additionalProperties": {"$ref": "#/$defs/hash"}},
+        "design": {"$ref": "#/$defs/node"}
+      }
+    }
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "id": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"},
+    "time": {"type": "string", "pattern": "^(0|[1-9][0-9]*)$", "description": "Exact fs; validator additionally enforces signed 64-bit range."},
+    "endpoint": {
+      "type": "object", "required": ["id", "rtl_path", "width", "source"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "rtl_path": {"type": "string"},
+        "width": {"type": "integer", "minimum": 1}, "source": {"type": "string"}}
+    },
+    "channel": {
+      "type": "object", "required": ["id", "protocol", "role", "request", "data", "acknowledge", "reset_domain", "layout", "phases", "environment"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "protocol": {"const": "four-phase-bundled-v1"},
+        "role": {"enum": ["input", "output"]}, "layout": {"type": "array", "minItems": 1},
+        "phases": {"const": ["00", "10", "11", "01", "00"]}}
+    },
+    "primitive": {
+      "type": "object", "required": ["id", "rtl_path", "model", "view", "version", "resource", "parameters", "reset", "reset_domain", "effects", "ports"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "view": {"const": "behavioral"}, "version": {"const": 1},
+        "parameters": {"type": "object", "additionalProperties": {"type": "string", "pattern": "^-?[0-9]+$"}},
+        "ports": {"type": "array", "minItems": 1}}
+    },
+    "timing": {
+      "type": "object", "required": ["id", "kind", "launch", "transaction", "data_valid", "capture", "captured", "setup_fs", "hold_fs", "mode", "provenance", "pulse_policy"],
+      "properties": {"id": {"$ref": "#/$defs/id"}, "kind": {"const": "bundled-setup-hold-v1"},
+        "setup_fs": {"$ref": "#/$defs/time"}, "hold_fs": {"$ref": "#/$defs/time"}, "mode": {"const": "digital-model"}}
+    },
+    "node": {
+      "type": "object", "required": ["rtl_path", "module", "reset_domain", "capacity", "endpoints", "channels", "primitives", "timing", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "rtl_path": {"type": "string"}, "module": {"$ref": "#/$defs/id"}, "reset_domain": {"type": "string"},
+        "capacity": {"oneOf": [{"type": "null"}, {"type": "integer", "minimum": 1}]},
+        "endpoints": {"type": "array", "items": {"$ref": "#/$defs/endpoint"}},
+        "channels": {"type": "array", "items": {"$ref": "#/$defs/channel"}},
+        "primitives": {"type": "array", "items": {"$ref": "#/$defs/primitive"}},
+        "timing": {"type": "array", "items": {"$ref": "#/$defs/timing"}},
+        "children": {"type": "array", "items": {"type": "object", "required": ["id", "contract"],
+          "properties": {"id": {"$ref": "#/$defs/id"}, "contract": {"$ref": "#/$defs/node"}}}}
+      }
+    }
+  }
+}

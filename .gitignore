@@ -1,0 +1,11 @@
+.tools/
+.venv/
+target/
+project/target/
+project/project/
+examples/target/
+.bsp/
+.metals/
+__pycache__/
+.pytest_cache/
+*.pyc

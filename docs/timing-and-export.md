@@ -1,0 +1,53 @@
+# Digital timing and compiler export, version 1
+
+This slice qualifies explicit digital model delays and a pinned compiler route. It does not establish characterized cell delays, hazard freedom, physical setup/hold, QDI, analog metastability or synthesis correctness. `TimedCapture[T]` is a transform/delay/latch fixture with one outstanding launch; the functional four-phase buffer remains a separate behavioral integration target.
+
+## Exact time and primitive contracts
+
+`ModelTime` stores nonnegative signed 64-bit femtoseconds, from 0 through 9223372036854775807. Addition and picosecond conversion check overflow. `ticks(precision)` rejects inexact conversion; there is no rounding. Serialized times are decimal strings so JSON consumers cannot silently lose integer precision. Delay parameters must be strictly positive. The qualified event lane uses `timeunit 1fs`, `timeprecision 1fs` and Icarus 13.0; no coarser simulator lane is claimed.
+
+`Latch(width, resetValue)` is transparent when enable is one, holds when enable is zero, and asynchronously resets to its explicit value. Unknown reset produces unknown output. Unknown enable retains a known value only when both hold and transparent outcomes agree; otherwise it produces uncertainty. Explicit reset is required before relying on initialized state. This is a functional latch view, with setup/hold observed separately.
+
+`DelayLine(width, delay, policy)` captures the entire input value at scheduling time. Transport delivers every captured input vector after the declared interval. Inertial suppresses a candidate when a later input change precedes its deadline. A candidate due at the same timestamp as the next input change is delivered: pulses shorter than the interval are suppressed; equal and longer pulses propagate. The implementation uses captured packets with reset epochs and sequence numbers; the independent Python oracle uses a priority queue.
+
+Reset clears output and invalidates queued deliveries. Release schedules the current input even if that input did not change during reset. Reset presented before a due delivery takes precedence. The coincident-reset experiment drives the settled input vector at the beginning of the time step, before NBA delivery, using cocotb `Immediate`. A reset introduced later in the same time step cannot retroactively erase an already-observed delivery. The qualified stimulus has one settled input vector per timestamp; arbitrary intra-timestamp glitches are outside this model contract. Unknown reset invalidates initialization; another known reset is required before normal operation.
+
+## Timing experiment and independent checker
+
+`TimedCapture` packs a 32-bit transaction identity with the transformed payload, delays that data independently of the launch signal, and feeds a latch. The delayed launch closes the latch. The driver does not wait for data validity before allowing capture. The observer records the actual capture edge and reads the captured value after NBA settling; waiting for the value does not change the recorded capture time.
+
+For data-valid time `tD`, capture time `tC`, setup `s` and hold `h`, the checker requires `tC >= tD + s` and no subsequent protected-data change before `tC + h`. Equality passes. Identity must match the pending launch; equal payload bits alone never establish fresh validity. A fresh identity may be valid before launch. IDs cannot be reused within a reset epoch. Reset aborts pending launches and clears validity. Each completed case checks `launches = captures + aborted`.
+
+The data delay is 8000 fs and setup/hold are each 2000 fs. Independent fixtures capture at 9999, 10000 and 10001 fs: early fails, equal and late pass. Separate hold experiments change the protected identity, with unchanged payload, at capture +1999/+2000/+2001 fs. The first fails and the other two pass. Successful setup fixtures exercise both polarities of every payload and identity bit, repeated equal payloads, one pending reset and a completed restart.
+
+The latch test makes 65 value/hold/reset/uncertainty observations. Each delay test drives 22 input/reset events, including pulse widths 9999/10000/10001 fs, overlapping distinct captured values, reset while pending, reset coincident with delivery, and release with unchanged data. The entire observed output transition sequence must equal the independent queue oracle.
+
+Five additional model mutations must fail with exact assertions: disable reset cancellation (`DELAY_TRACE_MISMATCH`), change transport to inertial (`DELAY_TRACE_MISMATCH`), erase transaction identity (`TIMING_DATA_NOT_VALID`), suppress delivery/capture (`TIMING_MISSING_CAPTURE`), and invert latch data (`TIMING_CAPTURED_VALUE`). Setup and hold violations require `TIMING_SETUP` and `TIMING_HOLD`. A crash, timeout, inactive observer or different assertion fails the campaign.
+
+## Scoped contract and compiler route
+
+Each `AsyncModule` owns a `DesignContract` and a `ResetDomain`. Share the same domain object when composing child buffers; identical labels on different objects do not authorize a connection. Register child contracts explicitly with `contract.child`. Channels have typed payload layouts, ordered protocol phases and owner-domain references. Nodes may declare token capacity. Primitive descriptors identify a semantic instance, model/version, selected behavioral view, exact parameters, ports, reset and effects. Timing obligations refer to registered endpoints and carry units, bounds, mode and provenance.
+
+Legacy unexported channels may both omit the optional domain. Mixing a bound and an unbound endpoint is rejected; export registration always requires the owner's explicit domain. When migrating a composed design, pass `Some(resetDomain)` to its boundary channels and `resetDomain` to child buffers.
+
+`contract.endpoint` creates a retained ground `ca_*` output. Primitive and child instance names receive reserved prefixes, avoiding Verilog keywords such as `cell`. Names are candidates until checked against actual compiled RTL. Semantic IDs are local to each registry and qualified by explicit child IDs; no mutable global registry is used. Duplicate local IDs are rejected.
+
+`ExportDesign.emit` writes SystemVerilog, the post-lowering HW MLIR snapshot and `contract.json`. The packaged [JSON schema](../src/main/resources/chiselasync/contract-v1.schema.json) describes its shape; `tools/check_export.py` also enforces cross-references, widths, layouts, bounds, domain consistency and exact tool/options support. Current options are `-O=debug`, `--no-dedup`, `--preserve-values=named`, `--strip-fir-debug-info`, and `--lowering-options=disallowPortDeclSharing`, using Chisel 7.16.0/firtool 1.160.0.
+
+The exporter checks the loaded Chisel and Scala runtime identities (7.16.0 and 2.13.18), and checks the actual firtool header before writing the manifest. Dependency eviction or a different native compiler cannot silently inherit the qualified tuple merely from build declarations.
+
+The sidecar is intentional: Chisel [annotations](https://www.chisel-lang.org/docs/explanations/annotations) are compiler implementation details, and name hints or retention annotations alone are not evidence of a preserved mapping. Primitive views are packaged through the supported [external-module resource API](https://www.chisel-lang.org/docs/explanations/blackboxes).
+
+Validation compiles the emitted sources with Icarus and reads its elaborated module, port and parameter inventory. Every declared primitive and node must resolve exactly once; extra/unregistered instances fail. Resource content hashes and normalized RTL hashes must match. A generated SV miter then drives every top input and primitive output with walking bits and complements. It compares each anchor to its independently reconstructed source expression, including nested payload packing, and requires both polarities on every anchor bit. Reset comparisons check child/primitive bindings against the root reset. These probe forces are for compiler mapping only; behavioral campaigns run the original design without them.
+
+`resolved.json` records success, resolved paths, mapping-check count, semantic identity, exact emitted-source hashes, HW-IR hash and resolver hash. Functional and timing runners revalidate exports before execution. Only the selected debug route and supported source-target forms are qualified; unsupported forms fail. This finite mapping corpus is not a formal equivalence proof for arbitrary transformations. The HW snapshot is retained for inspection/provenance; no general MLIR importer is claimed.
+
+## Identity, evidence and replay
+
+The semantic hash covers compact, insertion-ordered UTF-8 JSON for the manifest. It includes resource hashes and normalized emitted RTL, so changing datapath logic changes identity even when ports do not. Resource normalization converts CRLF to LF and canonicalizes trailing whitespace/newline. RTL normalization additionally removes firtool's tab-prefixed source-location comments. Absolute checkout paths, wall-clock timestamps and simulator temporary paths do not enter semantic identity. Exact source bytes are separately hashed in resolution/run evidence. Repeated elaboration, different widths, paths containing spaces and copied exports test stability and isolation.
+
+Compiler fault tests rehash deliberately corrupted descriptors/RTL where necessary to exercise resolution rather than merely checksum rejection. They cover duplicate/ambiguous IDs, missing ports, incorrect widths/parameters, missing/altered resources, unregistered primitives, reset miswiring and permuted anchor bits. A stale manifest or duplicate JSON key also fails.
+
+Run the commands in the README. Timing cases are individually selectable with `python verification/run_timing.py --job <name>`. Reports under `target/verification/timing` retain the full selected inventory, all completed results and unrun cases after failure; XML/logs, exact-fs traces, capture values, coverage and source/checker hashes accompany each case. The unrelated consumer publishes/loads the JAR locally and repeats the complete timing campaign. CI performs the same work on native Windows, Linux and macOS; only executed host results count as evidence.
+
+This is a development regression corpus informed by the prior ASYNC-Chisel, chisel-click, ACT and Workcraft comparison in [verification.md](verification.md). It adds falsifiable timing and compiler experiments rather than treating printed examples or matching two copies of the implementation as an oracle. Independent contract review and a frozen release campaign remain separate qualification work.

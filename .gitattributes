@@ -1,0 +1,6 @@
+* text=auto
+*.scala text eol=lf
+*.sv text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
