@@ -2,7 +2,7 @@
 
 A Chisel library for asynchronous hardware, developed independently under Apache 2.0.
 
-**Status: functional and digital timing foundation, not the complete library.** Typed four-phase channels, behavioral and structural storage, C-element, latch, captured-value delay models, and checked compiler export run on native Windows. Windows/Linux CI and a separate WSL Ubuntu run qualify the foundation. macOS qualification is explicitly deferred; see [exact evidence](docs/qualification.md).
+**Status: controller redesign required before library expansion.** The behavioral models, timing/compiler foundation and independent tests remain useful. The custom structural stage has a reproduced internal delay race and is withdrawn from the supported API. See the [review response and revised priorities](docs/review-response.md). Windows/Linux evidence remains recorded; macOS qualification is explicitly deferred.
 
 The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip implementation. This library works with an existing simulator and does not depend on Chiselator, Yosys, a PDK, ACT or a GPU.
 
@@ -12,14 +12,19 @@ The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip im
 - `FourPhase[T]`: request/data toward the consumer, acknowledgement toward the producer. Supports sized UInt/SInt/Bool and nested Bundle/Vec payloads.
 - `FourPhase.connect`: rejects incompatible shapes, implicit resizing and different reset-domain objects. Exported channels must share their owner's `ResetDomain`.
 - `FourPhaseBuffer[T]`: one captured token, backpressure, stable output data through return to idle, and coordinated reset flushing.
-- `FourPhaseStage[T]`, `StructuralFourPhaseBuffer[T]`: explicit latch composition with a shape-preserving pure transform or identity; zero-delay functional mode.
 - `CElement`: unanimity updates the output; disagreement holds state; reset forces zero. An external four-state diagnostic test checks unknown propagation.
 - `Latch`, `DelayLine`, `ModelTime`: explicit reset, transparent storage, transport/inertial delay, captured values and reset cancellation, with exact integer femtoseconds.
 - `TimedCapture[T]`: pure transform, independent data/control delays and a latch, with transaction identity and observed setup/hold checks.
 - `ExportDesign`: versioned manifest, scoped semantic IDs, payload layouts, reset domains, primitive parameters/resources and timing obligations. Actual RTL elaboration and active bit probes validate the retained endpoints.
 - Packaged SV behavioral views, executable examples, Scala API tests, passive protocol monitors, independent token accounting and eight deliberately corrupted-model controls.
 
-`FourPhaseBuffer` retains its zero-delay **behavioral storage model** as a separate integration target. The structural alternatives compose resettable latches but do not establish physical capture pulse widths, delay matching or hazard freedom. `TimedCapture` separately exercises declared digital delays; it does not qualify stage timing. Timed controllers, independent-reset bridges, two-phase, QDI, arbitration and memories remain in the [roadmap](docs/roadmap.md).
+`FourPhaseBuffer` is a zero-delay **behavioral storage model**, not a hardware controller. The failed structural experiment now lives under `chiselasync.experimental.UnsafeFourPhaseStage` / `UnsafeFourPhaseBuffer` solely for regression. `TimedCapture` separately exercises declared digital delays; it cannot repair controller races. Published-controller comparison and small bundled/QDI/clocked architecture examples precede catalog expansion in the revised [roadmap](docs/roadmap.md).
+
+## Using the library versus qualifying the repository
+
+There is no public release yet. A consumer of a locally published snapshot needs the matching Chisel/compiler-plugin setup and `libraryDependencies += "io.github.biscutlabs" %% "chisel-async" % "0.1.0-SNAPSHOT"`. Python and the qualification harness are not library runtime dependencies. Emission needs the compatible native firtool; simulation needs a backend supporting the chosen behavioral views. The [clean consumer](verification/consumer) is an executable dependency example. Qualified export remains pinned and fail-closed; this is not an optimized production-netlist path.
+
+For parent/child reset wiring, use `asyncChild("buffer")(domain => new FourPhaseBuffer(UInt(8.W), domain))` inside an `AsyncModule`. It passes the parent's domain, wires reset and registers the child contract. Separately constructed roots intentionally have separate domains. The commands below are for contributors running the full qualification campaign; a single-command setup/qualification wrapper remains planned.
 
 ## Build and test
 
@@ -39,6 +44,7 @@ python tools/sbt.py --bootstrap test "examples/runMain chiselasync.examples.Emit
 python tools/check_export.py
 python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py -q
 python verification/run.py
+python verification/controller_race.py
 python verification/run_timing.py
 python tools/consumer_smoke.py
 ```

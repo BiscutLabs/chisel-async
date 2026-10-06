@@ -53,6 +53,8 @@ jobs:
         run: python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py -q
       - name: Run independent event tests and known-bad control
         run: python verification/run.py
+      - name: Reproduce withdrawn controller counterexample
+        run: python verification/controller_race.py
       - name: Run timing boundaries and primitive fault controls
         run: python verification/run_timing.py
       - name: Consume published artifact outside source project

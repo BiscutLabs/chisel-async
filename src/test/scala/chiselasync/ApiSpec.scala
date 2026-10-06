@@ -2,7 +2,8 @@
 package chiselasync
 
 import chisel3._
-import chiselasync.bundled.{FourPhaseBuffer, FourPhaseStage, StructuralFourPhaseBuffer}
+import chiselasync.bundled.FourPhaseBuffer
+import chiselasync.experimental.{UnsafeFourPhaseStage, UnsafeFourPhaseBuffer}
 import chiselasync.core.AsyncModule
 import chiselasync.primitives.CElement
 import chiselasync.protocol.FourPhase
@@ -40,8 +41,8 @@ class ApiSpec extends AnyFunSuite {
     assert(getClass.getResource("/chiselasync/sv/ChiselAsyncFourPhaseStorage_v1.sv") != null)
   }
 
-  test("structural storage preserves nested payloads without a behavioral controller or clock") {
-    val emitted = ChiselStage.emitCHIRRTL(new StructuralFourPhaseBuffer(new Packet))
+  test("withdrawn controller fixture preserves its nested zero-delay regression") {
+    val emitted = ChiselStage.emitCHIRRTL(new UnsafeFourPhaseBuffer(new Packet))
     assert(emitted.contains("ChiselAsyncLatch_v1"))
     assert(emitted.contains("parameter WIDTH = 76"))
     assert(!emitted.contains("ChiselAsyncFourPhaseStorage_v1"))
@@ -50,7 +51,7 @@ class ApiSpec extends AnyFunSuite {
 
   test("stage transform rejects an implicit payload resize") {
     val error = intercept[IllegalArgumentException] {
-      ChiselStage.emitCHIRRTL(new FourPhaseStage(UInt(8.W), (value: UInt) => value.pad(9)))
+      ChiselStage.emitCHIRRTL(new UnsafeFourPhaseStage(UInt(8.W), (value: UInt) => value.pad(9)))
     }
     assert(error.getMessage.contains("identical field types, widths and shape"))
   }

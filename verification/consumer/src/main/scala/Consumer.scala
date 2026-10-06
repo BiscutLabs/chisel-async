@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 import chisel3._
-import chiselasync.bundled.{FourPhaseBuffer, FourPhaseStage, StructuralFourPhaseBuffer, TimedCapture}
+import chiselasync.bundled.{FourPhaseBuffer, TimedCapture}
+import chiselasync.experimental.{UnsafeFourPhaseStage, UnsafeFourPhaseBuffer}
 import chiselasync.core.AsyncModule
 import chiselasync.metadata.{DelayPolicy, ExportDesign, ModelTime}
 import chiselasync.primitives.{DelayLine, Latch}
 import java.nio.file.Paths
 
 class BufferExample extends FourPhaseBuffer(UInt(8.W))
-class StructuralBufferExample extends StructuralFourPhaseBuffer(UInt(8.W))
-class TransformExample extends FourPhaseStage(UInt(8.W), (value: UInt) => value ^ 0x55.U(8.W))
+// Regression-only checks that the withdrawn experiment stays reproducible in the JAR.
+class StructuralBufferExample extends UnsafeFourPhaseBuffer(UInt(8.W))
+class TransformExample extends UnsafeFourPhaseStage(UInt(8.W), (value: UInt) => value ^ 0x55.U(8.W))
 
 class ConsumerDelay(policy: DelayPolicy) extends AsyncModule {
   val d = IO(Input(UInt(9.W)))

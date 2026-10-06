@@ -1,6 +1,6 @@
 # Qualification status
 
-Development evidence, October 5, 2026. This document records a tested slice, not qualification of the complete planned catalog. The current platform scope is Windows/Linux; macOS is explicitly deferred by project decision, not counted as a passing or skipped required lane. Independent contract review is still needed for formal L0 sign-off.
+Development evidence, October 5, 2026. This document records experiments, not qualification of the complete catalog. **The structural controller is withdrawn following external review and an independently reproduced delay race.** Its previous zero-delay successes remain historical regression evidence, not approval for composition. L0 now requires controller replacement and architecture validation as well as independent sign-off. The platform scope is Windows/Linux; macOS is explicitly deferred.
 
 | Item | Local evidence |
 | --- | --- |
@@ -10,17 +10,21 @@ Development evidence, October 5, 2026. This document records a tested slice, not
 | Compiler | Native firtool 1.160.0, checked release archive. |
 | Event engine | Native Icarus Verilog 13.0; MSYS2 UCRT64 package `1~13.0-2`. |
 | Harness | Local Windows CPython 3.12.13; WSL CPython 3.12.3; cocotb 2.1.0, pytest 8.4.2; dependency lock in verification/requirements.txt. |
-| API/export checks | 16 Scala tests, including domain identity, transform resize rejection, clockless nested structural payloads, invalid time/primitive parameters, registry failures and deterministic compiler emission across paths/widths. |
+| API/export checks | 17 Scala tests, including parent-owned child/reset construction and domain misuse, experimental fixture payloads, invalid time/primitive parameters, registry failures and deterministic compiler emission. |
 | Reference/compiler/harness checks | 70 Python tests cover independent protocol/timing references, actual RTL corruption, endpoint/resource loss, exact fs, unknown contract fields, incomplete inventories, wrong diagnostic reasons, stale reports, inactive observations and inconsistent accounting. |
-| Event checks | 52 positive tests across behavioral and structural scalar/wide/aggregate buffers, pipelines, transform and C-element fixtures; eight deliberately bad models are rejected by the required checkers. |
+| Event checks | 52 zero-delay regression cases across behavioral and withdrawn experimental fixtures; eight fault controls. These cases do not approve the withdrawn controller. |
 | Compiler mapping | 16 exports, 121 resolved anchors and 13,498 active RTL mapping comparisons; every anchor bit reaches both polarities. Resources, primitive ports/parameters, hierarchy, packing and reset bindings checked. |
 | Timed models | 7 passing cases, 2 intended setup/hold violations and 5 corrupted-model controls. Exact 1 fs precision, independent data/control paths and transaction identity. |
 | Packaging | Local publication; unrelated consumer in a path with spaces; behavioral buffer, structural buffer and transform pass 18 event tests plus 7 controls, then the complete 14-case timing campaign. Schema and all four SV resources are packaged. |
 | macOS arm64 | Deferred; no executed qualification result claimed. Restore a required CI lane when qualification resumes. |
 
+The added directed [controller counterexample](review-response.md#reproduced-failure) accepts and delivers one token, then observes a duplicate offer when an internal release path is delayed. Its baseline and exact failure diagnostic are checked separately. The reviewer's 165/300 random-delay failure count remains external evidence; that campaign has not been reproduced here.
+
+The review corrections were exercised on native Windows and in a separate WSL source/build checkout (`/home/justin/chisel-async-review`, reusing the pinned Linux tool installations): 17 Scala tests, 70 Python tests, the 52-case/eight-control zero-delay corpus, all 14 timing cases, export checks and clean consumers passed. The directed counterexample reproduced on both. Logs are `target/review-controller-build.log` and `target/review-controller-consumer.log`; current reports use `target/verification`, including the separate `controller-race` report/VCDs. These outcomes validate regression preservation and the known defect, not a replacement controller.
+
 ## Platform evidence and setup corrections
 
-[CI run 37390113748](https://github.com/BiscutLabs/chisel-async/actions/runs/37390113748) passes both native Windows Server 2025 and Ubuntu 24.04 at `4a28c94`, covering the timing/compiler baseline: 14 Scala checks, 70 Python checks, 24 functional positives, 6 functional controls, 14 timing cases and the clean consumer. CI uses Temurin 21.0.12.1+1, CPython 3.12.10 on Windows and 3.12.13 on Linux. The expanded structural counts in the table above were subsequently executed on local Windows and WSL, including separate clean consumers. CI for those additions must be read at its own commit; the baseline run is not evidence for later code.
+[CI run 37390113748](https://github.com/BiscutLabs/chisel-async/actions/runs/37390113748) passes both native Windows Server 2025 and Ubuntu 24.04 at `4a28c94` for the timing/compiler baseline. [Run 37390903821](https://github.com/BiscutLabs/chisel-async/actions/runs/37390903821) also passes on both hosts at `dc7b325`, including the expanded zero-delay structural corpus, 16 Scala checks, 70 Python checks, 52 event cases, 8 controls, 14 timing cases and clean consumers. Neither run tested internal controller gate delays. CI uses Temurin 21.0.12.1+1, CPython 3.12.10 on Windows and 3.12.13 on Linux. Subsequent review fixes and the counterexample have separate local results; earlier green CI does not qualify those changes.
 
 The first CI attempts failed during tool setup, before testing: setup-java rejected the four-component JDK version, and setup-python had no Windows archive for 3.12.13. The fixes install official checksum-pinned Temurin archives directly and pin an available Windows Python release. Neither infrastructure failure was treated as a successful negative control. macOS was removed from the active matrix under the explicit deferral.
 
@@ -36,4 +40,4 @@ The review deliberately introduced three faults that the earlier suite missed: t
 
 The pinned debug export emits `circt.VerbatimBlackBoxAnno` and `firrtl.transforms.DedupGroupAnnotation` warnings. None are suppressed. The [checked sidecar route](timing-and-export.md) validates actual emitted instances and anchors independently of annotation preservation. The retained HW snapshot is provenance evidence, not a general MLIR import/equivalence claim.
 
-No physical timing, hazard freedom, QDI implementation, analog metastability, power, area, performance or Chiselator compatibility is claimed. Both the behavioral buffer and structural stage are qualified only as zero-delay functional models. Structural pulse-width/delay qualification and clocked interfaces remain future work. Export v1 supports a single coordinated reset domain and the pinned debug compiler configuration. Executed packaging results must exist before additional platforms are marked qualified.
+No physical timing, hazard freedom, QDI implementation, analog metastability, power, area, performance or Chiselator compatibility is claimed. The behavioral buffer remains a functional reference. The experimental controller needs replacement, not just later pulse-width qualification. Export v1 supports a single coordinated reset domain and the pinned debug compiler configuration. Executed packaging results must exist before additional platforms are marked qualified.

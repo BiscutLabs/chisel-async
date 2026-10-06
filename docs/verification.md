@@ -1,6 +1,6 @@
 # Verification method and acceptance criteria
 
-Development regression campaign, October 5, 2026. Scope: the zero-delay four-phase behavioral storage and structural latch composition, pure transform and resettable C-element on Icarus 13.0. No physical delay, hazard freedom, QDI or metastability claim follows. This campaign was developed after exploratory review; it is not a held-out release experiment.
+Development regression campaign, October 5, 2026. Scope: zero-delay behavioral storage, the withdrawn structural experiment, pure transform and resettable C-element on Icarus 13.0. The [external review response](review-response.md) records a directed internal-delay counterexample; historical zero-delay successes do not qualify that controller. No physical delay, hazard freedom, QDI or metastability claim follows. This is not a held-out release experiment.
 
 ## Claims and independent expectations
 
@@ -31,7 +31,7 @@ Trace timestamps are exact integer picoseconds, matching the selected fixture pr
 
 The two-token enumeration has eight environment actions: input offers `p0/p1`, input request returns `r0/r1`, output acknowledgements `a0/a1`, and output acknowledgement returns `z0/z1`. Prerequisites are declared separately from production behavior. In particular, a second request can wait while storage is full, but its request cannot return before acceptance after `z0`. There are exactly 18 linear extensions and 68 distinct prefixes under these assumptions. This is not exhaustive over unbounded streams, all delays, pipeline networks or independent resets.
 
-Functional boundary cases vary source request return versus sink acknowledgement, and next input offer versus prior output acknowledgement return, at -1/0/+1 ps. The separate [timing/compiler campaign](timing-and-export.md) tests exact-fs setup/hold, pulse filtering, reset cancellation, transaction identity and endpoint preservation. The structural stage passes these external functional contracts; its capture pulse width and arbitrary gate-delay behavior are not qualified by these experiments.
+Functional boundary cases vary source request return versus sink acknowledgement, and next input offer versus prior output acknowledgement return, at -1/0/+1 ps. The separate [timing/compiler campaign](timing-and-export.md) tests exact-fs setup/hold, pulse filtering, reset cancellation, transaction identity and endpoint preservation. These experiments missed the structural controller's internal race. The new directed counterexample delays one release-enable branch, retains the actual emitted controller equations, and requires a duplicate offer after exactly one acceptance and delivery. A paired baseline, strict diagnostic, annotated-source hashes and VCD make the failure inspectable. It is not a reproduction of the external random-seed campaign.
 
 ## Evidence and release discipline
 

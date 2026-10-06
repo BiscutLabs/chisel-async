@@ -51,6 +51,24 @@ class ExportSpec extends AnyFunSuite {
     assert(error.getMessage.contains("unbound reset domain"))
   }
 
+  test("child factory shares and wires the parent reset domain") {
+    ChiselStage.emitCHIRRTL(new AsyncModule {
+      val first = asyncChild("first")(domain => new FourPhaseBuffer(UInt(8.W), domain))
+      val second = asyncChild("second")(domain => new FourPhaseBuffer(UInt(8.W), domain))
+      assert((first.resetDomain eq resetDomain) && (second.resetDomain eq resetDomain))
+      first.in.req := false.B
+      first.in.bits := 0.U
+      second.out.ack := false.B
+      FourPhase.connect(second.in, first.out)
+    })
+    val ignoredDomain = intercept[IllegalArgumentException] {
+      ChiselStage.emitCHIRRTL(new AsyncModule {
+        val child = asyncChild("wrong")(_ => new FourPhaseBuffer(UInt(8.W)))
+      })
+    }
+    assert(ignoredDomain.getMessage.contains("child reset domains differ"))
+  }
+
   test("registry rejects duplicate semantic IDs and missing timing endpoints") {
     val duplicate = intercept[IllegalArgumentException] {
       ChiselStage.emitCHIRRTL(new AsyncModule {

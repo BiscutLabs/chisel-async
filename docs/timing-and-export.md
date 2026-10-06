@@ -28,6 +28,8 @@ Five additional model mutations must fail with exact assertions: disable reset c
 
 Each `AsyncModule` owns a `DesignContract` and a `ResetDomain`. Share the same domain object when composing child buffers; identical labels on different objects do not authorize a connection. Register child contracts explicitly with `contract.child`. Channels have typed payload layouts, ordered protocol phases and owner-domain references. Nodes may declare token capacity. Primitive descriptors identify a semantic instance, model/version, selected behavioral view, exact parameters, ports, reset and effects. Timing obligations refer to registered endpoints and carry units, bounds, mode and provenance.
 
+Prefer `asyncChild("id")(domain => new FourPhaseBuffer(gen, domain))` in an `AsyncModule`: it supplies the parent domain, registers the child and wires reset together. A factory that ignores the supplied domain fails. Explicit `Module`/`contract.child` wiring remains available for advanced composition.
+
 Legacy unexported channels may both omit the optional domain. Mixing a bound and an unbound endpoint is rejected; export registration always requires the owner's explicit domain. When migrating a composed design, pass `Some(resetDomain)` to its boundary channels and `resetDomain` to child buffers.
 
 `contract.endpoint` creates a retained ground `ca_*` output. Primitive and child instance names receive reserved prefixes, avoiding Verilog keywords such as `cell`. Names are candidates until checked against actual compiled RTL. Semantic IDs are local to each registry and qualified by explicit child IDs; no mutable global registry is used. Duplicate local IDs are rejected.

@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-package chiselasync.bundled
+package chiselasync.experimental
 
 import chisel3._
 import chiselasync.core.{AsyncModule, ResetDomain}
 import chiselasync.primitives.Latch
 import chiselasync.protocol.{FourPhase, Payload}
 
-/** One-entry, shape-preserving transform with explicit latch state.
-  * Qualified only with the zero-delay digital latch view. The self-closing capture
-  * enable is not a physical pulse-width or gate-delay guarantee; see contracts.md.
+/** WITHDRAWN controller, retained only to reproduce its zero-delay and delay-race regressions.
+  * Relative internal delays can cause duplicate offers, loss and non-progress.
+  * Do not use this as a hardware controller or as the foundation for library composition.
+  * See verification/controller_race.py and docs/review-response.md.
   */
-class FourPhaseStage[T <: Data](gen: T, transform: T => T,
+class UnsafeFourPhaseStage[T <: Data](gen: T, transform: T => T,
                                domain: ResetDomain = new ResetDomain("root")) extends AsyncModule(domain) {
   val in = IO(Flipped(new FourPhase(gen, Some(resetDomain))))
   val out = IO(new FourPhase(gen, Some(resetDomain)))
@@ -28,8 +29,8 @@ class FourPhaseStage[T <: Data](gen: T, transform: T => T,
   private val take = !reset.asBool && !full && !back && in.req && !ack && !out.ack
   private val release = back && !out.ack
 
-  // Each closing enable depends on its own stored state, so a simultaneous
-  // data/input transition cannot leak through a stale transparent enable.
+  // These equations settle under the zero-delay view, but their relative-delay
+  // races are NOT repaired by the stored-state guards. Keep the counterexample.
   occupied.enable := take || (full && release)
   occupied.d := (!back).asUInt
   returning.enable := out.ack || back
@@ -50,10 +51,10 @@ class FourPhaseStage[T <: Data](gen: T, transform: T => T,
       "acknowledged" -> acknowledged, "payload" -> payload).foreach { case (id, cell) =>
     cell.reset := reset
     contract.primitive(id, cell, Map("WIDTH" -> BigInt(cell.q.getWidth), "RESET_VALUE" -> BigInt(0)),
-      resetRef, "zero-delay functional latch; reset clears state; no physical pulse-width qualification")
+      resetRef, "WITHDRAWN controller regression; relative-delay races; not a supported hardware stage")
   }
 }
 
-/** Identity-transform structural alternative; the behavioral buffer remains available. */
-class StructuralFourPhaseBuffer[T <: Data](gen: T, domain: ResetDomain = new ResetDomain("root"))
-    extends FourPhaseStage(gen, (value: T) => value, domain)
+/** Identity-transform version of the withdrawn controller, for regression only. */
+class UnsafeFourPhaseBuffer[T <: Data](gen: T, domain: ResetDomain = new ResetDomain("root"))
+    extends UnsafeFourPhaseStage(gen, (value: T) => value, domain)
