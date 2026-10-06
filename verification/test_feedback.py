@@ -69,6 +69,19 @@ def test_maximum_campaign_seed_runs_random_arbitration(tmp_path):
     assert result['status']=='PASS' and any('.SEED=1;' in value for value in result['overrides'])
 
 
+def test_fixed_resolution_mutant_cannot_pass_random_campaign(tmp_path):
+    generated=tmp_path/'generated';(generated/'arbiter').mkdir(parents=True)
+    source=ROOT/'src/main/resources/chiselasync/sv/ChiselAsyncMutex_v1.sv'
+    text=source.read_text(encoding='utf-8')
+    target='latency = RESOLVE_FS + draw % (RESOLVE_MAX_FS - RESOLVE_FS + 1);'
+    assert text.count(target)==1
+    (generated/'arbiter'/source.name).write_text(text.replace(target,'latency = RESOLVE_FS;'),encoding='utf-8')
+    result=subprocess.run([sys.executable,str(ROOT/'verification/run_mutex.py'),
+        '--generated',str(generated),'--output',str(tmp_path/'evidence')],capture_output=True,text=True,timeout=60)
+    assert result.returncode!=0 and 'AssertionError: RANDOM_RESOLUTION_COVERAGE' in result.stderr,result.stdout+result.stderr
+    assert json.loads((tmp_path/'evidence/report.json').read_text(encoding='utf-8'))['status']!='PASS'
+
+
 def test_random_mutex_import_keeps_dynamic_delay(tmp_path):
     output=tmp_path/'model.mlir'
     command=[importer(),'--top','ChiselAsyncMutex_v1','-G','POLICY=3','-G','SEED=123',

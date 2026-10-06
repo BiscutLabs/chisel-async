@@ -8,6 +8,8 @@ The follow-up review identified a real modeling gap: `ClosingLatch.DELAY_FS` del
 
 Return is self-timed: `req4− → closed− → history updated → ack4−`. Delaying the toggle's input instead would be wrong: a legal request-low pulse can be shorter than the guard and disappear through inertial propagation. Coordinated reset must be held until every delayed path is quiescent.
 
+This closure budget applies to the four-to-two history path. Other catalog latches, including those in the separate two-to-four adapter, retain ideal-wire/zero-intrinsic-aperture assumptions unless their own contract declares an additional path bound.
+
 The two-argument constructor remains available and uses `cells` for the independently sweepable closure bound and `returnDelay` for the request guard. Default examples use 1–10 ns bounds and 40 ns guards. `phase-conversion-v2` carries these bounds, the closure endpoint and guard in both the sidecar and KIND 5 marker. Active export checks bind the marker to the actual history, toggle, guard and XOR pins; rehashed rewiring, inadequate guards and non-buffer guard cells are rejected. Regenerate earlier phase exports.
 
 `run_closure.py` instantiates emitted production `ToTwoPhase` RTL. Its 101 positive cases include independent closure/toggle/history/XOR extremes, a one-femtosecond strict margin, the review's four latch/toggle pairs with 0–12 ns closure skew, immediate back-to-back transfers, long holds and six reset windows with restart. These deliberately reparameterized experiments include values beyond the default fixture's bounds; each case records its actual parameters. The regular phase campaign separately checks overrides against the exported bounds. Removing the guard and moving it before the toggle are paired controls with specific failures. This is our reproduction of the mechanism, not an assertion that we ran the reviewer's original harness or replicated its exact failure thresholds.
@@ -38,5 +40,16 @@ The default reference campaign runs 33 configurations per style. Each case sends
 The standalone DIMS campaign additionally exhausts all 16 inputs × 24 arrival orders × 24 independent spacer orders, at five cell-delay configurations, with partial-valid/spacer reset tests and paired early-valid/stateless-return controls. Rail steps are 200 ns apart so each partial state settles; these are exhaustive permutations, not exhaustive timings. This is 46,110 completed transfers. It checks strong indication directly, rather than relying solely on the wrapped arithmetic result.
 
 Latency measurements include converters, storage, guards and clock/synchronizer costs. Different capacities and arbitrary model delays prevent a silicon speed/area/power ranking. The behavioral zero-delay result is an abstract reference. These examples supply functional integration evidence and a reproducible place to substitute characterized cells later; they do not close L1 acceptance.
+
+The nominal seed-0 experiment uses 1 ns cell/data propagation, 40 ns bundled/phase guards, and GALS clocks of 14 ns and 22 ns with a 3 ns initial sink offset. The same 96 transactions produce these isolated input-offer to output-offer latencies:
+
+| Version | Minimum–maximum | Mean |
+| --- | --- | --- |
+| Behavioral | 0 ns | 0 ns |
+| Bundled | 81 ns | 81 ns |
+| Wrapped QDI | 208–216 ns | 211.865 ns |
+| GALS | approximately 417–431 ns | 417.146 ns |
+
+These figures are reproducible with `run_reference.py --seeds 0` after emission. The complete 132-case development campaign delivers 25,344 checked results across all four styles; the full-wrapper/native result is recorded separately in qualification.
 
 Run `python tools/qualify.py` for setup and all lanes, including published-JAR replay. Focused commands after emission are `python verification/run_closure.py`, `run_mutex.py`, `run_dims.py` and `run_reference.py` in the same directory. Evidence is retained under `target/verification/{closure,mutex,dims,reference}`; [qualification](qualification.md) records completed runs and revisions.

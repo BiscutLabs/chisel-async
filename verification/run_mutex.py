@@ -55,6 +55,7 @@ def main():
         assert logs[0]==logs[1],('GLOBAL_RNG_INTERFERENCE',seed)
         summaries.append({'seed':seed,'status':'PASS','choices':48,'commits':commits,'schedules':len(schedules)})
     assert all(w=={1,2} for w in coverage.values())
+    assert latencies==set(range(10,101)), 'RANDOM_RESOLUTION_COVERAGE'
     out={**environment,'status':'PASS','bench_sha256':sha(template),'checker_sha256':sha(Path(__file__)), 'source_sha256':hashlib.sha256(source.read_bytes()).hexdigest(),
          'seeds':summaries,'coverage':{str(k):sorted(v) for k,v in coverage.items()},
          'distinct_latencies':len(latencies),'min_observed_latency':min(latencies),'max_observed_latency':max(latencies)}
