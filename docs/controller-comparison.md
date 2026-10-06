@@ -43,7 +43,7 @@ Each successful case must execute:
 
 - Forty ordered transfers, including adjacent equal payload bytes, with exactly forty accepted, offered, delivered and returned transactions in the stream.
 - Reset at idle, just after an input offer, after input acceptance with a stalled sink, during an output offer, after output acceptance, and during return. Every scenario completes fresh traffic afterward.
-- A 5,000 ns sink stall that reaches the controller's declared capacity while another offer waits; reset aborts exactly those queued tokens, followed by a fresh transfer.
+- A 5,000 ns sink stall that reaches the controller's declared capacity; reset aborts exactly those queued tokens, followed by a fresh transfer. The source may be waiting to offer another token or waiting for input-handshake return, depending on the controller and depth.
 - Final accounting of 49 deliveries and 47 completed output returns. The two additional deliveries have their return phases interrupted by reset; delivery is not undone by reset.
 
 Passive monitors check all pipeline links, including request/acknowledgement order and early data hold. An independent FIFO of accepted identities checks delivery, ordering and conservation. It also rejects capacity overflow during traffic, rather than waiting for a later timeout. None of these checks uses controller state equations.
@@ -63,6 +63,8 @@ Native Windows 11 / Icarus 13.0 / Python 3.12.13 and a separate Ubuntu-under-WSL
 | Muller, six stages | 300 / 300 | 0 | 0 | Both uniform baselines and all 16 corners pass |
 
 The withdrawn failures include data-hold, payload, protocol-order, unexpected-token and capacity violations. Seed 1 retains a data-hold counterexample; seeds 184 and 206 reach the progress deadline. Both deliberate fault controls and both cell checks behave as required on both hosts. Fifteen Python harness tests additionally reject false passes, unsupported compiler syntax, wrong activity counts and infrastructure failures.
+
+[Native CI run 37400947157](https://github.com/BiscutLabs/chisel-async/actions/runs/37400947157), at implementation commit `40f3b7c`, passes on Windows Server 2025 and Ubuntu 24.04 with the same comparison counts. Both lanes also pass 17 Scala tests, all 85 Python tests, the existing functional/timing campaigns, the original directed race and the clean-consumer checks. This is executed native Linux evidence in addition to WSL.
 
 These are **our experiment's numbers**, not a reproduction of the external reviewer's 165/300 result. That harness, seed mapping, latch model and schedules have not been supplied. Finite passing samples do not prove delay independence, hazard freedom, QDI correctness or physical timing closure. This was development testing, not an independently held-out release campaign.
 
