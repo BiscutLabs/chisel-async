@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT / "verification"))
 from run import read_sources
 
 OPTIONS = ["-O=debug", "--no-dedup", "--preserve-values=named", "--strip-fir-debug-info",
-           "--lowering-options=disallowPortDeclSharing"]
+           "--lowering-options=disallowPortDeclSharing,disallowLocalVariables"]
 IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
 
 
@@ -92,13 +92,27 @@ def validate_manifest(document):
             all_paths.add(item["rtl_path"])
             require(type(item["width"]) is int and item["width"] > 0, "INVALID_ENDPOINT_WIDTH")
         for channel in node["channels"]:
-            shape(channel, "id protocol role request data acknowledge reset_domain layout phases environment")
+            common = "id protocol role reset_domain layout phases environment token_contract "
+            if channel["protocol"] == "four-phase-bundled-v1":
+                shape(channel, common + "request data acknowledge")
+                refs, payload, controls = ("request", "data", "acknowledge"), "data", ("request", "acknowledge")
+                phases = ["00", "10", "11", "01", "00"]
+            elif channel["protocol"] == "dual-rail-rtz-v1":
+                shape(channel, common + "zero one acknowledge")
+                refs, payload, controls = ("zero", "one", "acknowledge"), "one", ("acknowledge",)
+                phases = ["spacer", "data", "acknowledged", "spacer", "idle"]
+            elif channel["protocol"] == "decoupled-v1":
+                shape(channel, common + "valid data ready clock")
+                refs, payload, controls = ("valid", "data", "ready", "clock"), "data", ("valid", "ready", "clock")
+                phases = ["rising-edge-fire"]
+            else:
+                raise ValueError("INVALID_CHANNEL")
             require(channel["reset_domain"] == domain, "RESET_DOMAIN_MISMATCH")
-            require(channel["protocol"] == "four-phase-bundled-v1" and
-                    channel["role"] in ("input", "output") and
-                    channel["phases"] == ["00", "10", "11", "01", "00"], "INVALID_CHANNEL")
-            require(all(channel[ref] in endpoints for ref in ("request", "data", "acknowledge")),
+            require(channel["role"] in ("input", "output") and channel["phases"] == phases and
+                    channel["token_contract"] == "ordered-lossless-reset-abort-v1", "INVALID_CHANNEL")
+            require(all(channel[ref] in endpoints for ref in refs),
                     "MISSING_CHANNEL_ENDPOINT")
+            require(all(endpoints[channel[c]]["width"] == 1 for c in controls), "INVALID_CHANNEL_CONTROL")
             offset = 0
             for field in channel["layout"]:
                 shape(field, "field lsb width signed source")
@@ -106,7 +120,9 @@ def validate_manifest(document):
                 require(field["lsb"] == offset and type(field["width"]) is int and field["width"] > 0,
                         "INVALID_PAYLOAD_LAYOUT")
                 offset += field["width"]
-            require(offset == endpoints[channel["data"]]["width"], "INVALID_PAYLOAD_LAYOUT")
+            require(offset == endpoints[channel[payload]]["width"], "INVALID_PAYLOAD_LAYOUT")
+            if channel["protocol"] == "dual-rail-rtz-v1":
+                require(offset == endpoints[channel["zero"]]["width"], "INVALID_PAYLOAD_LAYOUT")
         for primitive in node["primitives"]:
             shape(primitive, "id rtl_path model view version resource parameters reset reset_domain effects ports")
             require(len({p["name"] for p in primitive["ports"]}) == len(primitive["ports"]), "DUPLICATE_PRIMITIVE_PORT")
@@ -128,11 +144,11 @@ def validate_manifest(document):
             all_paths.add(primitive["rtl_path"])
             resources.add(primitive["resource"])
         for timing in node["timing"]:
-            if timing.get("kind") == "long-hold-bundling-v1":
+            if timing.get("kind") == "long-hold-bundling-v2":
                 shape(timing, "id kind mode request input_data latch_data latch_closed acknowledge output_request output_data "
-                      "matched_delay_fs data_delay_fs cell_delay_fs latch_delay_fs output_delay_fs provenance assumptions")
+                      "matched_delay_fs data_delay control_delays latch_delay output_delay_fs provenance assumptions")
                 refs = ("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
-                times = ("matched_delay_fs", "data_delay_fs", "cell_delay_fs", "latch_delay_fs", "output_delay_fs")
+                times = ("matched_delay_fs", "output_delay_fs")
                 require(timing["mode"] in ("functional-only", "digital-model"), "UNSUPPORTED_TIMING")
             else:
                 shape(timing, "id kind launch transaction data_valid capture captured setup_fs hold_fs mode provenance pulse_policy")
@@ -143,15 +159,25 @@ def validate_manifest(document):
             for name in times:
                 require(type(timing[name]) is str and re.fullmatch(r"0|[1-9][0-9]*", timing[name])
                         and int(timing[name]) <= 2**63 - 1, "INVALID_MODEL_TIME")
-            if timing["kind"] == "long-hold-bundling-v1":
-                matched, data, cell, latch, output = (int(timing[n]) for n in times)
-                require((timing["mode"] == "functional-only" and not any((matched, data, cell, latch, output))) or
-                        (timing["mode"] == "digital-model" and cell > 0 and latch > 0 and matched > data and
-                         output > 2*cell+latch), "INVALID_BUNDLING_POLICY")
+            if timing["kind"] == "long-hold-bundling-v2":
+                matched, output = (int(timing[n]) for n in times)
+                shape(timing["control_delays"], "a b acknowledge long_hold")
+                bounds = {**timing["control_delays"], "data_delay": timing["data_delay"], "payload": timing["latch_delay"]}
+                for bound in bounds.values():
+                    shape(bound, "min_fs max_fs model_fs")
+                    require(all(type(v) is str and re.fullmatch(r"0|[1-9][0-9]*", v) and int(v) <= 2**63-1
+                                for v in bound.values()), "INVALID_MODEL_TIME")
+                    require(int(bound["min_fs"]) <= int(bound["model_fs"]) <= int(bound["max_fs"]), "INVALID_DELAY_BOUNDS")
+                maxima = {k: int(v["max_fs"]) for k,v in bounds.items()}
+                worst = max(maxima[k] for k in timing["control_delays"])
+                require((timing["mode"] == "functional-only" and not any([matched, output, *maxima.values()])) or
+                        (timing["mode"] == "digital-model" and matched > maxima["data_delay"] and output > 2*worst+maxima["payload"] and
+                         all(int(v["min_fs"]) > 0 for k,v in bounds.items() if k != "data_delay")), "INVALID_BUNDLING_POLICY")
                 # The declared model times must agree with actual preserved cell parameters.
                 primitives = {p["id"]: p for p in node["primitives"]}
-                for cell_id, delay in (("request_delay", matched), ("data_delay", data), ("long_hold", cell),
-                                       ("a", cell), ("b", cell), ("acknowledge", cell), ("payload", latch), ("output_delay", output)):
+                model_delays = {k: int(v["model_fs"]) for k,v in bounds.items()}
+                model_delays.update(request_delay=matched, output_delay=output)
+                for cell_id, delay in model_delays.items():
                     require(cell_id in primitives and primitives[cell_id]["parameters"].get("DELAY_FS") == str(delay),
                             "BUNDLING_PARAMETER_MISMATCH")
         for child in node["children"]:
@@ -169,7 +195,7 @@ def read_vvp(contents):
             key, kind, name, model, tail = scope.groups()
             parent = re.search(r", (S_\w+)$", tail)
             parent_path = scopes[parent[1]]["path"] + "." if parent else ""
-            current = {"path": parent_path + name, "kind": kind, "model": model, "ports": {}, "parameters": {}}
+            current = {"path": parent_path + name, "kind": kind, "model": model, "ports": {}, "parameters": {}, "registers": {}}
             require(key not in scopes and current["path"] not in paths, "AMBIGUOUS_ELABORATED_SCOPE")
             scopes[key] = paths[current["path"]] = current
         elif ".scope " in line and not line.lstrip().startswith(".scope"):
@@ -179,6 +205,9 @@ def read_vvp(contents):
             direction, width, name = port.groups()
             require(name not in current["ports"], "AMBIGUOUS_ELABORATED_PORT")
             current["ports"][name] = {"name": name, "direction": direction.lower(), "width": int(width)}
+        register = re.match(r'v\w+ \.var "(' + IDENT + r')", (\d+) 0;', line)
+        if register and current:
+            current["registers"][register[1]] = int(register[2]) + 1
         param = re.match(r'P_\w+ \.param/l "(' + IDENT + r')" 0 \d+ \d+, (\+?)C4<([01]+)>;', line)
         if param and current:
             name, signed, bits = param.groups()
@@ -203,7 +232,17 @@ def probe_source(manifest, scopes):
     comparisons, coverage, drivers = [], [], []
     for node in nodes(manifest["design"]):
         comparisons.append(f'if ({node["rtl_path"]}.reset !== {top}.reset) $fatal(1, "RESET_BINDING_MISMATCH");')
-        layouts = {ch["data"]: ch["layout"] for ch in node["channels"]}
+        layouts = {}
+        endpoint_by_id = {e["id"]: e for e in node["endpoints"]}
+        for channel in node["channels"]:
+            if channel["protocol"] == "dual-rail-rtz-v1":
+                layouts[channel["one"]] = channel["layout"]
+                one = endpoint_by_id[channel["one"]]["source"]
+                zero = endpoint_by_id[channel["zero"]]["source"]
+                require(all(f["source"].startswith(one) for f in channel["layout"]), "INVALID_PAYLOAD_LAYOUT")
+                layouts[channel["zero"]] = [{**f, "source": zero + f["source"][len(one):]} for f in channel["layout"]]
+            else:
+                layouts[channel["data"]] = channel["layout"]
         for endpoint in node["endpoints"]:
             fields = layouts.get(endpoint["id"], [{"source": endpoint["source"], "lsb": 0, "width": endpoint["width"]}])
             expr = "{" + ", ".join(source_path(node, f["source"]) for f in reversed(fields)) + "}"
@@ -220,6 +259,11 @@ def probe_source(manifest, scopes):
         if node["rtl_path"] == top:
             drivers += [(top + "." + name, p["width"])
                         for name, p in scopes[top]["ports"].items() if p["direction"] == "input"]
+        if any(c["protocol"] == "decoupled-v1" for c in node["channels"]):
+            # Mapping-only stimulus for native Chisel registers, analogous to forcing
+            # primitive q ports below. Behavioral runs never force these registers.
+            drivers += [(node["rtl_path"] + "." + name, width)
+                        for name, width in scopes[node["rtl_path"]]["registers"].items()]
         for primitive in node["primitives"]:
             drivers += [(primitive["rtl_path"] + "." + p["name"], p["width"])
                         for p in primitive["ports"] if p["direction"] == "output"]
@@ -305,7 +349,8 @@ def main():
     fixtures = ("buffer", "wide", "packet", "pipeline", "celement", "latch", "transport", "inertial",
                 "timed_early", "timed_equal", "timed_late", "structural", "structural_wide",
                 "structural_packet", "structural_pipeline", "transform", "longhold", "longhold_wide",
-                "longhold_packet", "longhold_pipeline", "longhold_comparison", "longhold_sum", "longhold_signed")
+                "longhold_packet", "longhold_pipeline", "longhold_comparison", "longhold_sum", "longhold_signed",
+                "dualrail", "to_async", "to_clocked", "bridge_roundtrip")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

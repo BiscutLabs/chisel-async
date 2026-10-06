@@ -1,6 +1,6 @@
 # Published-controller comparison
 
-Development experiment, October 5, 2026. **Keep the custom controller withdrawn. Keep the Muller implementation as a bounded reference, not a replacement for `FourPhaseBuffer`. Select the Furber–Day fully decoupled, long-hold design as the production design target.** Its exact topology, implementation and acceptance evidence remain the next work package; this comparison does not qualify it.
+Development experiment, October 5, 2026. **Keep the custom controller withdrawn. Keep the Muller implementation as a bounded reference, not a replacement for `FourPhaseBuffer`. Select the Furber–Day fully decoupled, long-hold design as the production design target.** Its separate implementation and evidence are now in [the long-hold record](long-hold-controller.md); this comparison remains a different experiment.
 
 ## Source and contract
 
@@ -84,4 +84,4 @@ python verification/compare_controllers.py
 
 ## Next implementation gate
 
-The [fully decoupled long-hold implementation](long-hold-controller.md) now checks its published event graph, emitted cell connections, typed transforms and explicit timing policy against the stronger buffer oracle and a separate delay campaign. Next, validate the logical-channel/encoding split with minimal bundled, dual-rail and clocked examples, then scalable observation/export before CA-06. This Muller reference still has its own distinct contract; its passing random sweep alone does not close L0.
+The [fully decoupled long-hold implementation](long-hold-controller.md) now checks its published event graph, emitted cell connections, typed transforms and explicit timing policy against the stronger buffer oracle and a separate delay campaign. The first [logical-channel/encoding probes](logical-channels.md) are now implemented; scalable observation/export and further qualification still precede CA-06. This Muller reference still has its own distinct contract; its passing random sweep alone does not close L0.

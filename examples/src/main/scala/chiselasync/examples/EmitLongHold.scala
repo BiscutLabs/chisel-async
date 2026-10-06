@@ -4,13 +4,14 @@ package chiselasync.examples
 import chisel3._
 import chiselasync.bundled.{FourPhaseStage, LongHoldBuffer}
 import chiselasync.core.AsyncModule
-import chiselasync.metadata.{BundledTiming, ExportDesign, ModelTime}
+import chiselasync.metadata.{BundledTiming, ControlDelays, DelayBounds, ExportDesign, ModelTime}
 import chiselasync.protocol.FourPhase
 import java.nio.file.Paths
 
 object LongHoldModels {
-  val digital = BundledTiming.Digital(ModelTime.ps(40000), ModelTime.ps(8000),
-    ModelTime.ps(1000), ModelTime.ps(1000), ModelTime.ps(40000))
+  private def bounded(ns: Long) = DelayBounds(ModelTime.ps(1000), ModelTime.ps(10000), ModelTime.ps(ns * 1000))
+  val digital = BundledTiming.Digital(ModelTime.ps(40000), bounded(8),
+    ControlDelays(bounded(1), bounded(2), bounded(3), bounded(4)), bounded(1), ModelTime.ps(40000))
 }
 class LongHoldExample extends LongHoldBuffer(UInt(8.W), BundledTiming.FunctionalOnly)
 class LongHoldWideExample extends LongHoldBuffer(UInt(65.W), BundledTiming.FunctionalOnly)

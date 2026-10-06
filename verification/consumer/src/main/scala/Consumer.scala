@@ -3,7 +3,7 @@ import chisel3._
 import chiselasync.bundled.{FourPhaseBuffer, FourPhaseStage, LongHoldBuffer, TimedCapture}
 import chiselasync.experimental.{UnsafeFourPhaseStage, UnsafeFourPhaseBuffer}
 import chiselasync.core.AsyncModule
-import chiselasync.metadata.{BundledTiming, DelayPolicy, ExportDesign, ModelTime}
+import chiselasync.metadata.{BundledTiming, ControlDelays, DelayBounds, DelayPolicy, ExportDesign, ModelTime}
 import chiselasync.primitives.{DelayLine, Latch}
 import java.nio.file.Paths
 
@@ -13,8 +13,9 @@ class StructuralBufferExample extends UnsafeFourPhaseBuffer(UInt(8.W))
 class TransformExample extends UnsafeFourPhaseStage(UInt(8.W), (value: UInt) => value ^ 0x55.U(8.W))
 
 object ConsumerTiming {
-  val digital = BundledTiming.Digital(ModelTime.ps(40000), ModelTime.ps(8000),
-    ModelTime.ps(1000), ModelTime.ps(1000), ModelTime.ps(40000))
+  private def bounded(ns: Long) = DelayBounds(ModelTime.ps(1000), ModelTime.ps(10000), ModelTime.ps(ns * 1000))
+  val digital = BundledTiming.Digital(ModelTime.ps(40000), bounded(8),
+    ControlDelays(bounded(1), bounded(2), bounded(3), bounded(4)), bounded(1), ModelTime.ps(40000))
 }
 class LongHoldExample extends LongHoldBuffer(UInt(8.W), BundledTiming.FunctionalOnly)
 class LongHoldComparisonExample extends LongHoldBuffer(UInt(40.W), ConsumerTiming.digital)
@@ -66,6 +67,7 @@ class ConsumerLatch extends AsyncModule {
 
 object Consumer {
   def main(args: Array[String]): Unit = {
+    ConsumerArchitecture.main(Array("generated"))
     ExportDesign.emit(new BufferExample, Paths.get("generated/buffer"))
     ExportDesign.emit(new StructuralBufferExample, Paths.get("generated/structural"))
     ExportDesign.emit(new TransformExample, Paths.get("generated/transform"))

@@ -40,7 +40,7 @@ def main():
     java = str(Path(java_home) / "bin" / ("java.exe" if os.name == "nt" else "java")) if java_home else shutil.which("java")
     command = [java, "-Xmx2G", "-XX:ActiveProcessorCount=4", "-Dsbt.supershell=false", "-Dsbt.color=false",
                "-Dsbt.override.build.repos=true", f"-Dsbt.repository.config={ROOT / 'project/repositories'}",
-               "-jar", str(ROOT / ".tools/sbt-launch-1.12.4.jar"), "run"]
+               "-jar", str(ROOT / ".tools/sbt-launch-1.12.4.jar"), "runMain Consumer"]
     subprocess.run(command, cwd=consumer, env=environment, check=True, timeout=180)
     subprocess.run([sys.executable, str(ROOT / "verification/run.py"), "--fixtures", "buffer", "structural", "transform", "longhold",
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification")],
@@ -50,6 +50,9 @@ def main():
                    cwd=ROOT, check=True, timeout=180)
     subprocess.run([sys.executable, str(ROOT / "verification/run_longhold.py"), "--seeds", "2",
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/longhold")],
+                   cwd=ROOT, check=True, timeout=180)
+    subprocess.run([sys.executable, str(ROOT / "verification/run_architecture.py"),
+                    "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/architecture")],
                    cwd=ROOT, check=True, timeout=180)
     print(f"Published artifact consumed and simulated successfully: {consumer}")
 

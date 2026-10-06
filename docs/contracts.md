@@ -2,6 +2,10 @@
 
 These contracts describe the first functional slice. They do not specify a mapped circuit, physical delay or analog behavior.
 
+## Logical token stream
+
+`Channel[T]` separates payload/reset intent from its electrical binding. Bundled, dual-rail RTZ and Decoupled have distinct transfer, hold and commit semantics; see [logical-channel contracts](logical-channels.md). Clocked conversion uses explicit storage and synchronized control; it does not turn a clock into an implicit library assumption.
+
 ## Four-phase channel
 
 The producer drives `req` and `bits`; the consumer drives `ack`. Idle is `(req, ack) = (0, 0)`. The legal transition order is `00 → 10 → 11 → 01 → 00`. One round trip represents one transaction even if its data equals the preceding transaction. The producer establishes data before raising request and holds it through return to idle. The consumer raises acknowledgement only for an offered transaction and lowers it after request falls.

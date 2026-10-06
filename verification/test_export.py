@@ -41,7 +41,7 @@ def test_export_survives_moving_to_path_with_spaces(exported):
 
 @pytest.mark.parametrize("fault,diagnostic", [
     ("duplicate", "DUPLICATE_SEMANTIC_ID"), ("alias", "AMBIGUOUS_RTL_PATH"),
-    ("domain", "RESET_DOMAIN_MISMATCH"), ("width", "ENDPOINT_MISMATCH"),
+    ("domain", "RESET_DOMAIN_MISMATCH"), ("width", "INVALID_CHANNEL_CONTROL"),
     ("missing", "ENDPOINT_MISMATCH"), ("parameter", "PRIMITIVE_PARAMETER_MISMATCH"),
     ("unregistered", "UNREGISTERED_MODULE_OR_PRIMITIVE"),
 ])

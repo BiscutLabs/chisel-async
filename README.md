@@ -2,13 +2,14 @@
 
 A Chisel library for asynchronous hardware, developed independently under Apache 2.0.
 
-**Status: published long-hold controller implemented; architecture gate still open.** `FourPhaseStage[A, B]` now uses the Furber–Day fully decoupled long-hold topology with explicit timing policies. Its [bounded digital campaign](docs/long-hold-controller.md) checks full-handshake data hold, capacity, typed transforms and internal event order. The custom controller remains withdrawn. Logical-channel separation, small dual-rail/clocked examples and scalable export precede catalog expansion. macOS qualification is explicitly deferred.
+**Status: logical-channel and encoding probes implemented; export gate still open.** `FourPhaseStage[A, B]` now uses the Furber–Day fully decoupled long-hold topology with explicit timing policies. Its [bounded digital campaign](docs/long-hold-controller.md) checks full-handshake data hold, capacity, typed transforms and internal event order. The custom controller remains withdrawn. The [logical-channel layer, dual-rail storage/completion probe and explicit-clock bridges](docs/logical-channels.md) now have executable evidence. Scalable export and independent review still precede catalog expansion. macOS qualification is explicitly deferred.
 
 The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip implementation. This library works with an existing simulator and does not depend on Chiselator, Yosys, a PDK, ACT or a GPU.
 
 ## What works now
 
 - `AsyncModule`: `RawModule` with an explicit active-high `AsyncReset`, no implicit clock.
+- `Channel[T]`: shared typed token intent and reset domain, with distinct bundled, dual-rail and standard Decoupled bindings; explicit clocked converters.
 - `FourPhase[T]`: request/data toward the consumer, acknowledgement toward the producer. Supports sized UInt/SInt/Bool and nested Bundle/Vec payloads.
 - `FourPhase.connect`: rejects incompatible shapes, implicit resizing and different reset-domain objects. Exported channels must share their owner's `ResetDomain`.
 - `FourPhaseBuffer[T]`: one captured token, backpressure, stable output data through return to idle, and coordinated reset flushing.
@@ -19,44 +20,31 @@ The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip im
 - `ExportDesign`: versioned manifest, scoped semantic IDs, payload layouts, reset domains, primitive parameters/resources and timing obligations. Actual RTL elaboration and active bit probes validate the retained endpoints.
 - Packaged SV behavioral views, executable examples, Scala API tests, passive protocol monitors, independent token accounting and eight deliberately corrupted-model controls.
 
-`FourPhaseBuffer` is a zero-delay **behavioral storage model**, not a hardware controller. The failed structural experiment lives under `chiselasync.experimental.UnsafeFourPhaseStage` / `UnsafeFourPhaseBuffer` solely for regression. The replacement has bounded digital evidence under stated atomic-cell, ideal-wire and bundling assumptions; no physical cell mapping is supplied. Small bundled/QDI/clocked architecture examples precede catalog expansion in the revised [roadmap](docs/roadmap.md).
+`FourPhaseBuffer` is a zero-delay **behavioral storage model**, not a hardware controller. The failed structural experiment lives under `chiselasync.experimental.UnsafeFourPhaseStage` / `UnsafeFourPhaseBuffer` solely for regression. The replacement has bounded digital evidence under stated atomic-cell, ideal-wire and bundling assumptions; no physical cell mapping is supplied. The small bundled/dual-rail/clocked examples exercise the shared API; scalable export and broader qualification still gate the catalog in the [roadmap](docs/roadmap.md).
 
 ## Using the library versus qualifying the repository
 
 There is no public release yet. A consumer of a locally published snapshot needs the matching Chisel/compiler-plugin setup and `libraryDependencies += "io.github.biscutlabs" %% "chisel-async" % "0.1.0-SNAPSHOT"`. Python and the qualification harness are not library runtime dependencies. Emission needs the compatible native firtool; simulation needs a backend supporting the chosen behavioral views. The [clean consumer](verification/consumer) is an executable dependency example. Qualified export remains pinned and fail-closed; this is not an optimized production-netlist path.
 
-For parent/child reset wiring, use `asyncChild("buffer")(domain => new FourPhaseBuffer(UInt(8.W), domain))` inside an `AsyncModule`. It passes the parent's domain, wires reset and registers the child contract. Separately constructed roots intentionally have separate domains. The commands below are for contributors running the full qualification campaign; a single-command setup/qualification wrapper remains planned.
+For parent/child reset wiring, use `asyncChild("buffer")(domain => new FourPhaseBuffer(UInt(8.W), domain))` inside an `AsyncModule`. It passes the parent's domain, wires reset and registers the child contract. Separately constructed roots intentionally have separate domains. The command below is for contributors running the full qualification campaign.
 
 ## Build and test
 
-Use JDK 21, Python 3.12 and Icarus Verilog 13.0. The library pins Chisel 7.16.0, Scala 2.13.18, sbt 1.12.4 and firtool 1.160.0. These scripts run from PowerShell or a Unix shell; Python must be at least 3.12 for bootstrap extraction. They install checked compiler/build artifacts only into the ignored `.tools` directory. Maven dependencies resolve normally through sbt.
+Install **Python 3.12** and the platform prerequisites below, then run:
 
 ```text
-python -m venv .venv
+python tools/qualify.py
 ```
 
-Activate with `.venv\Scripts\Activate.ps1` on Windows or `source .venv/bin/activate` on macOS/Linux. Set `JAVA_HOME` to your JDK if it is not the default Java installation.
+The wrapper creates/reuses `.venv`, installs the hash-locked verification dependencies, installs the pinned JDK/firtool/sbt, configures paths for its child processes, emits every fixture, and runs all API, export, functional, timing, controller, architecture and clean-consumer checks. No activation or manual `JAVA_HOME` is needed. It stops on the first failure and writes commands, status and logs to `target/verification/qualification`. A stale successful report cannot survive a failed preflight or run. Native CI uses this same command.
 
-```text
-python -m pip install --require-hashes -r verification/requirements.txt
-python tools/bootstrap_jdk.py
-python tools/bootstrap.py
-python tools/sbt.py --bootstrap test "examples/runMain chiselasync.examples.EmitFixtures target/generated"
-python tools/sbt.py "examples/runMain chiselasync.examples.EmitControllerComparison target/generated/comparison_unsafe"
-python tools/sbt.py "examples/runMain chiselasync.examples.EmitLongHold target/generated"
-python tools/check_export.py
-python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py verification/test_controller_comparison.py verification/test_longhold.py -q
-python verification/run.py
-python verification/controller_race.py
-python verification/compare_controllers.py
-python verification/run_timing.py
-python verification/run_longhold.py
-python tools/consumer_smoke.py
-```
+- **Windows:** install the native MSYS2 UCRT64 `mingw-w64-ucrt-x86_64-iverilog` package. The wrapper finds `C:/msys64/ucrt64/bin`; use `--simulator-dir <directory>` for another installation. WSL is unnecessary for native Windows testing.
+- **Linux:** install `autoconf gperf bison flex g++ make` if a pinned simulator build is needed. The wrapper builds checked Icarus 13 sources under `.tools` when no qualified simulator is available. It does not install system packages or invoke sudo.
+- **macOS:** qualification remains explicitly deferred; the wrapper reports this rather than silently skipping a lane.
 
-`bootstrap_jdk.py` verifies the exact Temurin 21.0.12.1+1 archive and installs it under `.tools/jdk21`. Outside CI, set `JAVA_HOME` to `.tools/jdk21/jdk-21.0.12.1+1` afterward. It supports Windows/Linux x86-64; macOS setup is deferred. CI pins CPython 3.12.10 on Windows and 3.12.13 on Linux because setup-python has no Windows binary for 3.12.13. Reports retain actual interpreter identities.
+The tuple is JDK 21.0.12.1+1, Chisel 7.16.0, Scala 2.13.18, sbt 1.12.4, firtool 1.160.0 and Icarus 13.0. CI pins CPython 3.12.10 on Windows and 3.12.13 on Linux; actual identities remain in reports. Tools install into ignored `.tools`, and the clean consumer publishes only to the local Ivy cache. Python and the verification harness are not library runtime dependencies.
 
-For native Windows simulation, install `mingw-w64-ucrt-x86_64-iverilog` in an [MSYS2 UCRT64 environment](https://www.msys2.org/) and add its `ucrt64/bin` directory to PATH in the shell running Python. This runs Windows executables and does not require WSL. On Linux, install the build dependencies listed in the CI workflow, run `python tools/build_iverilog.py`, then add `.tools/iverilog/bin` to PATH. The runner checks the engine version rather than silently using another simulator.
+`--no-setup` runs the same complete campaign using already installed dependencies and the calling Python interpreter. Individual runners remain available for focused debugging; see [timing/export](docs/timing-and-export.md), [long-hold replay](docs/long-hold-controller.md) and [architecture replay](docs/logical-channels.md). Missing tools, partial suites and unexpected fault diagnostics fail the run.
 
 `tools/consumer_smoke.py` publishes to the local Ivy cache and creates a separate consumer project under `target/consumers`. It checks behavioral/withdrawn regression fixtures, long-hold buffering and type-changing transforms, packaged primitive models, timing tests and a short long-hold delay sweep with all fault controls. The proposed Maven coordinates are `io.github.biscutlabs:chisel-async_2.13:0.1.0-SNAPSHOT`; publication namespace ownership remains to be established.
 
@@ -80,7 +68,7 @@ Run `python tools/check_export.py generated` to resolve and validate the export.
 
 ## Evidence and limits
 
-The functional campaign requires 74 positive event tests and eight fault controls, including 22 new long-hold cases. The separate long-hold campaign requires 628 delayed cases, three activated faults, 5,184 primitive state/delay checks and 776 typed transfers. The timing campaign adds seven passing cases, two intended setup/hold violations and five corrupted-model controls. Scala and Python checks cover API misuse, deterministic export, compiler corruption, exact time, independent reference models and harness failures. An unrelated assertion, crash or timeout cannot count as successful rejection.
+The functional campaign requires 74 positive event tests and eight fault controls, including 22 new long-hold cases. The separate long-hold campaign requires 628 delayed cases, three activated faults, 5,184 primitive state/delay checks and 776 typed transfers. The architecture campaign adds 14 positive cases and four precise fault controls for completion and synchronizer latency. The timing campaign adds seven passing cases, two intended setup/hold violations and five corrupted-model controls. Scala and Python checks cover API misuse, deterministic export, compiler corruption, exact time, independent reference models and harness failures. An unrelated assertion, crash or timeout cannot count as successful rejection.
 
 Passive observers enforce handshake order and data hold while independent transaction accounting checks capacity, delivery and reset abortion. Tests include walking-one/walking-zero patterns for every payload bit, full-pipeline reset with a pending request, and completed post-reset transfers. Each single-buffer fixture runs 18 legal two-token orders with both equal and distinct payloads, 68 reset prefixes, and six coincident/one-picosecond boundary cases. The C-element checks 1,024 Boolean transitions. These are bounded functional experiments; see the [verification method and acceptance criteria](docs/verification.md).
 

@@ -62,6 +62,16 @@ def case_configuration(seed, depth, uniform=None):
     return delays, environment
 
 
+def check_case_bounds(policy, delays):
+    bounds = {**policy["control_delays"], "data_delay": policy["data_delay"], "payload": policy["latch_delay"]}
+    for stage in delays:
+        if set(stage) != set(bounds):
+            raise ValueError("DELAY_ROLE_INVENTORY")
+        for name, value in stage.items():
+            if not int(bounds[name]["min_fs"]) <= value*1000000 <= int(bounds[name]["max_fs"]):
+                raise ValueError("DELAY_OUTSIDE_DECLARED_BOUNDS")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seeds", type=int, default=300)
@@ -80,6 +90,8 @@ def main():
     try:
         generated = args.generated.resolve() / "longhold_comparison"
         evidence["original_export"] = validate_export(generated)
+        policy = json.loads((generated / "contract.json").read_text())["manifest"]["design"]["timing"][0]
+        evidence["declared_policy"] = policy
         version = subprocess.run(["iverilog", "-V"], capture_output=True, text=True, check=True).stdout.splitlines()[0]
         evidence.update(platform=platform.platform(), python=sys.version, simulator=version)
         evidence["stg_reachability"] = explore()
@@ -111,6 +123,7 @@ def main():
                         stage[role] = 1 if slow else 10
                     cases.append((f"depth{depth}_corner_{int(slow)}_{role}", delays, env))
             for name, delays, environment in cases:
+                check_case_bounds(policy, delays)
                 result = execute(sources, output / name, depth, delays, environment, waves="uniform_10" in name)
                 evidence["cases"].append(result)
                 if result["status"] != "PASS":

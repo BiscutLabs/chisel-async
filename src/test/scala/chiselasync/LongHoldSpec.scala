@@ -3,7 +3,7 @@ package chiselasync
 
 import chisel3._
 import chiselasync.bundled.{FourPhaseStage, LongHoldBuffer}
-import chiselasync.metadata.{BundledTiming, ModelTime}
+import chiselasync.metadata.{BundledTiming, ControlDelays, DelayBounds, ModelTime}
 import chiselasync.primitives.AsymmetricCElement
 import circt.stage.ChiselStage
 import org.scalatest.funsuite.AnyFunSuite
@@ -42,7 +42,8 @@ class LongHoldSpec extends AnyFunSuite {
 
   test("timed mode rejects zero, insufficient, and overflowing timing margins") {
     def timing(matched: Long, data: Long, cell: Long, latch: Long, output: Long) =
-      BundledTiming.Digital(ModelTime(matched), ModelTime(data), ModelTime(cell), ModelTime(latch), ModelTime(output))
+      BundledTiming.Digital(ModelTime(matched), DelayBounds.fixed(ModelTime(data)),
+        ControlDelays.uniform(DelayBounds.fixed(ModelTime(cell))), DelayBounds.fixed(ModelTime(latch)), ModelTime(output))
     assert(timing(40, 8, 1, 1, 40).mode == "digital-model")
     intercept[IllegalArgumentException] { timing(8, 8, 1, 1, 40) }
     intercept[IllegalArgumentException] { timing(40, 8, 0, 1, 40) }
@@ -61,5 +62,19 @@ class LongHoldSpec extends AnyFunSuite {
     assert(getClass.getResource("/chiselasync/sv/ChiselAsyncAsymmetricC_v1.sv") != null)
     assert(getClass.getResource("/chiselasync/sv/ChiselAsyncClosingLatch_v1.sv") != null)
     assert(getClass.getResource("/chiselasync/sv/ChiselAsyncControlGate_v1.sv") != null)
+  }
+
+  test("timing guards use independent worst-case bounds rather than model values") {
+    val one = DelayBounds.fixed(ModelTime(1))
+    val slow = DelayBounds(ModelTime(1), ModelTime(10), ModelTime(2))
+    val cells = ControlDelays(one, slow, one, one)
+    intercept[IllegalArgumentException] {
+      BundledTiming.Digital(ModelTime(20), slow, cells, one, ModelTime(21))
+    }
+    val policy = BundledTiming.Digital(ModelTime(20), slow, cells, one, ModelTime(22))
+    assert(policy.minimumOutputGuard.fs == 21)
+    intercept[IllegalArgumentException] { DelayBounds(ModelTime(3), ModelTime(2), ModelTime(2)) }
+    val text = ChiselStage.emitCHIRRTL(new LongHoldBuffer(UInt(8.W), policy))
+    assert(text.contains("parameter DELAY_FS = 2"))
   }
 }

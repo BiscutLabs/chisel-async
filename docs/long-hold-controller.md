@@ -23,9 +23,11 @@ The latch is transparent at Lt=0. Input inversion bubbles belong inside each ato
 
 ```scala
 class Operands extends Bundle { val left = UInt(8.W); val right = UInt(8.W) }
+def bounded(ns: Long) = DelayBounds(ModelTime.ps(1000), ModelTime.ps(10000), ModelTime.ps(ns * 1000))
 val model = BundledTiming.Digital(
-  matchedDelay = ModelTime.ps(40000), dataDelay = ModelTime.ps(8000),
-  cellDelay = ModelTime.ps(1000), latchDelay = ModelTime.ps(1000),
+  matchedDelay = ModelTime.ps(40000), dataDelay = bounded(8),
+  controls = ControlDelays(a = bounded(1), b = bounded(2), acknowledge = bounded(3), longHold = bounded(4)),
+  latchDelay = bounded(1),
   outputDelay = ModelTime.ps(40000))
 class AddStage extends FourPhaseStage(new Operands, UInt(9.W),
   (p: Operands) => p.left +& p.right, model)
@@ -35,11 +37,11 @@ Imports are in [EmitLongHold.scala](../examples/src/main/scala/chiselasync/examp
 
 The wrapper adds a matched admission buffer before both uses of Rin, a modeled data-path delay before storage, and an output-request buffer after A. The latter enforces our ledger's acceptance-before-offer ordering and payload settling; these added guards are our wrapper, not a claim that the paper specifies these values. The data delay models the entire pure transform path, whose Chisel logic is otherwise ideal in this simulation.
 
-`Digital` requires positive cell/latch delays, `matchedDelay > dataDelay`, and `outputDelay > 2*cellDelay + latchDelay`. Exact femtoseconds and checked arithmetic prevent rounding/overflow. The strict guards avoid equality assumptions. They cover this atomic digital model with ideal wires/forks and a zero-aperture storage event; they do not substitute for physical setup/hold, minimum pulse or routing constraints. Each output propagation uses inertial SV delay. Input polarity has no independent delay. Binary operation and coordinated reset held until quiescent are required; the campaign holds reset for 1000 ns, comfortably beyond its longest bounded path. Reset release starts with both external handshake drivers idle. Arbitrarily short reset pulses and analog uncertainty are not qualified.
+`DelayBounds(min, max, model)` supplies each of A, B, acknowledgement, long-hold OR, data path and latch separately. The model value must lie within its bounds; `DelayBounds.fixed` expresses an exact value. `Digital` requires positive cell/latch lower bounds, `matchedDelay > dataDelay.max`, and `outputDelay > 2*max(control upper bounds) + latchDelay.max`. The latter is a deliberately conservative guard over all four controls. Exact femtoseconds and checked arithmetic prevent rounding/overflow. The strict guards avoid equality assumptions. They cover the declared atomic digital model with ideal wires/forks and zero latch aperture; physical setup/hold, pulse and routing constraints remain separate. Output propagation is inertial, and input polarity has no independent delay. Binary operation and coordinated reset held until quiescent are required; the campaign holds reset for 1000 ns, beyond its longest bounded path. Reset release starts with both external handshake drivers idle. Arbitrarily short reset pulses and analog uncertainty are not qualified.
 
 `BundledTiming.FunctionalOnly` is the explicitly requested all-zero mode for the existing functional corpus. Neither mode has a default. While idle, a transparent stage's output data may follow input data. Once output request rises, data remains stable through output acknowledgement falling. Reset clears the stored value after modeled propagation; a previously delivered transaction is not retrospectively aborted.
 
-Primitive delay values remain in emitted `ExtModule` parameters. The `long-hold-bundling-v1` descriptor records the same values, seven semantic endpoints and assumptions. Export validation rejects inconsistent margins or disagreement with primitive parameters. The current qualified debug/retained-port route still applies; this addition does not qualify optimized/deduplicated production export.
+Primitive model values remain in emitted `ExtModule` parameters. The `long-hold-bundling-v2` descriptor records individual bounds/model values, seven semantic endpoints and assumptions. Export validation checks worst-case margins and model/primitive agreement. Every positive sweep override is checked against these declared bounds before compilation; deliberate fault cases explicitly violate the contract. Earlier v1 exports described equal nominal control delays despite independently varied experiments. That mismatch is corrected: re-emit with v2 and the current compiler options. The qualified debug/retained-port route still applies; optimized/deduplicated production export remains unqualified.
 
 ## Executable evidence
 

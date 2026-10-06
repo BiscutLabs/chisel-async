@@ -95,11 +95,12 @@ def test_topology_rejects_changed_input_polarity(longhold_export):
 
 
 @pytest.mark.parametrize("key,value,diagnostic", [
-    ("matched_delay_fs", "8000000", "INVALID_BUNDLING_POLICY"),
-    ("output_delay_fs", "3000000", "INVALID_BUNDLING_POLICY"),
+    ("matched_delay_fs", "10000000", "INVALID_BUNDLING_POLICY"),
+    ("output_delay_fs", "30000000", "INVALID_BUNDLING_POLICY"),
     ("mode", "functional-only", "INVALID_BUNDLING_POLICY"),
     ("latch_closed", "absent", "MISSING_TIMING_ENDPOINT"),
-    ("data_delay_fs", "9000000", "BUNDLING_PARAMETER_MISMATCH"),
+    ("data_delay", {"min_fs":"1000000", "max_fs":"10000000", "model_fs":"9000000"}, "BUNDLING_PARAMETER_MISMATCH"),
+    ("latch_delay", {"min_fs":"2000000", "max_fs":"10000000", "model_fs":"1000000"}, "INVALID_DELAY_BOUNDS"),
     ("output_delay_fs", str(2**63), "INVALID_MODEL_TIME"),
 ])
 def test_timing_contract_cannot_drift_from_rtl(longhold_export, key, value, diagnostic):
@@ -107,3 +108,14 @@ def test_timing_contract_cannot_drift_from_rtl(longhold_export, key, value, diag
     with pytest.raises(ValueError, match=f"^{diagnostic}$"):
         validate_export(longhold_export)
     assert json.loads((longhold_export / "resolved.json").read_text())["status"] != "PASS"
+
+
+def test_sweep_cannot_escape_declared_cell_envelope(longhold_export):
+    from run_longhold import check_case_bounds, case_configuration
+    policy = json.loads((longhold_export / "contract.json").read_text())["manifest"]["design"]["timing"][0]
+    for delay in (1, 10):
+        values, _ = case_configuration(0, 3, delay)
+        check_case_bounds(policy, values)
+    values[1]["b"] = 11
+    with pytest.raises(ValueError, match="DELAY_OUTSIDE_DECLARED_BOUNDS"):
+        check_case_bounds(policy, values)

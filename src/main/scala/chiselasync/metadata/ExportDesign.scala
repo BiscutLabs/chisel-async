@@ -11,7 +11,7 @@ import scala.jdk.CollectionConverters._
 /** Qualified debug export. check_export.py must validate the resulting RTL before consumption. */
 object ExportDesign {
   val options: Seq[String] = Vector("-O=debug", "--no-dedup", "--preserve-values=named",
-    "--strip-fir-debug-info", "--lowering-options=disallowPortDeclSharing")
+    "--strip-fir-debug-info", "--lowering-options=disallowPortDeclSharing,disallowLocalVariables")
   private def sha(bytes: Array[Byte]): String = MessageDigest.getInstance("SHA-256").digest(bytes)
     .map(b => f"${b & 0xff}%02x").mkString
 

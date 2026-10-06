@@ -4,7 +4,8 @@ package chiselasync.metadata
 import chisel3._
 import chisel3.reflect.DataMirror
 import chiselasync.core.AsyncModule
-import chiselasync.protocol.FourPhase
+import chiselasync.protocol.{Channel, DualRail, FourPhase, Payload}
+import chisel3.util.DecoupledIO
 import scala.collection.mutable.ArrayBuffer
 
 /** Per-module, explicit registry. No mutable singleton or ambient elaboration state. */
@@ -49,7 +50,40 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
       "request" -> req, "data" -> bits, "acknowledge" -> ack,
       "reset_domain" -> owner.resetDomain.id, "layout" -> layout(port.bits),
       "phases" -> ujson.Arr("00", "10", "11", "01", "00"),
+      "token_contract" -> "ordered-lossless-reset-abort-v1",
       "environment" -> "binary inputs; coordinated reset; data held through return to idle"))
+  }
+
+  def dualRailChannel[T <: Data](id: String, port: DualRail[T], role: String): Unit = {
+    claim(id)
+    require(port.domain eq owner.resetDomain, s"unbound reset domain: $id")
+    require(Set("input", "output").contains(role), "invalid channel role")
+    val zero = endpoint(s"${id}_zero", port.zero)
+    val one = endpoint(s"${id}_one", port.one)
+    val ack = endpoint(s"${id}_acknowledge", port.ack)
+    channels += (() => ujson.Obj("id" -> id, "protocol" -> "dual-rail-rtz-v1", "role" -> role,
+      "zero" -> zero, "one" -> one, "acknowledge" -> ack,
+      "reset_domain" -> owner.resetDomain.id, "layout" -> layout(port.one),
+      "phases" -> ujson.Arr("spacer", "data", "acknowledged", "spacer", "idle"),
+      "token_contract" -> "ordered-lossless-reset-abort-v1",
+      "environment" -> "monotonic 1-of-2 rails; all-spacer return; coordinated reset; ideal forks in digital probe"))
+  }
+
+  def clockedChannel[T <: Data](id: String, port: DecoupledIO[T], clock: Clock,
+                                logical: Channel[T], role: String): Unit = {
+    claim(id)
+    require(logical.domain eq owner.resetDomain, s"unbound reset domain: $id")
+    Payload.requireSame(port.bits, logical.payload)
+    require(Set("input", "output").contains(role), "invalid channel role")
+    val valid = endpoint(s"${id}_valid", port.valid)
+    val bits = endpoint(s"${id}_data", port.bits)
+    val ready = endpoint(s"${id}_ready", port.ready)
+    val edge = endpoint(s"${id}_clock", clock)
+    channels += (() => ujson.Obj("id" -> id, "protocol" -> "decoupled-v1", "role" -> role,
+      "valid" -> valid, "data" -> bits, "ready" -> ready, "clock" -> edge,
+      "reset_domain" -> owner.resetDomain.id, "layout" -> layout(port.bits),
+      "phases" -> ujson.Arr("rising-edge-fire"), "token_contract" -> logical.tokenContract,
+      "environment" -> "transfer only at rising clock with ready and valid; no input irrevocability assumed; coordinated reset"))
   }
 
   def primitive(id: String, instance: ExtModule, parameters: Map[String, BigInt],
@@ -95,12 +129,16 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     Seq(request, inputData, latchData, latchClosed, acknowledge, outputRequest, outputData).foreach { ref =>
       require(endpoints.exists(_._1 == ref), s"missing timing endpoint: $ref")
     }
-    obligations += ujson.Obj("id" -> id, "kind" -> "long-hold-bundling-v1", "mode" -> policy.mode,
+    def bounds(value: DelayBounds): ujson.Value = ujson.Obj("min_fs" -> value.min.fs.toString,
+      "max_fs" -> value.max.fs.toString, "model_fs" -> value.model.fs.toString)
+    obligations += ujson.Obj("id" -> id, "kind" -> "long-hold-bundling-v2", "mode" -> policy.mode,
       "request" -> request, "input_data" -> inputData, "latch_data" -> latchData,
       "latch_closed" -> latchClosed, "acknowledge" -> acknowledge,
       "output_request" -> outputRequest, "output_data" -> outputData,
-      "matched_delay_fs" -> policy.matchedDelay.fs.toString, "data_delay_fs" -> policy.dataDelay.fs.toString,
-      "cell_delay_fs" -> policy.cellDelay.fs.toString, "latch_delay_fs" -> policy.latchDelay.fs.toString,
+      "matched_delay_fs" -> policy.matchedDelay.fs.toString, "data_delay" -> bounds(policy.dataDelay),
+      "control_delays" -> ujson.Obj("a" -> bounds(policy.controls.a), "b" -> bounds(policy.controls.b),
+        "acknowledge" -> bounds(policy.controls.acknowledge), "long_hold" -> bounds(policy.controls.longHold)),
+      "latch_delay" -> bounds(policy.latchDelay),
       "output_delay_fs" -> policy.outputDelay.fs.toString,
       "provenance" -> "explicit model policy; not technology timing closure",
       "assumptions" -> "atomic asymmetric cells including input bubbles; ideal forks; zero latch aperture; coordinated quiescent reset")
