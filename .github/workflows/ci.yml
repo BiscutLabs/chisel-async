@@ -22,13 +22,21 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Install native Windows event simulator
+      - name: Install native Windows simulation prerequisites
         if: runner.os == 'Windows'
         id: msys2
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
-          install: mingw-w64-ucrt-x86_64-iverilog mingw-w64-ucrt-x86_64-verilator mingw-w64-ucrt-x86_64-gcc make
+          install: mingw-w64-ucrt-x86_64-iverilog mingw-w64-ucrt-x86_64-gcc make
+      - name: Install checksum-pinned native Verilator
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          mkdir -p .tools
+          curl --fail --location --retry 3 https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-verilator-5.046-1-any.pkg.tar.zst -o .tools/verilator-5.046.pkg.tar.zst
+          echo '8c11e6057890d67157bf4285211381a2474c0b2172bc10254657d018f9449a2a  .tools/verilator-5.046.pkg.tar.zst' | sha256sum --check -
+          pacman --noconfirm -U .tools/verilator-5.046.pkg.tar.zst
       - name: Expose native Windows simulator
         if: runner.os == 'Windows'
         shell: pwsh

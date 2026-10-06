@@ -40,7 +40,7 @@ Upstream Chisel 7.16.0 svsim generates a Windows cleanup recipe followed by POSI
 
 The adapter removes the redundant cleanup from an already fresh svsim workspace, normalizes generated paths, supplies independently written `getline`/null-device compatibility, uses static DPI declarations and Verilator's context-based time API, and copies the native PE executable to svsim's requested extensionless name. Build-directory and test names stay short enough for native Windows tools' MAX_PATH limit. Nested compiler make calls pass through unchanged. The original makefile is retained next to the adapted file. No Chisel JAR, RTL, stimulus, simulator message protocol or simulator source is patched. The 1024-bit test exercises command-buffer growth as well as payload transport.
 
-The build requires MSYS2 UCRT64 Verilator 5.046/GCC and MSYS make/Perl; the wrapper does not install system packages. Linux uses an unmodified native backend, built from a checksum-pinned source archive when needed. macOS remains deferred.
+The build requires MSYS2 UCRT64 Verilator 5.046/GCC and MSYS make/Perl; the wrapper does not install system packages. Windows CI installs the official `5.046-1` package archive with SHA-256 `8c11e6057890d67157bf4285211381a2474c0b2172bc10254657d018f9449a2a`; floating MSYS2 installation supplied 5.050 and correctly failed preflight before this pin was added. Linux uses an unmodified native backend, built from a checksum-pinned source archive when needed. macOS remains deferred.
 
 ## Evidence limits and next gate
 
