@@ -14,8 +14,8 @@ from test_export import edit_manifest
 @pytest.mark.parametrize("fixture,key,value,diagnostic", [
     ("dualrail","phases",["rising-edge-fire"],"INVALID_CHANNEL"),
     ("to_async","clock","absent","MISSING_CHANNEL_ENDPOINT"),
-    ("to_clocked","clock","out_data","INVALID_CHANNEL_CONTROL"),
-    ("dualrail","zero","in_acknowledge","INVALID_PAYLOAD_LAYOUT"),
+    ("to_clocked","clock","out_data","CHANNEL_ENDPOINT_ASSOCIATION"),
+    ("dualrail","zero","in_acknowledge","CHANNEL_ENDPOINT_ASSOCIATION"),
     ("dualrail","token_contract","unordered","INVALID_CHANNEL"),
 ])
 def test_encoding_contract_cannot_be_relabelled(tmp_path,fixture,key,value,diagnostic):

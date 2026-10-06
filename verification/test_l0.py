@@ -22,7 +22,7 @@ def test_acceptance_inventory_is_finite_and_separate_from_development_seeds():
     check_reports(baseline, campaign)
     assert len(expected_cases()) == len(set(expected_cases())) == 312
     seeds = [int(name.rsplit("_", 1)[1]) for name in expected_cases() if "_seed_" in name]
-    assert len(seeds) == 256 and min(seeds) == 10000 and max(seeds) == 10063
+    assert len(seeds) == 256 and min(seeds) == 10064 and max(seeds) == 10127
 
 
 @pytest.mark.parametrize("fault", ["partial", "duplicate", "inactive", "wrong_seed", "failure"])

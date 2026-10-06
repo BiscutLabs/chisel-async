@@ -15,7 +15,7 @@ def main():
     subprocess.run([sys.executable, str(ROOT / "tools/sbt.py"), "publishLocal"], check=True)
     artifact = ROOT / "target/scala-2.13/chisel-async_2.13-0.1.0-SNAPSHOT.jar"
     with zipfile.ZipFile(artifact) as library:
-        for name in ("META-INF/LICENSE", "chiselasync/contract-v2.schema.json", "chiselasync/trace-v1.schema.json", "chiselasync/sv/ChiselAsyncCElement_v1.sv",
+        for name in ("META-INF/LICENSE", "chiselasync/contract-v3.schema.json", "chiselasync/trace-v1.schema.json", "chiselasync/sv/ChiselAsyncCElement_v1.sv",
                      "chiselasync/sv/ChiselAsyncFourPhaseStorage_v1.sv",
                      "chiselasync/sv/ChiselAsyncLatch_v1.sv", "chiselasync/sv/ChiselAsyncDelayLine_v1.sv",
                      "chiselasync/sv/ChiselAsyncAsymmetricC_v1.sv", "chiselasync/sv/ChiselAsyncControlGate_v1.sv",

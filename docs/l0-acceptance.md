@@ -4,17 +4,17 @@ L0 is the CA-01–05 foundation gate: pinned native tools, protocol/reference co
 
 ## Candidate and prospective campaign
 
-Before executing acceptance, create and commit `qualification/l0-candidate-1.json` with `python verification/run_l0.py --freeze`. Freezing records normalized-LF SHA-256 hashes of every Git-visible source, resource, example, test, checker, tool, build/project and CI input. It refuses to overwrite an existing candidate. Documentation can record results afterwards without changing the tested source identity.
+Before executing acceptance, create and commit `qualification/l0-candidate-2.json` with `python verification/run_l0.py --freeze`. Freezing records normalized-LF SHA-256 hashes of every Git-visible source, resource, example, test, checker, tool, build/project and CI input. It refuses to overwrite an existing candidate. Documentation can record results afterwards without changing the tested source identity.
 
-Run `python verification/run_l0.py` with the README prerequisites, or manually dispatch the Library qualification workflow with `l0=true`. This runs the complete one-command qualification first, including local publication and the unrelated consumer. It then executes the published long-hold stage at depths 1, 2, 3 and 4 with seeds 10000–10063 (256 configurations), two uniform cases per depth and both polarities of six role corners per depth (56 cases). All 312 cases must pass. The three existing faults must fail specifically for payload mismatch, data hold and capacity respectively. Missing cases, duplicate cases, nonprogress, unrelated failures or source drift invalidate acceptance.
+Run `python verification/run_l0.py` with the README prerequisites, or manually dispatch the Library qualification workflow with `l0=true`. This runs the complete one-command qualification first, including local publication and the unrelated consumer. It then executes the published long-hold stage at depths 1, 2, 3 and 4 with seeds 10064–10127 (256 configurations), two uniform cases per depth and both polarities of six role corners per depth (56 cases). All 312 cases must pass. The three existing faults must fail specifically for payload mismatch, data hold and capacity respectively. Missing cases, duplicate cases, nonprogress, unrelated failures or source drift invalidate acceptance.
 
 The custom deterministic PRNG and parameter mapping are frozen with the checker sources. Each cell role has an independent 1–10 ns digital delay; environment pauses span 1–60 ns. Bounds must satisfy the emitted timing policy. Each case checks 49 deliveries, 47 completed output returns, seven reset scenarios, conservation, capacity, full-handshake data hold and the independent published event graph. The established topology, primitive, typed-payload and fault checks are also repeated.
 
-The seeds and depths are selected before this acceptance run. Existing uniform/corner cases at depths 1 and 3 are deliberate regression replays; depths 2 and 4 extend composition coverage. This is fresh input coverage on a known topology, driver and oracle, not an independent implementation, calibrated physical distribution, statistical reliability bound or proof over arbitrary delays. Retain the original development corpus and withdrawn-controller counterexample.
+The seeds and depths are selected before this acceptance run. For candidate 2, all 56 uniform/corner cases at depths 1–4 are deliberate regression replays from candidate 1; only the 256 new seed/depth configurations are fresh. This is fresh input coverage on a known topology, driver and oracle, not an independent implementation, calibrated physical distribution, statistical reliability bound or proof over arbitrary delays. Retain the original development corpus and withdrawn-controller counterexample.
 
 Each attempt gets a new directory under `target/verification/l0`; failed attempts are retained. A required failure is not cured by retrying until green. Fixes require review, a new named candidate committed before rerunning, and an explicit supersession record. CI uploads the aggregate report, source identities, commands, per-case configuration/logs and selected waveforms.
 
-## Decision
+## Candidate 1: automated pass, superseded by review
 
 Candidate 1 is frozen at commit `eb814564ff0fadc4ca4320cb2c10f071964ba4a4`, before acceptance execution. It binds 102 execution inputs; the normalized candidate manifest SHA-256 is `13aa8b78d9c31a944c061b478c4804d019d1c71f442e08b5660db7fd942e7833`. Its native Windows/Linux workflow is [run 37418977069](https://github.com/BiscutLabs/chisel-async/actions/runs/37418977069).
 
@@ -28,7 +28,11 @@ Both CI artifacts were downloaded and checked: candidate and campaign digests ma
 
 The local attempt is retained at `target/verification/l0/20261006T053140Z-8vl433q0`. The complete baseline includes 174 Python checks, 28 Scala API checks, 29 validated exports, five ChiselSim cases and the published-JAR consumer, alongside the existing functional/timing/controller/architecture campaigns. The 312 acceptance cases add 15,288 checked deliveries per host. The 256 fresh random configurations account for 12,544 of those deliveries; neither count represents independent statistical trials.
 
-**Automated acceptance passed; L0 remains open for independent review.** The tested candidate has not yet received independent sign-off. Required review covers controller/timing assumptions, reset/accounting, compiler/export preservation and oracle provenance. Passing automation alone does not close the review gate. CA-06 remains gated until that decision is recorded. The next implementation item after closure is the four-phase FIFO and initial-token contract.
+**Candidate 1 did not close L0.** The [fresh-context agent reviews](l0-review.md) passed the controller and recorded verification evidence but found two blocking export-validation gaps. Its original automated results and manifest remain retained; they are not retroactively relabelled as a successful review.
+
+## Candidate 2: review repairs
+
+The v3 typed-port export and channel-association fixes, their corruption tests, and improved consumer XML retention require a new candidate. The prospective campaign uses fresh seeds 10064–10127 at depths 1–4, with the same declared uniform/corner inventory, activity and fault criteria. Candidate 2 is not yet frozen or executed. CA-06 remains gated until the repaired candidate passes native Windows/Linux acceptance and review. The next implementation item after closure is the four-phase FIFO and initial-token contract.
 
 ## Review map
 

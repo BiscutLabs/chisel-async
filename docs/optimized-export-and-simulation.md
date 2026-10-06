@@ -4,7 +4,7 @@ The default `ExportDesign.emit` route uses firtool 1.160.0 release optimization 
 
 ## Probe identity and deduplication
 
-`contract.endpoint` creates a read probe of the packed value. `contract.child` forwards child references up the hierarchy without forwarding hardware data. Probe names encode the length of each semantic path segment so distinct hierarchies cannot collide through underscore concatenation. The compiler emits `ref_<top>.sv`, whose macros identify the actual optimized references. The v2 manifest records each probe name and the ABI file hash. It retains original elaboration paths only as provenance; those paths are not treated as compiled endpoint locations.
+`contract.endpoint` creates a read probe of the packed value. `contract.child` forwards child references up the hierarchy without forwarding hardware data. Probe names encode the length of each semantic path segment so distinct hierarchies cannot collide through underscore concatenation. The compiler emits `ref_<top>.sv`, whose macros identify the actual optimized references. The v3 manifest records each probe name and the ABI file hash. It retains original elaboration paths only as provenance; those paths are not treated as compiled endpoint locations.
 
 The resolver checks the ABI inventory and supported syntax, compiles the real RTL, resolves each reference and width, and verifies every node, primitive, parameter and resource. It records the actual module definition at each instance path; identical instances may share a definition. Active walking-bit comparisons independently reconstruct public boundary/aggregate sources. Internal timing nodes optimized into aliases are compared against the marker's wired endpoint slice. Every observed bit must reach both polarities. Functional campaigns run the original RTL without mapping forces.
 
@@ -14,6 +14,12 @@ Existing production examples now execute through release export, including typed
 
 Read probes can restrict optimization of observed values. This route removes hardware observation ports and demonstrates deduplication; it does not claim zero observation cost or equivalence for arbitrary FIRRTL, synthesis or flattening passes. The current ABI reader deliberately rejects unsupported reference expressions.
 
+## Typed port facts and channel associations
+
+The v3 export also writes and hashes `ports.json`. This inventories every elaborated hardware-port leaf using Chisel reflection, separately from the channel registry and payload-layout writer; probes are excluded. The resolver compares its complete per-module inventory against actual Icarus port widths/directions. Channel leaves must have exactly the declared names, sources, widths and signed flags, and controls must have the correct forward/reverse directions. Factory-defined endpoint IDs and common source-bundle roots prevent borrowing another channel’s otherwise valid request or clock.
+
+CIRCT erases SInt port signedness in SV. Signed metadata is checked against the elaborated Chisel port inventory; packed-bit mapping and typed transform tests then check the lowering behavior. This is not an independent proof of compiler type preservation. Re-emit older v1/v2 exports for this resolver. [The L0 review](l0-review.md) records the original false passes and required corruption controls.
+
 ## Timing intent in RTL
 
 Every setup/hold or long-hold obligation instantiates `ChiselAsyncTimingMarker_v1`. It has no outputs, storage or behavior. Its input vector packs the obligation's ordered endpoints from least to most significant. Parameters carry the constraint kind, width, exact setup/hold or guard values and all per-cell min/max/model bounds in femtoseconds. Semantic instance IDs are not encoded into the cell's parameters, so equal definitions remain deduplicable.
@@ -22,7 +28,7 @@ The validator independently recomputes the marker parameters from the obligation
 
 Markers carry intent through this Chisel/CIRCT export. Their empty definitions are removable by downstream synthesis: a physical flow must consume or explicitly preserve their constraints before that step. They enforce no physical timing and supply no technology mapping.
 
-The schema is now `chisel-async-contract-v2`; re-emit v1 exports. Timing observers use `resolved.json`'s checked probe paths. The old v1 schema remains packaged as historical format documentation, but the current resolver accepts v2 only. Absolute paths and timestamps remain outside semantic identity.
+The schema is now `chisel-async-contract-v3`; re-emit v1/v2 exports. Timing observers use `resolved.json`'s checked probe paths. The old v1 schema remains packaged as historical format documentation, but the current resolver accepts v3 only. Absolute paths and timestamps remain outside semantic identity.
 
 ## ChiselSim scope and usage
 

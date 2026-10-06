@@ -16,13 +16,13 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from qualify import run_steps
 
-SPEC = {"depths": [1, 2, 3, 4], "seed_start": 10000, "seeds": 64,
+SPEC = {"depths": [1, 2, 3, 4], "seed_start": 10064, "seeds": 64,
         "uniform_ns": [1, 10], "roles": ["data_delay", "long_hold", "a", "b", "acknowledge", "payload"],
         "faults": {"missing_match": "PAYLOAD_MISMATCH", "early_release": "DATA_HOLD",
                    "split_bubble": "CAPACITY_EXCEEDED"}}
 BASELINE = ["build", "export", "python", "functional", "counterexample", "comparison", "timing",
             "longhold", "architecture", "optimized", "chiselsim", "consumer"]
-DEFAULT = ROOT / "qualification/l0-candidate-1.json"
+DEFAULT = ROOT / "qualification/l0-candidate-2.json"
 
 
 def digest(path):

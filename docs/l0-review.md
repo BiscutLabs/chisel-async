@@ -1,0 +1,25 @@
+# L0 delegated review and remediation
+
+On October 5, 2026, the user authorized three fresh-context reviewer agents. They received the repository, candidate identity, review scope and evidence locations, without the implementation conversation. This is separate agent review, not external human or asynchronous-circuit specialist certification. Shared model/tool assumptions can still produce correlated errors.
+
+## Decisions and findings
+
+| Review | Candidate 1 judgment | Evidence and resolution |
+| --- | --- | --- |
+| `/root/controller_review` | Scoped PASS | Inspected Furber–Day Figs. 10/14/15 and the recorded PDF hash; compared 210 control excitations across all 42 graph markings. Ran 134 additional cases / 6,566 deliveries with guards 1 fs above strict bounds, 1 fs environment responses, mixed depth-four corners and 500 ns legal holds. No blocking controller, primitive, reset or accounting defect found. |
+| `/root/verification_review` | Scoped PASS for the recorded campaigns | Replayed all 624 native-host acceptance logs/configurations with a newly written external-edge queue/reservation ledger, STG and exact diagnostic checks. Revalidated baseline/consumer functional traces and timing evidence. Ran 89 reference/checker tests and 15 fresh controller configurations, plus primitive/typed checks and required faults. No acceptance-affecting defect found in this scope. |
+| `/root/export_review` | BLOCK CA-03; two P2 findings | Rehashed sidecar-only corruptions passed against unchanged RTL. Candidate 1 is superseded, despite its passing automated campaign. Both findings are repaired and must pass a new frozen native campaign. |
+
+**P2: payload leaf metadata was not fully checked.** Changing packet leaf widths from `[5,5,9,3]` to `[4,6,9,3]` retained total width and contiguous offsets but changed decoding boundaries. The old checker still passed 686 mapping comparisons because it concatenated whole source signals. Incorrect field names and signed flags also passed. The repair checks every leaf against a separately inventoried elaborated Chisel port, including exact source membership, name, width and signedness; actual Icarus port widths/directions and active packed-bit mapping remain independent checks.
+
+**P2: channel direction and endpoint associations were not fully checked.** An input channel relabelled as output still passed. A bridge input clock redirected to the output clock passed 4,420 comparisons; a replicated request redirected to another lane passed 207,840. Individually valid endpoints did not establish a valid channel. The repair requires the factory-defined endpoint IDs, common hardware-bundle source roots, actual forward/reverse port directions and a typed input clock.
+
+The new v3 sidecar hashes `ports.json`, a complete inventory obtained from `DataMirror.modulePorts` on each registered module, independently of channel records. Read probes are excluded. The resolver verifies exact module/port inventories and unique source targets, then checks channel metadata against those ports and real elaborated RTL. CIRCT erases signedness at the SV boundary: signed flags are checked against elaborated Chisel types, not misrepresented as recovered SV types. This remains bounded evidence, not a proof against coherently corrupted compiler, ABI and sidecar outputs.
+
+Fourteen new Python corruption cases cover these holes and port-inventory corruption. A Scala test checks hand-derived nested UInt/SInt/Vec port facts and absence of hardware probe ports. All 29 exports, 188 Python checks and 29 Scala checks pass locally. The export reviewer independently reproduced all original mutations against the repair and obtained the exact intended rejections; 43 isolated export/architecture checks passed. The export reviewer approved the final repair scope, and the verification reviewer separately approved the prospective candidate 2 inventory/source freeze after 46 focused checks. The frozen native candidate 2 rerun is pending before final closure.
+
+## Evidence and retained limits
+
+Scratch review evidence is retained under `target/review-controller`, `target/review-verification` and `target/review-export`. The controller scripts are `graph_cells.py` and `adversarial.py`; verification's `review.json` records commands and hashes for `audit_artifacts.py`, `audit_baseline.py`, raw-log accounting and fresh runs. Export's `repair-review.json` records exact reviewed source hashes and diagnostics; original false-pass exports/checker are retained separately. These are review experiments, not retrospectively added held-out acceptance cases.
+
+The nonblocking verification recommendation to retain consumer ChiselSim XML is incorporated in the next CI candidate. The controller's guard-edge/long-hold cases inform CA-06 regression expansion. Optimized internal endpoint checks still share timing-marker provenance; behavioral campaigns provide a distinct check. None of this approves arbitrary synthesis, cell decomposition, physical timing, analog metastability, independent endpoint reset, full QDI/arbitration/catalog coverage or macOS.

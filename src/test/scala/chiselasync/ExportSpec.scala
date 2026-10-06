@@ -115,4 +115,24 @@ class ExportSpec extends AnyFunSuite {
     assert(ujson.read(a)("semantic_sha256") != ujson.read(b)("semantic_sha256"))
     assert(!a.contains(first.toAbsolutePath.toString))
   }
+
+  test("typed port inventory retains nested signed leaves independently of channel layout") {
+    class Packet extends Bundle {
+      val tag = UInt(3.W)
+      val signed = SInt(9.W)
+      val lanes = Vec(2, UInt(5.W))
+    }
+    val root = Paths.get("target", "export-spec")
+    Files.createDirectories(root)
+    val directory = Files.createTempDirectory(root, "typed ports ")
+    ExportDesign.emit(new FourPhaseBuffer(new Packet), directory)
+    val abi = ujson.read(Files.readString(directory.resolve("ports.json")))
+    val ports = abi("nodes")(0)("ports").arr
+    val input = ports.filter(_("source").str.contains(">in.bits")).map { p =>
+      p("source").str.split(">", 2)(1) -> (p("width").num.toInt, p("signed").bool, p("direction").str)
+    }.toMap
+    assert(input == Map("in.bits.tag" -> (3, false, "input"), "in.bits.signed" -> (9, true, "input"),
+      "in.bits.lanes[0]" -> (5, false, "input"), "in.bits.lanes[1]" -> (5, false, "input")))
+    assert(ports.size == 13 && !ports.exists(_("source").str.contains("ca_p_")))
+  }
 }

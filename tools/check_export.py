@@ -62,9 +62,9 @@ def nodes(node):
 def validate_manifest(document):
     shape(document, "semantic_sha256 manifest")
     manifest = document["manifest"]
-    shape(manifest, "schema time_unit time_range top toolchain resources rtl_semantic_sha256 probe_abi design")
+    shape(manifest, "schema time_unit time_range top toolchain resources rtl_semantic_sha256 probe_abi port_abi design")
     require(document["semantic_sha256"] == semantic_hash(manifest), "SEMANTIC_HASH_MISMATCH")
-    require(manifest["schema"] == "chisel-async-contract-v2" and manifest["time_unit"] == "fs"
+    require(manifest["schema"] == "chisel-async-contract-v3" and manifest["time_unit"] == "fs"
             and manifest["time_range"] == "0..9223372036854775807", "UNSUPPORTED_SCHEMA")
     require(manifest["toolchain"] == {"chisel": "7.16.0", "scala": "2.13.18", "firtool": "1.160.0", "options": manifest["toolchain"]["options"]},
             "UNQUALIFIED_COMPILER")
@@ -115,12 +115,13 @@ def validate_manifest(document):
                     channel["token_contract"] == "ordered-lossless-reset-abort-v1", "INVALID_CHANNEL")
             require(all(channel[ref] in endpoints for ref in refs),
                     "MISSING_CHANNEL_ENDPOINT")
+            require(all(channel[ref] == channel["id"] + "_" + ref for ref in refs), "CHANNEL_ENDPOINT_ASSOCIATION")
             require(all(endpoints[channel[c]]["width"] == 1 for c in controls), "INVALID_CHANNEL_CONTROL")
             offset = 0
             for field in channel["layout"]:
                 shape(field, "field lsb width signed source")
                 require(type(field["signed"]) is bool, "INVALID_PAYLOAD_LAYOUT")
-                require(field["lsb"] == offset and type(field["width"]) is int and field["width"] > 0,
+                require(type(field["lsb"]) is int and field["lsb"] == offset and type(field["width"]) is int and field["width"] > 0,
                         "INVALID_PAYLOAD_LAYOUT")
                 offset += field["width"]
             require(offset == endpoints[channel[payload]]["width"], "INVALID_PAYLOAD_LAYOUT")
@@ -352,6 +353,79 @@ def probe_source(manifest, scopes):
     return "\n".join(lines), checks
 
 
+def validate_port_abi(directory, manifest, scopes):
+    abi = manifest["port_abi"]
+    shape(abi, "file sha256")
+    require(abi["file"] == "ports.json", "INVALID_PORT_ABI")
+    path = directory / abi["file"]
+    require(path.is_file(), "MISSING_PORT_ABI")
+    content = path.read_text(encoding="utf-8")
+    require(sha(content.encode()) == abi["sha256"], "PORT_ABI_HASH_MISMATCH")
+    data = json.loads(content, object_pairs_hook=unique_json)
+    shape(data, "schema top nodes")
+    require(data["schema"] == "chisel-async-port-abi-v1" and data["top"] == manifest["top"], "INVALID_PORT_ABI")
+    inventory = {}
+    for node in data["nodes"]:
+        shape(node, "rtl_path module ports")
+        require(node["rtl_path"] not in inventory, "DUPLICATE_PORT_ABI_NODE")
+        inventory[node["rtl_path"]] = node
+    require(set(inventory) == {n["rtl_path"] for n in nodes(manifest["design"])}, "PORT_ABI_NODE_INVENTORY")
+    for node in nodes(manifest["design"]):
+        actual = inventory[node["rtl_path"]]
+        require(actual["module"] == node["module"], "PORT_ABI_MODULE_MISMATCH")
+        ports, flattened = {}, {}
+        for port in actual["ports"]:
+            shape(port, "source width signed direction clock")
+            require(type(port["width"]) is int and port["width"] > 0
+                    and type(port["signed"]) is bool and type(port["clock"]) is bool
+                    and port["direction"] in ("input", "output"), "INVALID_PORT_ABI")
+            name = source_path(node, port["source"]).rsplit(".", 1)[1]
+            require(port["source"] not in ports and name not in flattened, "DUPLICATE_PORT_ABI_SOURCE")
+            ports[port["source"]] = port
+            flattened[name] = {"name": name, "width": port["width"], "direction": port["direction"]}
+        require(flattened == scopes[node["rtl_path"]]["ports"], "PORT_ABI_RTL_MISMATCH")
+        endpoints = {e["id"]: e for e in node["endpoints"]}
+        for channel in node["channels"]:
+            protocol = channel["protocol"]
+            if protocol == "four-phase-bundled-v1":
+                members, forward, reverse, payload = {"request": "req", "data": "bits", "acknowledge": "ack"}, ("request",), "acknowledge", "data"
+            elif protocol == "dual-rail-rtz-v1":
+                members, forward, reverse, payload = {"zero": "zero", "one": "one", "acknowledge": "ack"}, (), "acknowledge", "one"
+            else:
+                members, forward, reverse, payload = {"valid": "valid", "data": "bits", "ready": "ready"}, ("valid",), "ready", "data"
+            roots = []
+            for ref, member in members.items():
+                source = endpoints[channel[ref]]["source"]
+                require(source.endswith("." + member), "CHANNEL_SOURCE_ASSOCIATION")
+                roots.append(source[:-(len(member) + 1)])
+            require(len(set(roots)) == 1, "CHANNEL_SOURCE_ASSOCIATION")
+            def check_port(source, direction, width, diagnostic="CHANNEL_PORT_MISMATCH"):
+                require(source in ports, diagnostic)
+                port = ports[source]
+                require(port["width"] == width, "PAYLOAD_LEAF_WIDTH_MISMATCH" if diagnostic == "PAYLOAD_SOURCE_MISMATCH" else diagnostic)
+                require(port["direction"] == direction, "CHANNEL_DIRECTION_MISMATCH")
+                return port
+            role = channel["role"]
+            for ref in forward:
+                check_port(endpoints[channel[ref]]["source"], role, 1)
+            check_port(endpoints[channel[reverse]]["source"], "output" if role == "input" else "input", 1)
+            if protocol == "decoupled-v1":
+                require(check_port(endpoints[channel["clock"]]["source"], "input", 1)["clock"], "CHANNEL_CLOCK_TYPE")
+            root = endpoints[channel[payload]]["source"]
+            expected_leaves = {s for s in ports if s == root or s.startswith(root + ".") or s.startswith(root + "[")}
+            fields = channel["layout"]
+            require(len({f["source"] for f in fields}) == len(fields)
+                    and {f["source"] for f in fields} == expected_leaves, "PAYLOAD_SOURCE_MISMATCH")
+            for field in fields:
+                require(field["field"] == "bits" + field["source"][len(root):], "PAYLOAD_FIELD_MISMATCH")
+                port = check_port(field["source"], role, field["width"], "PAYLOAD_SOURCE_MISMATCH")
+                require(field["signed"] == port["signed"] and not port["clock"], "PAYLOAD_SIGNEDNESS_MISMATCH")
+                if protocol == "dual-rail-rtz-v1":
+                    zero = endpoints[channel["zero"]]["source"] + field["source"][len(root):]
+                    other = check_port(zero, role, field["width"], "PAYLOAD_SOURCE_MISMATCH")
+                    require(other["signed"] == port["signed"], "PAYLOAD_SIGNEDNESS_MISMATCH")
+
+
 def validate_export(directory: Path):
     directory = directory.resolve()
     output = directory / "resolved.json"
@@ -406,6 +480,7 @@ def validate_export(directory: Path):
             require(actual["parameters"] == primitive["parameters"], "PRIMITIVE_PARAMETER_MISMATCH")
             require(actual["ports"] == {p["name"]: p for p in primitive["ports"]}, "PRIMITIVE_PORT_MISMATCH")
     require(set(scopes) == expected_scopes, "UNREGISTERED_MODULE_OR_PRIMITIVE")
+    validate_port_abi(directory, manifest, scopes)
     probe, checks = probe_source(manifest, scopes)
     (directory / "contract_probe.sv").write_text(probe, encoding="utf-8")
     built = subprocess.run(command[:1] + ["-s", "ContractProbe"] + command[1:] + ["contract_probe.sv"], cwd=directory,
@@ -423,6 +498,7 @@ def validate_export(directory: Path):
               "module_definitions": sorted({s["model"] for s in scopes.values()}),
               "instances": {path: scope["model"] for path, scope in scopes.items()},
               "probe_abi_sha256": abi["sha256"],
+              "port_abi_sha256": manifest["port_abi"]["sha256"],
               "probe_paths": {e["probe"]: e["rtl_path"] for n in nodes(manifest["design"]) for e in n["endpoints"]}, "source_sha256": {s.name: sha(s.read_bytes()) for s in sources},
               "hw_ir_sha256": sha((directory / "design.hw.mlir").read_bytes()),
               "resolver_sha256": sha(Path(__file__).read_bytes()), "simulator": "Icarus 13.0"}

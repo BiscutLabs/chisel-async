@@ -82,7 +82,7 @@ Passive observers enforce handshake order and data hold while independent transa
 
 Reports, source/checker hashes, seeds, simulator identity, XML, logs and per-case traces/counters are retained under `target/verification`; timing traces use exact integer femtoseconds. Replay with `python verification/run.py` and `python verification/run_timing.py`. Select a functional fixture with `--fixture buffer`, or a timing experiment with `--job setup_equal`. The clean consumer gets separate evidence. See [qualification status](docs/qualification.md) for exact versions and limits.
 
-Compiler emission reports remaining `circt.VerbatimBlackBoxAnno` and `firrtl.transforms.DedupGroupAnnotation` warnings with this pinned tuple. They remain visible. The checked v2 route resolves read probes through the compiler ABI under release optimization/deduplication. Debug/no-dedup is a comparison mode and preserves the withdrawn controller’s historical delay experiments. This does not claim compatibility with arbitrary compiler transformations.
+Compiler emission reports remaining `circt.VerbatimBlackBoxAnno` and `firrtl.transforms.DedupGroupAnnotation` warnings with this pinned tuple. They remain visible. The checked v3 route resolves read probes through the compiler ABI under release optimization/deduplication. Debug/no-dedup is a comparison mode and preserves the withdrawn controller’s historical delay experiments. This does not claim compatibility with arbitrary compiler transformations.
 
 Read the [roadmap](docs/roadmap.md), [contributor instructions](AGENTS.md), and [provenance record](docs/provenance.md). The repository's [Apache-2.0 license](LICENSE) applies to our code; external tools retain their own licenses.
 

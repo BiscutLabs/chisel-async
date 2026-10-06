@@ -77,6 +77,8 @@ jobs:
             target/generated/**/resolved.json
             target/generated/**/design.hw.mlir
             target/generated/**/ref_*.sv
+            target/generated/**/ports.json
             target/generated/**/contract_*.log
             target/consumers/**/verification
+            target/consumers/**/target/test-reports
           if-no-files-found: error

@@ -135,3 +135,75 @@ def test_unknown_contract_constraints_are_not_silently_ignored(exported):
     document["semantic_sha256"] = semantic_hash(document["manifest"])
     with pytest.raises(ValueError, match="UNSUPPORTED_CONTRACT_FIELDS"):
         validate_manifest(document)
+
+
+@pytest.mark.parametrize("fault,diagnostic", [
+    ("leaf_widths", "PAYLOAD_LEAF_WIDTH_MISMATCH"),
+    ("signed", "PAYLOAD_SIGNEDNESS_MISMATCH"),
+    ("field_name", "PAYLOAD_FIELD_MISMATCH"),
+    ("role", "CHANNEL_DIRECTION_MISMATCH"),
+    ("source", "PAYLOAD_SOURCE_MISMATCH"),
+    ("duplicate_source", "PAYLOAD_SOURCE_MISMATCH"),
+    ("bundle", "CHANNEL_SOURCE_ASSOCIATION"),
+])
+def test_payload_metadata_is_checked_against_typed_and_actual_ports(tmp_path, fault, diagnostic):
+    directory = tmp_path / "nested payload"
+    shutil.copytree(ROOT / "target/generated/packet", directory)
+    def change(manifest):
+        design = manifest["design"]
+        channel = design["channels"][0]
+        fields = channel["layout"]
+        if fault == "leaf_widths":
+            # Retain total width and contiguous offsets: aggregate checks cannot catch this.
+            assert [f["width"] for f in fields] == [5, 5, 9, 3]
+            fields[0]["width"], fields[1]["width"], fields[1]["lsb"] = 4, 6, 4
+        elif fault == "signed":
+            next(f for f in fields if f["signed"])["signed"] = False
+        elif fault == "field_name":
+            fields[2]["field"] = "bits.no_such_field"
+        elif fault == "role":
+            channel["role"] = "output"
+        elif fault == "bundle":
+            endpoint = next(e for e in design["endpoints"] if e["id"] == "in_acknowledge")
+            endpoint["source"] = endpoint["source"].replace(">in.", ">out.")
+        else:
+            fields[0]["source"] = fields[1]["source"] if fault == "duplicate_source" else fields[0]["source"].replace(">in.", ">out.")
+    edit_manifest(directory, change)
+    with pytest.raises(ValueError, match=f"^{diagnostic}$"):
+        validate_export(directory)
+    assert json.loads((directory / "resolved.json").read_text())["status"] != "PASS"
+
+
+@pytest.mark.parametrize("fixture,ref,replacement", [
+    ("bridge_roundtrip", "clock", "out_clock"),
+    ("replicated", "request", "in2_request"),
+    ("dualrail", "zero", "out_zero"),
+])
+def test_channel_cannot_borrow_another_valid_endpoint(tmp_path, fixture, ref, replacement):
+    directory = tmp_path / fixture
+    shutil.copytree(ROOT / "target/generated" / fixture, directory)
+    edit_manifest(directory, lambda m: m["design"]["channels"][0].update({ref: replacement}))
+    with pytest.raises(ValueError, match="^CHANNEL_ENDPOINT_ASSOCIATION$"):
+        validate_export(directory)
+
+
+@pytest.mark.parametrize("fault,diagnostic", [
+    ("width", "PORT_ABI_RTL_MISMATCH"), ("direction", "PORT_ABI_RTL_MISMATCH"),
+    ("duplicate", "DUPLICATE_PORT_ABI_SOURCE"), ("missing", "PORT_ABI_RTL_MISMATCH"),
+])
+def test_typed_port_inventory_cannot_disagree_with_actual_rtl(exported, fault, diagnostic):
+    path = exported / "ports.json"
+    abi = json.loads(path.read_text())
+    ports = abi["nodes"][0]["ports"]
+    if fault == "width":
+        ports[0]["width"] += 1
+    elif fault == "direction":
+        ports[0]["direction"] = "output"
+    elif fault == "duplicate":
+        ports.append(copy.deepcopy(ports[0]))
+    else:
+        ports.pop()
+    path.write_text(json.dumps(abi), encoding="utf-8")
+    edit_manifest(exported, lambda m: m["port_abi"].update(sha256=sha(path.read_text().encode())))
+    with pytest.raises(ValueError, match=f"^{diagnostic}$"):
+        validate_export(exported)

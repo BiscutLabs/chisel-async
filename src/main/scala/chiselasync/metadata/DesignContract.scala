@@ -201,6 +201,26 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
 
   private[chiselasync] def json: ujson.Value = jsonAt(Vector.empty)
 
+  /** Independent inventory of actual elaborated hardware ports, not channel records.
+    * CIRCT erases SInt port signedness; preserve that Chisel fact before lowering.
+    */
+  private[chiselasync] def portAbi: Seq[ujson.Value] = {
+    val ports = ArrayBuffer.empty[ujson.Value]
+    def visit(value: Data): Unit = {
+      if (!DataMirror.hasProbeTypeModifier(value)) value match {
+        case record: Record => record.elements.values.foreach(visit)
+        case vector: Vec[_] => vector.foreach(visit)
+        case _ => ports += ujson.Obj("source" -> value.toTarget.serialize,
+          "width" -> value.getWidth, "signed" -> value.isInstanceOf[SInt],
+          "direction" -> DataMirror.directionOf(value).toString.toLowerCase,
+          "clock" -> value.isInstanceOf[Clock])
+      }
+    }
+    DataMirror.modulePorts(owner).foreach { case (_, data) => visit(data) }
+    Seq(ujson.Obj("rtl_path" -> owner.pathName, "module" -> owner.name,
+      "ports" -> ujson.Arr.from(ports))) ++ children.flatMap(_._2.contract.portAbi)
+  }
+
   private def jsonAt(prefix: Vector[String]): ujson.Value = ujson.Obj(
     "rtl_path" -> owner.pathName, "module" -> owner.name, "reset_domain" -> owner.resetDomain.id,
     "capacity" -> storageCapacity.map(n => ujson.Num(n)).getOrElse(ujson.Null),

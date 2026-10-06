@@ -50,12 +50,17 @@ object ExportDesign {
       }.sortBy(_._1)
     val probeFile = s"ref_${module.name}.sv"
     val probeHash = sha(Files.readString(destination.resolve(probeFile), UTF_8).replace("\r\n", "\n").getBytes(UTF_8))
-    val manifest = ujson.Obj("schema" -> "chisel-async-contract-v2", "time_unit" -> "fs",
+    val portFile = "ports.json"
+    val portText = ujson.write(ujson.Obj("schema" -> "chisel-async-port-abi-v1", "top" -> module.name,
+      "nodes" -> ujson.Arr.from(module.contract.portAbi)), indent = 2) + "\n"
+    Files.writeString(destination.resolve(portFile), portText, UTF_8)
+    val manifest = ujson.Obj("schema" -> "chisel-async-contract-v3", "time_unit" -> "fs",
       "time_range" -> "0..9223372036854775807", "top" -> module.name,
       "toolchain" -> ujson.Obj("chisel" -> chiselVersion, "scala" -> scalaVersion, "firtool" -> "1.160.0",
         "options" -> ujson.Arr.from(mode.options)), "resources" -> ujson.Obj.from(hashes),
       "rtl_semantic_sha256" -> ujson.Obj.from(rtlHashes),
-      "probe_abi" -> ujson.Obj("file" -> probeFile, "sha256" -> probeHash), "design" -> contract)
+      "probe_abi" -> ujson.Obj("file" -> probeFile, "sha256" -> probeHash),
+      "port_abi" -> ujson.Obj("file" -> portFile, "sha256" -> sha(portText.getBytes(UTF_8))), "design" -> contract)
     // Hash compact insertion-ordered JSON. No filesystem paths or timestamps enter this identity.
     val semantic = ujson.write(manifest)
     val result = ujson.Obj("semantic_sha256" -> sha(semantic.getBytes(UTF_8)), "manifest" -> manifest)
