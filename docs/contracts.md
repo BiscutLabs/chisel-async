@@ -88,6 +88,10 @@ The [CA-08 family](qdi-family.md) adds strongly indicating typed half-buffers, s
 
 `QdiTiming` records positive independent cell-delay bounds. The `qdi-digital-v1` export binds actual rail/ack/reset endpoints to indication and atomic-cell, ideal-fork, monotonic-RTZ and coordinated-reset assumptions. These are bounded digital model contracts; physical QDI implementation and arbitrary compiler lowering remain unqualified.
 
+## Clocked application boundaries
+
+The [CA-09 contracts](application-boundaries.md) distinguish backend acceptance, response delivery and external effects. The single-outstanding memory adapter reuses Decoupled bridges; it does not supply storage or roll back committed writes on reset. The event bridge sends coalesced pending bit sets with set priority over snapshot clearing. Both use explicit clocks and coordinated reset; neither claims independent endpoint restart, physical CDC closure or arbitrary narrow-pulse capture.
+
 ## Versioning
 
 SV model identifiers end in `_v1`. Their behavior is part of the contract, not an incidental module name. Incompatible changes require a new model identifier and updated compatibility evidence. The Scala library remains `0.1.0-SNAPSHOT` and has no stable API promise yet. The separate `chisel-async-contract-v3` sidecar carries scoped instance IDs, compiler probe identities and checked endpoint mappings. Re-emit v1/v2 exports for the current resolver. [Timing and export](timing-and-export.md) specifies the latch/delay models, qualified compiler configurations, schema and limits.

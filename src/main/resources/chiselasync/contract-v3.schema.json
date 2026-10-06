@@ -677,6 +677,65 @@
               }
             }
           }
+        },
+        "memories": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "source",
+              "depth",
+              "word_bits",
+              "mask_bits",
+              "read_latency",
+              "write_latency",
+              "ports",
+              "initial_contents",
+              "reset_contents",
+              "read_under_write"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "source": {
+                "type": "string"
+              },
+              "depth": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "word_bits": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "mask_bits": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "read_latency": {
+                "const": 1
+              },
+              "write_latency": {
+                "const": 1
+              },
+              "ports": {
+                "const": "one-read-write"
+              },
+              "initial_contents": {
+                "const": "unspecified"
+              },
+              "reset_contents": {
+                "const": "preserved"
+              },
+              "read_under_write": {
+                "const": "undefined"
+              }
+            }
+          }
         }
       }
     },

@@ -6,11 +6,12 @@ A Chisel library for asynchronous hardware, developed independently under Apache
 
 The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip implementation. This library works with an existing simulator and does not depend on Chiselator, Yosys, a PDK, ACT or a GPU.
 
-The latest [adapter-closure repair and four-style adder reference](docs/adapter-closure-and-reference.md) add explicit closure timing, seeded variable-resolution arbitration, and behavioral/bundled/DIMS/GALS integration tests to the one-command qualifier. The [frozen L1 candidate 2](docs/l1-acceptance.md) passed native Windows/Linux acceptance and independent artifact review. The [CA-08 family](docs/qdi-family.md) has separate qualification; CA-09 clocked and memory/I/O boundaries are next.
+The [adapter-closure repair and four-style adder reference](docs/adapter-closure-and-reference.md) add explicit closure timing, seeded variable-resolution arbitration, and behavioral/bundled/DIMS/GALS integration tests to the one-command qualifier. The [frozen L1 candidate 2](docs/l1-acceptance.md) passed native Windows/Linux acceptance and independent artifact review. The [CA-08 family](docs/qdi-family.md) has separate qualification. [CA-09 application boundaries](docs/application-boundaries.md) are implemented and reviewed, with complete qualification in progress; CA-10 packaging and release is next.
 
 ## What works now
 
 - `AsyncModule`: `RawModule` with an explicit active-high `AsyncReset`, no implicit clock.
+- `AsyncMemoryPort` and `PendingEventBridge`: explicit-clock request/response and event adapters. RAM/ROM examples reuse standard Chisel storage; commit/reset, byte masks and event-coalescing contracts have independent oracles and actual-RTL fault controls.
 - `Channel[T]`: shared typed token intent and reset domain, with distinct bundled, dual-rail and standard Decoupled bindings; explicit clocked converters.
 - `FourPhase[T]`: request/data toward the consumer, acknowledgement toward the producer. Supports sized UInt/SInt/Bool and nested Bundle/Vec payloads.
 - `FourPhase.connect`: rejects incompatible shapes, implicit resizing and different reset-domain objects. Exported channels must share their owner's `ResetDomain`.

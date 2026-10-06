@@ -16,10 +16,14 @@ CASES = {
     "source observation corruption activates the payload oracle",
     "sink observation corruption activates the payload oracle",
     "wide payloads survive the simulator command transport",
+    "memory adapter reserves through response return and commits a held request once",
+    "pending events preserve a newer edge on an already offered bit",
 }
 ACTIVITY = ("CHISELSIM_SOURCE_PASS accepted=265 delivered=264 aborted=1",
             "CHISELSIM_SINK_PASS offered=265 delivered=264 aborted=1",
-            "CHISELSIM_WIDE_PASS delivered=4 bits=1024")
+            "CHISELSIM_WIDE_PASS delivered=4 bits=1024",
+            "CHISELSIM_MEMORY_PASS accepted=32 delivered=32",
+            "CHISELSIM_EVENTS_PASS delivered=31 resets=1")
 
 
 def verify(xml, log):
@@ -61,7 +65,7 @@ def run_suite(command, environment, cwd, xml, output):
     except BaseException as error:
         record.update(status="ERROR", error=str(error)); save(); raise
     save()
-    print(f"ChiselSim PASS: 3 positive tests and 2 required payload-fault rejections; {report}")
+    print(f"ChiselSim PASS: 5 positive tests and 2 required payload-fault rejections; {report}")
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.simulator.scalatest.ChiselSim
 import chiselasync.clocked.{DecoupledToFourPhase, FourPhaseToDecoupled}
+import chiselasync.clocked.{AsyncMemoryPort, MemoryShape, MemoryRequest, MemoryResponse, PendingEventBridge}
 import chiselasync.protocol.FourPhase
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.exceptions.TestFailedException
@@ -29,6 +30,25 @@ class SinkBridgeHarness(corrupt: Boolean = false) extends Module {
   bridge.in :<>= in
   out :<>= bridge.out
   if (corrupt) out.bits := bridge.out.bits ^ 1.U
+}
+
+class MemoryPortHarness extends Module {
+  private val shape = MemoryShape(12, 32)
+  val request = IO(Flipped(new FourPhase(new MemoryRequest(shape))))
+  val response = IO(new FourPhase(new MemoryResponse(shape)))
+  val backendRequest = IO(Decoupled(new MemoryRequest(shape)))
+  val backendResponse = IO(Flipped(Decoupled(new MemoryResponse(shape))))
+  private val port = Module(new AsyncMemoryPort(shape))
+  port.clock := clock; port.reset := reset.asAsyncReset
+  port.request :<>= request; response :<>= port.response
+  backendRequest :<>= port.backendRequest; port.backendResponse :<>= backendResponse
+}
+class EventsHarness extends Module {
+  val levels = IO(Input(UInt(4.W)))
+  val out = IO(new FourPhase(UInt(4.W)))
+  private val events = Module(new PendingEventBridge(4))
+  events.clock := clock; events.reset := reset.asAsyncReset
+  events.levels := levels; out :<>= events.out
 }
 
 /** External handshake/transaction expectations; no access to implementation state.
@@ -123,6 +143,69 @@ class BridgeSimulationSpec extends AnyFunSuite with ChiselSim {
   test("sink observation corruption activates the payload oracle") {
     val error = intercept[TestFailedException](sink(true))
     assert(error.getMessage.contains("SINK_PAYLOAD"))
+  }
+  test("memory adapter reserves through response return and commits a held request once") {
+    simulate(new MemoryPortHarness) { dut =>
+      dut.request.req.poke(false.B); dut.response.ack.poke(false.B)
+      dut.backendRequest.ready.poke(false.B); dut.backendResponse.valid.poke(false.B)
+      dut.backendResponse.bits.data.poke(0.U); dut.backendResponse.bits.error.poke(false.B)
+      dut.request.bits.write.poke(true.B); dut.request.bits.address.poke(0.U)
+      dut.request.bits.data.poke(0.U); dut.request.bits.mask.poke(15.U)
+      dut.clock.step(5)
+      for (i <- 0 until 32) {
+        val value = BigInt(i / 2) * 0x01010101L
+        dut.request.bits.address.poke((i * 4).U); dut.request.bits.data.poke(value.U)
+        dut.request.req.poke(true.B)
+        waitFor(dut.clock, "MEMORY_BACKEND_DEADLINE")(dut.backendRequest.valid.peekBoolean())
+        dut.clock.step(i % 5)
+        dut.backendRequest.bits.address.expect((i * 4).U)
+        dut.backendRequest.bits.data.expect(value.U); dut.backendRequest.bits.mask.expect(15.U)
+        dut.request.ack.expect(false.B)
+        dut.backendRequest.ready.poke(true.B); dut.clock.step()
+        dut.backendRequest.ready.poke(false.B); dut.request.ack.expect(true.B)
+        dut.clock.step(1 + i % 7)
+        dut.backendResponse.bits.data.poke(value.U); dut.backendResponse.bits.error.poke((i % 3 == 0).B)
+        dut.backendResponse.valid.poke(true.B); dut.backendResponse.ready.expect(true.B)
+        dut.clock.step(); dut.backendResponse.valid.poke(false.B)
+        waitFor(dut.clock, "MEMORY_RESPONSE_DEADLINE")(dut.response.req.peekBoolean())
+        dut.clock.step(3); dut.response.bits.data.expect(value.U)
+        dut.response.bits.error.expect((i % 3 == 0).B)
+        dut.response.ack.poke(true.B)
+        waitFor(dut.clock, "MEMORY_RETURN_DEADLINE")(!dut.response.req.peekBoolean())
+        dut.clock.step(4); dut.backendRequest.valid.expect(false.B)
+        dut.response.ack.poke(false.B); dut.clock.step(8)
+        dut.backendRequest.valid.expect(false.B)
+        dut.request.req.poke(false.B)
+        waitFor(dut.clock, "MEMORY_IDLE_DEADLINE")(!dut.request.ack.peekBoolean())
+      }
+      println("CHISELSIM_MEMORY_PASS accepted=32 delivered=32")
+    }
+  }
+  test("pending events preserve a newer edge on an already offered bit") {
+    simulate(new EventsHarness) { dut =>
+      dut.levels.poke(0.U); dut.out.ack.poke(false.B); dut.clock.step(5)
+      def pulse(bits: Int): Unit = {
+        dut.levels.poke(bits.U); dut.clock.step(5)
+        dut.levels.poke(0.U); dut.clock.step(5)
+      }
+      def receive(bits: Int): Unit = {
+        waitFor(dut.clock, "EVENT_OFFER_DEADLINE")(dut.out.req.peekBoolean())
+        dut.out.bits.expect(bits.U); dut.clock.step(4); dut.out.bits.expect(bits.U)
+        dut.out.ack.poke(true.B)
+        waitFor(dut.clock, "EVENT_RETURN_DEADLINE")(!dut.out.req.peekBoolean())
+        dut.out.ack.poke(false.B); dut.clock.step(6)
+      }
+      for (bits <- 1 until 16) {
+        pulse(bits); pulse(bits); pulse(bits)
+        receive(bits); receive(bits)
+        dut.clock.step(8); dut.out.req.expect(false.B)
+      }
+      pulse(1); pulse(8)
+      dut.reset.poke(true.B); dut.clock.step(2)
+      dut.reset.poke(false.B); dut.clock.step(8); dut.out.req.expect(false.B)
+      pulse(15); receive(15)
+      println("CHISELSIM_EVENTS_PASS delivered=31 resets=1")
+    }
   }
   test("wide payloads survive the simulator command transport") {
     class WideHarness extends Module {

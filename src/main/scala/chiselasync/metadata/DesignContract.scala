@@ -22,6 +22,7 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
   private val primitives = ArrayBuffer.empty[() => ujson.Value]
   private val children = ArrayBuffer.empty[(String, AsyncModule)]
   private val obligations = ArrayBuffer.empty[ujson.Value]
+  private val memories = ArrayBuffer.empty[() => ujson.Value]
   private var storageCapacity: Option[Int] = None
 
   def capacity(tokens: Int): Unit = {
@@ -328,7 +329,8 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
       "ports" -> ujson.Arr.from(ports), "channels" -> ujson.Arr.from(bindings))) ++ children.flatMap(_._2.contract.portAbi)
   }
 
-  private def jsonAt(prefix: Vector[String]): ujson.Value = ujson.Obj(
+  private def jsonAt(prefix: Vector[String]): ujson.Value = {
+    val result = ujson.Obj(
     "rtl_path" -> owner.pathName, "module" -> owner.name, "reset_domain" -> owner.resetDomain.id,
     "capacity" -> storageCapacity.map(n => ujson.Num(n)).getOrElse(ujson.Null),
     "endpoints" -> ujson.Arr.from(endpoints.map { case (id, source, anchor) =>
@@ -339,6 +341,23 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     "children" -> ujson.Arr.from(children.map { case (id, module) =>
       ujson.Obj("id" -> id, "contract" -> module.contract.jsonAt(prefix :+ id))
     }))
+    if (memories.nonEmpty) result("memories") = ujson.Arr.from(memories.map(_()))
+    result
+  }
+
+  /** Pinned lowering of a masked SyncReadMem with one inferred read/write port.
+    * Records ordinary Chisel storage; it supplies no replacement memory model.
+    * Other port arrangements fail export qualification rather than being guessed.
+    */
+  def synchronousMemory(id: String, memory: SyncReadMem[_], wordBits: Int, maskBits: Int): Unit = {
+    claim(id)
+    require(wordBits > 0 && maskBits > 0 && wordBits % maskBits == 0, "invalid memory shape")
+    memories += (() => ujson.Obj("id" -> id, "source" -> memory.toTarget.serialize,
+      "depth" -> memory.length.toInt, "word_bits" -> wordBits, "mask_bits" -> maskBits,
+      "read_latency" -> 1, "write_latency" -> 1, "ports" -> "one-read-write",
+      "initial_contents" -> "unspecified", "reset_contents" -> "preserved",
+      "read_under_write" -> "undefined"))
+  }
 
   /** Bounded digital QDI-family intent. Every local public channel is listed;
     * the resolver independently checks its type, role, rails and marker pins.

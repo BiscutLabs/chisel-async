@@ -123,11 +123,21 @@ def validate_manifest(document):
     all_paths, resources = set(), set()
     domain = manifest["design"]["reset_domain"]
     for node in nodes(manifest["design"]):
-        shape(node, "rtl_path module reset_domain capacity endpoints channels primitives timing children")
+        shape(node, "rtl_path module reset_domain capacity endpoints channels primitives timing children" + (" memories" if "memories" in node else ""))
+        if "memories" in node:
+            require(type(node["memories"]) is list and bool(node["memories"]), "MEMORY_INVENTORY")
+        for memory in node.get("memories", []):
+            shape(memory, "id source depth word_bits mask_bits read_latency write_latency ports initial_contents reset_contents read_under_write")
+            require(all(type(memory[k]) is int and memory[k] > 0 for k in ("depth", "word_bits", "mask_bits"))
+                    and memory["word_bits"] % memory["mask_bits"] == 0, "MEMORY_SHAPE")
+            require(type(memory["read_latency"]) is int and type(memory["write_latency"]) is int
+                    and memory["read_latency"] == memory["write_latency"] == 1 and memory["ports"] == "one-read-write"
+                    and memory["initial_contents"] == "unspecified" and memory["reset_contents"] == "preserved"
+                    and memory["read_under_write"] == "undefined", "UNSUPPORTED_MEMORY_POLICY")
         require(node["reset_domain"] == domain, "RESET_DOMAIN_MISMATCH")
         require(node["capacity"] is None or type(node["capacity"]) is int and node["capacity"] > 0, "INVALID_CAPACITY")
         ids = [item["id"] for group in ("endpoints", "channels", "primitives", "timing", "children")
-               for item in node[group]]
+               for item in node[group]] + [m["id"] for m in node.get("memories", [])]
         require(len(ids) == len(set(ids)), "DUPLICATE_SEMANTIC_ID")
         require(all(re.fullmatch(IDENT, item) for item in ids), "INVALID_SEMANTIC_ID")
         path = node["rtl_path"]
@@ -481,7 +491,7 @@ def read_vvp(contents):
             key, kind, name, model, tail = scope.groups()
             parent = re.search(r", (S_\w+)$", tail)
             parent_path = scopes[parent[1]]["path"] + "." if parent else ""
-            current = {"path": parent_path + name, "kind": kind, "model": model, "ports": {}, "parameters": {}, "registers": {}, "nets": {}}
+            current = {"path": parent_path + name, "kind": kind, "model": model, "ports": {}, "parameters": {}, "registers": {}, "nets": {}, "memories": {}}
             require(key not in scopes and current["path"] not in paths, "AMBIGUOUS_ELABORATED_SCOPE")
             scopes[key] = paths[current["path"]] = current
         elif ".scope " in line and not line.lstrip().startswith(".scope"):
@@ -497,6 +507,9 @@ def read_vvp(contents):
         register = re.match(r'v\w+ \.var "(' + IDENT + r')", (\d+) 0;', line)
         if register and current:
             current["registers"][register[1]] = int(register[2]) + 1
+        memory = re.match(r'v\w+ \.array "(' + IDENT + r')", (\d+) 0, (\d+) 0;', line)
+        if memory and current:
+            current["memories"][memory[1]] = (int(memory[2]) + 1, int(memory[3]) + 1)
         param = re.match(r'P_\w+ \.param/l "(' + IDENT + r')" 0 \d+ \d+, (\+?)C4<([01]+)>;', line)
         if param and current:
             name, signed, bits = param.groups()
@@ -515,7 +528,7 @@ def source_path(node, target):
     return node["rtl_path"] + "." + field.replace(".", "_").replace("[", "_").replace("]", "")
 
 
-def probe_source(manifest, scopes):
+def probe_source(manifest, scopes, paired=False):
     top = manifest["top"]
     lines = ["module ContractProbe; timeunit 1fs; timeprecision 1fs;"]
     comparisons, timing_bindings, coverage, drivers = [], [], [], []
@@ -623,11 +636,10 @@ def probe_source(manifest, scopes):
         if node["rtl_path"] == top:
             drivers += [(top + "." + name, p["width"])
                         for name, p in scopes[top]["ports"].items() if p["direction"] == "input"]
-        if any(c["protocol"] == "decoupled-v1" for c in node["channels"]):
-            # Mapping-only stimulus for native Chisel registers, analogous to forcing
-            # primitive q ports below. Behavioral runs never force these registers.
-            drivers += [(node["rtl_path"] + "." + name, width)
-                        for name, width in scopes[node["rtl_path"]]["registers"].items()]
+        # Mapping-only stimulus for native Chisel registers, including clocked
+        # backends behind an async public port. Behavioral runs never force them.
+        drivers += [(node["rtl_path"] + "." + name, width)
+                    for name, width in scopes[node["rtl_path"]]["registers"].items()]
         for primitive in node["primitives"]:
             drivers += [(primitive["rtl_path"] + "." + p["name"], p["width"])
                         for p in primitive["ports"] if p["direction"] == "output"]
@@ -653,6 +665,18 @@ def probe_source(manifest, scopes):
                     lines += [f"force {src} = {width}'h{value:x};", "#1; check;"]
                     checks += len(coverage)
             lines += [f"force {src} = {width}'h{controls if width == 1 else 0:x};", "#1;"]
+    if paired:
+        # Nested ready/valid gates can require two independently stored controls.
+        # Keep every mapping comparison active; never force a derived endpoint.
+        for src, width in drivers:
+            lines.append(f"force {src} = {width}'h0;")
+        for first, (a, aw) in enumerate(drivers):
+            for b, bw in drivers[first+1:]:
+                for av in sorted({1, (1 << aw)-1}):
+                    for bv in sorted({1, (1 << bw)-1}):
+                        lines += [f"force {a} = {aw}'h{av:x};", f"force {b} = {bw}'h{bv:x};", "#1; check;"]
+                        checks += len(coverage)
+                lines += [f"force {a} = {aw}'h0;", f"force {b} = {bw}'h0;"]
     lines += coverage
     lines += [f'$display("CONTRACT_PROBES_PASS:{checks}"); $finish; end endmodule']
     return "\n".join(lines), checks
@@ -745,6 +769,41 @@ def validate_port_abi(directory, manifest, scopes):
                     "QDI_CHANNEL_ABI_INVENTORY")
 
 
+def validate_memories(directory, node, scopes):
+    """Only declared, one-RW-port SyncReadMem lowerings enter the scope inventory.
+
+    Cross-check dimensions/latency in compiler IR and the actual elaborated array
+    and pin ABI. Behavioral read/write, masks and reset persistence are exercised
+    separately by the boundary campaign; this is not a general RAM equivalence proof.
+    """
+    memories = node.get("memories", [])
+    if not memories:
+        return set()
+    model = scopes[node["rtl_path"]]["model"]
+    ir = (directory / "design.hw.mlir").read_text()
+    bodies = re.findall(r"^  hw.module (?:private )?@" + re.escape(model) + r"\([^\n]*\) \{\n(.*?)^  }", ir, re.M | re.S)
+    require(len(bodies) == 1, "MEMORY_HW_MODULE")
+    declared = re.findall(r"^    %(\w+) = seq.firmem 1, 1, undefined, port_order : <(\d+) x (\d+), mask (\d+)>$", bodies[0], re.M)
+    require(len(declared) == len(memories), "MEMORY_HW_INVENTORY")
+    result = set()
+    for memory in memories:
+        source = source_path(node, memory["source"])
+        name = source.rsplit(".", 1)[1]
+        depth, width, mask = (memory[k] for k in ("depth", "word_bits", "mask_bits"))
+        require((name, str(depth), str(width), str(mask)) in declared, "MEMORY_HW_SHAPE")
+        port_lines = [line for line in bodies[0].splitlines() if re.search(r"seq.firmem\.\w+ %" + re.escape(name) + r"\[", line)]
+        require(len(port_lines) == 1 and "seq.firmem.read_write_port" in port_lines[0], "MEMORY_HW_PORTS")
+        path = source + "_ext"
+        actual = scopes.get(path)
+        require(actual is not None and actual["memories"] == {"Memory": (depth, width)}, "MEMORY_RTL_SHAPE")
+        pins = {key: {"name": key, "width": bits, "direction": "output" if key == "RW0_rdata" else "input"}
+                for key, bits in (("RW0_addr", max(1, (depth-1).bit_length())), ("RW0_en",1), ("RW0_clk",1),
+                                  ("RW0_wmode",1), ("RW0_wdata",width), ("RW0_rdata",width), ("RW0_wmask",mask))}
+        require(actual["ports"] == pins and not actual["parameters"], "MEMORY_RTL_PORTS")
+        result.add(path)
+    return result
+
+
 def validate_export(directory: Path):
     directory = directory.resolve()
     output = directory / "resolved.json"
@@ -790,6 +849,7 @@ def validate_export(directory: Path):
         require(node["rtl_path"] in scopes, "MISSING_MODULE")
         require(not any(name.startswith("ca_") for name in scopes[node["rtl_path"]]["ports"]), "HARDWARE_OBSERVATION_PORT")
         expected_scopes.add(node["rtl_path"])
+        expected_scopes.update(validate_memories(directory, node, scopes))
         for endpoint in node["endpoints"]:
             path, name = endpoint["rtl_path"].rsplit(".", 1)
             require(path in scopes and scopes[path]["nets"].get(name) == endpoint["width"], "ENDPOINT_MISMATCH")
@@ -809,6 +869,14 @@ def validate_export(directory: Path):
     (directory / "contract_build.log").write_text(built.stdout + built.stderr, encoding="utf-8")
     require(built.returncode == 0, "RTL_PROBE_ELABORATION_FAILED")
     simulation = subprocess.run(["vvp", "contract_probe.vvp"], cwd=directory, text=True, capture_output=True, timeout=60)
+    if "INACTIVE_ENDPOINT:" in simulation.stdout:
+        probe, checks = probe_source(manifest, scopes, paired=True)
+        (directory / "contract_probe.sv").write_text(probe, encoding="utf-8")
+        built = subprocess.run(command[:1] + ["-s", "ContractProbe"] + command[1:] + ["contract_probe.sv"], cwd=directory,
+                               text=True, capture_output=True, timeout=60)
+        (directory / "contract_build.log").write_text(built.stdout + built.stderr, encoding="utf-8")
+        require(built.returncode == 0, "RTL_PROBE_ELABORATION_FAILED")
+        simulation = subprocess.run(["vvp", "contract_probe.vvp"], cwd=directory, text=True, capture_output=True, timeout=60)
     (directory / "contract_simulation.log").write_text(simulation.stdout + simulation.stderr, encoding="utf-8")
     for diagnostic in ("RESET_BINDING_MISMATCH", "TIMING_MARKER_BINDING_MISMATCH", "PHASE_CLOSURE_BINDING_MISMATCH",
                        "PHASE_RETURN_BINDING_MISMATCH", "DATA_PATH_BINDING_MISMATCH", "HOLD_FORK_BINDING_MISMATCH",
@@ -845,7 +913,8 @@ def main():
                 "encoding_from_dual", "encoding_roundtrip", "phase_roundtrip", "reference_behavioral",
                 "reference_bundled", "reference_qdi", "reference_gals", "reference_core",
                 "qdi_buffer", "qdi_packet", "qdi_not", "qdi_and", "qdi_or", "qdi_xor", "qdi_select",
-                "qdi_adder", "qdi_constant", "qdi_fork", "qdi_join", "qdi_demux", "qdi_merge", "qdi_composition")
+                "qdi_adder", "qdi_constant", "qdi_fork", "qdi_join", "qdi_demux", "qdi_merge", "qdi_composition",
+                "memory_ram", "memory_rom", "memory_port", "pending_events")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

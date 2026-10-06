@@ -1,5 +1,13 @@
 # Qualification status
 
+## CA-09 application boundaries
+
+The [CA-09 implementation and contracts](application-boundaries.md) pass focused local native-Windows checks: 80 positive cases / 9,840 deliveries and five actual-RTL controls, four optimized exports, 31 Python boundary/export checks, and the expanded seven-test ChiselSim suite. Complete qualification and final native Windows/Linux CI are in progress; this paragraph is not a platform acceptance claim.
+
+Two fresh-context scoped reviews checked control/reset semantics and export/oracle/integration behavior. The control reviewer independently replayed the then-current 85-case campaign and found no blocker; its suggested held-high-across-reset event case was added. The export reviewer found empty `memories` collections and Boolean latencies were accepted despite violating the schema. Exact type/nonempty checks and four full-export regression cases repair that finding. Campaign attempts now retain their own complete export/source snapshots. The reviewer confirmed the repaired baseline and rejection diagnostics, audited all 85 revised cases / 325 recorded files / 399 source bindings, replayed all 60 memory/event traces, and rejected two independently corrupted probe aliases. No remaining blocker was found in those scopes. Evidence is under `target/ca09-review-control`, `target/ca09-review-export`, and `target/verification/boundaries-reviewed`.
+
+These are agent reviews and bounded digital experiments, not external specialist certification or physical CDC qualification. Independent CPU/always-on reset and arbitrary narrow-pulse capture remain outside the declared contracts; macOS remains deferred. Historical L0/L1 and CA-08 results below keep their original source scope.
+
 ## CA-08 bounded dual-rail family
 
 The [CA-08 family](qdi-family.md) passes the complete native Windows Server 2025 and Ubuntu 24.04 qualifier at `28684c2cf13debc9aa85427ce9924b2505db506b` in [run 37521726421](https://github.com/BiscutLabs/chisel-async/actions/runs/37521726421). Each host passes 51 Scala tests, 487 Python tests, 77 default exports / 2,408 endpoints / 1,473,552 mapping checks, all historical regressions, five ChiselSim tests and clean published-JAR consumption. Later documentation changes do not alter those execution inputs.

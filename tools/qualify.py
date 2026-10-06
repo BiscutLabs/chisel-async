@@ -120,7 +120,8 @@ def main():
                  "examples/runMain chiselasync.examples.EmitComposition target/generated",
                  "examples/runMain chiselasync.examples.EmitPhase target/generated",
                  "examples/runMain chiselasync.examples.EmitReference target/generated",
-                 "examples/runMain chiselasync.examples.EmitQdi target/generated"]
+                 "examples/runMain chiselasync.examples.EmitQdi target/generated",
+                 "examples/runMain chiselasync.examples.EmitBoundaries target/generated"]
         steps = setup + [("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
             ("python", [python, "-m", "pytest", *[str(p) for p in sorted((ROOT / "verification").glob("test_*.py"))], "-q"])]
         steps += [(name, [python, str(ROOT / path)]) for name, path in (
@@ -139,6 +140,10 @@ def main():
         steps += [("qdi", [python, str(ROOT / "verification/run_qdi.py"), "--output", str(qdi_attempt)])]
         steps += [("qdi-sequences", [python, str(ROOT / "verification/run_qdi_sequences.py"),
                                       "--output", str(qdi_attempt.parent / "sequences")])]
+        boundary_parent = ROOT / "target/verification/boundaries"
+        boundary_parent.mkdir(parents=True, exist_ok=True)
+        boundary_attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=boundary_parent)) / "campaign"
+        steps += [("boundaries", [python, str(ROOT / "verification/run_boundaries.py"), "--output", str(boundary_attempt)])]
         steps += [("chiselsim", [python, str(ROOT / "verification/run_chiselsim.py")]),
                   ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")])]
         run_steps(steps, environment, output)
