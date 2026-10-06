@@ -144,7 +144,8 @@ class BridgeSimulationSpec extends AnyFunSuite with ChiselSim {
     val error = intercept[TestFailedException](sink(true))
     assert(error.getMessage.contains("SINK_PAYLOAD"))
   }
-  test("memory adapter reserves through response return and commits a held request once") {
+  // ChiselSim uses test names in paths; leave room for native Windows consumer builds.
+  test("memory commits once through full response return") {
     simulate(new MemoryPortHarness) { dut =>
       dut.request.req.poke(false.B); dut.response.ack.poke(false.B)
       dut.backendRequest.ready.poke(false.B); dut.backendResponse.valid.poke(false.B)

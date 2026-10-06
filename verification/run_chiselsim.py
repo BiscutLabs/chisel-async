@@ -16,7 +16,7 @@ CASES = {
     "source observation corruption activates the payload oracle",
     "sink observation corruption activates the payload oracle",
     "wide payloads survive the simulator command transport",
-    "memory adapter reserves through response return and commits a held request once",
+    "memory commits once through full response return",
     "pending events preserve a newer edge on an already offered bit",
 }
 ACTIVITY = ("CHISELSIM_SOURCE_PASS accepted=265 delivered=264 aborted=1",
