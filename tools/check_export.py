@@ -128,14 +128,32 @@ def validate_manifest(document):
             all_paths.add(primitive["rtl_path"])
             resources.add(primitive["resource"])
         for timing in node["timing"]:
-            shape(timing, "id kind launch transaction data_valid capture captured setup_fs hold_fs mode provenance pulse_policy")
-            require(timing["kind"] == "bundled-setup-hold-v1" and timing["mode"] == "digital-model",
-                    "UNSUPPORTED_TIMING")
-            require(all(timing[ref] in endpoints for ref in
-                        ("launch", "transaction", "data_valid", "capture", "captured")), "MISSING_TIMING_ENDPOINT")
-            for name in ("setup_fs", "hold_fs"):
+            if timing.get("kind") == "long-hold-bundling-v1":
+                shape(timing, "id kind mode request input_data latch_data latch_closed acknowledge output_request output_data "
+                      "matched_delay_fs data_delay_fs cell_delay_fs latch_delay_fs output_delay_fs provenance assumptions")
+                refs = ("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
+                times = ("matched_delay_fs", "data_delay_fs", "cell_delay_fs", "latch_delay_fs", "output_delay_fs")
+                require(timing["mode"] in ("functional-only", "digital-model"), "UNSUPPORTED_TIMING")
+            else:
+                shape(timing, "id kind launch transaction data_valid capture captured setup_fs hold_fs mode provenance pulse_policy")
+                require(timing["kind"] == "bundled-setup-hold-v1" and timing["mode"] == "digital-model", "UNSUPPORTED_TIMING")
+                refs = ("launch", "transaction", "data_valid", "capture", "captured")
+                times = ("setup_fs", "hold_fs")
+            require(all(timing[ref] in endpoints for ref in refs), "MISSING_TIMING_ENDPOINT")
+            for name in times:
                 require(type(timing[name]) is str and re.fullmatch(r"0|[1-9][0-9]*", timing[name])
                         and int(timing[name]) <= 2**63 - 1, "INVALID_MODEL_TIME")
+            if timing["kind"] == "long-hold-bundling-v1":
+                matched, data, cell, latch, output = (int(timing[n]) for n in times)
+                require((timing["mode"] == "functional-only" and not any((matched, data, cell, latch, output))) or
+                        (timing["mode"] == "digital-model" and cell > 0 and latch > 0 and matched > data and
+                         output > 2*cell+latch), "INVALID_BUNDLING_POLICY")
+                # The declared model times must agree with actual preserved cell parameters.
+                primitives = {p["id"]: p for p in node["primitives"]}
+                for cell_id, delay in (("request_delay", matched), ("data_delay", data), ("long_hold", cell),
+                                       ("a", cell), ("b", cell), ("acknowledge", cell), ("payload", latch), ("output_delay", output)):
+                    require(cell_id in primitives and primitives[cell_id]["parameters"].get("DELAY_FS") == str(delay),
+                            "BUNDLING_PARAMETER_MISMATCH")
         for child in node["children"]:
             shape(child, "id contract")
     require(resources == set(manifest["resources"]), "RESOURCE_INVENTORY_MISMATCH")
@@ -286,7 +304,8 @@ def main():
     args = parser.parse_args()
     fixtures = ("buffer", "wide", "packet", "pipeline", "celement", "latch", "transport", "inertial",
                 "timed_early", "timed_equal", "timed_late", "structural", "structural_wide",
-                "structural_packet", "structural_pipeline", "transform")
+                "structural_packet", "structural_pipeline", "transform", "longhold", "longhold_wide",
+                "longhold_packet", "longhold_pipeline", "longhold_comparison", "longhold_sum", "longhold_signed")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

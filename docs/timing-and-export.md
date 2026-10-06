@@ -4,7 +4,7 @@ This slice qualifies explicit digital model delays and a pinned compiler route. 
 
 ## Exact time and primitive contracts
 
-`ModelTime` stores nonnegative signed 64-bit femtoseconds, from 0 through 9223372036854775807. Addition and picosecond conversion check overflow. `ticks(precision)` rejects inexact conversion; there is no rounding. Serialized times are decimal strings so JSON consumers cannot silently lose integer precision. Delay parameters must be strictly positive. The qualified event lane uses `timeunit 1fs`, `timeprecision 1fs` and Icarus 13.0; no coarser simulator lane is claimed.
+`ModelTime` stores nonnegative signed 64-bit femtoseconds, from 0 through 9223372036854775807. Addition and picosecond conversion check overflow. `ticks(precision)` rejects inexact conversion; there is no rounding. Serialized times are decimal strings so JSON consumers cannot silently lose integer precision. `DelayLine` requires strictly positive delay; the newer control primitives also permit the explicitly named functional-only zero-delay policy. The qualified event lane uses `timeunit 1fs`, `timeprecision 1fs` and Icarus 13.0; no coarser simulator lane is claimed.
 
 `Latch(width, resetValue)` is transparent when enable is one, holds when enable is zero, and asynchronously resets to its explicit value. Unknown reset produces unknown output. Unknown enable retains a known value only when both hold and transparent outcomes agree; otherwise it produces uncertainty. Explicit reset is required before relying on initialized state. This is a functional latch view, with setup/hold observed separately.
 
@@ -25,6 +25,8 @@ The latch test makes 65 value/hold/reset/uncertainty observations. Each delay te
 Five additional model mutations must fail with exact assertions: disable reset cancellation (`DELAY_TRACE_MISMATCH`), change transport to inertial (`DELAY_TRACE_MISMATCH`), erase transaction identity (`TIMING_DATA_NOT_VALID`), suppress delivery/capture (`TIMING_MISSING_CAPTURE`), and invert latch data (`TIMING_CAPTURED_VALUE`). Setup and hold violations require `TIMING_SETUP` and `TIMING_HOLD`. A crash, timeout, inactive observer or different assertion fails the campaign.
 
 ## Scoped contract and compiler route
+
+The [long-hold stage](long-hold-controller.md) adds `long-hold-bundling-v1` obligations: seven endpoint references, five exact delay values, mode, provenance and model assumptions. Delays also reside in actual primitive parameters. The checker rejects invalid strict margins and any sidecar/primitive disagreement; parameter resolution then checks the elaborated RTL. These are declared atomic digital-model bounds, separate from `TimedCapture`'s observed setup/hold experiment. They do not qualify new synthesis options or physical timing.
 
 Each `AsyncModule` owns a `DesignContract` and a `ResetDomain`. Share the same domain object when composing child buffers; identical labels on different objects do not authorize a connection. Register child contracts explicitly with `contract.child`. Channels have typed payload layouts, ordered protocol phases and owner-domain references. Nodes may declare token capacity. Primitive descriptors identify a semantic instance, model/version, selected behavioral view, exact parameters, ports, reset and effects. Timing obligations refer to registered endpoints and carry units, bounds, mode and provenance.
 

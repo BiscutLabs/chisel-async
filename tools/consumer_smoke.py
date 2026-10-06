@@ -17,7 +17,9 @@ def main():
     with zipfile.ZipFile(artifact) as library:
         for name in ("META-INF/LICENSE", "chiselasync/contract-v1.schema.json", "chiselasync/sv/ChiselAsyncCElement_v1.sv",
                      "chiselasync/sv/ChiselAsyncFourPhaseStorage_v1.sv",
-                     "chiselasync/sv/ChiselAsyncLatch_v1.sv", "chiselasync/sv/ChiselAsyncDelayLine_v1.sv"):
+                     "chiselasync/sv/ChiselAsyncLatch_v1.sv", "chiselasync/sv/ChiselAsyncDelayLine_v1.sv",
+                     "chiselasync/sv/ChiselAsyncAsymmetricC_v1.sv", "chiselasync/sv/ChiselAsyncControlGate_v1.sv",
+                     "chiselasync/sv/ChiselAsyncClosingLatch_v1.sv"):
             if not library.read(name):
                 raise RuntimeError(f"Empty published resource: {name}")
     # The space in the path is intentional. Keep outputs for diagnosis/replay.
@@ -40,11 +42,14 @@ def main():
                "-Dsbt.override.build.repos=true", f"-Dsbt.repository.config={ROOT / 'project/repositories'}",
                "-jar", str(ROOT / ".tools/sbt-launch-1.12.4.jar"), "run"]
     subprocess.run(command, cwd=consumer, env=environment, check=True, timeout=180)
-    subprocess.run([sys.executable, str(ROOT / "verification/run.py"), "--fixtures", "buffer", "structural", "transform",
+    subprocess.run([sys.executable, str(ROOT / "verification/run.py"), "--fixtures", "buffer", "structural", "transform", "longhold",
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification")],
                    cwd=ROOT, check=True, timeout=180)
     subprocess.run([sys.executable, str(ROOT / "verification/run_timing.py"),
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/timing")],
+                   cwd=ROOT, check=True, timeout=180)
+    subprocess.run([sys.executable, str(ROOT / "verification/run_longhold.py"), "--seeds", "2",
+                    "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/longhold")],
                    cwd=ROOT, check=True, timeout=180)
     print(f"Published artifact consumed and simulated successfully: {consumer}")
 

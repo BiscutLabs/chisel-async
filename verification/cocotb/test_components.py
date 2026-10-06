@@ -12,8 +12,8 @@ from reference import reset_prefixes, two_token_schedules
 
 FIXTURE = os.environ["FIXTURE"]
 IS_CELEMENT = FIXTURE == "celement"
-IS_PACKET = FIXTURE in ("packet", "structural_packet")
-IS_SINGLE = FIXTURE not in ("pipeline", "structural_pipeline", "celement")
+IS_PACKET = FIXTURE in ("packet", "structural_packet", "longhold_packet")
+IS_SINGLE = FIXTURE not in ("pipeline", "structural_pipeline", "longhold_pipeline", "celement")
 
 
 def expected_payload(value):

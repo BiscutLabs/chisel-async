@@ -20,11 +20,14 @@ FIXTURES = {
     "structural": "StructuralBufferExample", "structural_wide": "StructuralWideExample",
     "structural_packet": "StructuralPacketExample", "structural_pipeline": "StructuralPipelineExample",
     "transform": "TransformExample",
+    "longhold": "LongHoldExample", "longhold_wide": "LongHoldWideExample",
+    "longhold_packet": "LongHoldPacketExample", "longhold_pipeline": "LongHoldPipelineExample",
 }
 WIDTHS = {"buffer": 8, "wide": 65, "packet": 22, "pipeline": 8,
           "structural": 8, "structural_wide": 65, "structural_packet": 22,
-          "structural_pipeline": 8, "transform": 8}
-PIPELINES = {"pipeline", "structural_pipeline"}
+          "structural_pipeline": 8, "transform": 8, "longhold": 8, "longhold_wide": 65,
+          "longhold_packet": 22, "longhold_pipeline": 8}
+PIPELINES = {"pipeline", "structural_pipeline", "longhold_pipeline"}
 CONTROLS = {
     "payload-invert": ("transaction_stream", "PAYLOAD_MISMATCH", "out_bits <= in_bits;", "out_bits <= ~in_bits;"),
     "request-glitch": ("transaction_stream", "REQUEST_WITHDRAWN", "out_req <= 1'b1;",

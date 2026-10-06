@@ -45,6 +45,25 @@
         "ports": {"type": "array", "minItems": 1}}
     },
     "timing": {
+      "oneOf": [{"$ref": "#/$defs/captureTiming"}, {"$ref": "#/$defs/longHoldTiming"}]
+    },
+    "longHoldTiming": {
+      "type": "object",
+      "required": ["id", "kind", "mode", "request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data", "matched_delay_fs", "data_delay_fs", "cell_delay_fs", "latch_delay_fs", "output_delay_fs", "provenance", "assumptions"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {"$ref": "#/$defs/id"}, "kind": {"const": "long-hold-bundling-v1"},
+        "mode": {"enum": ["functional-only", "digital-model"]},
+        "request": {"$ref": "#/$defs/id"}, "input_data": {"$ref": "#/$defs/id"},
+        "latch_data": {"$ref": "#/$defs/id"}, "latch_closed": {"$ref": "#/$defs/id"},
+        "acknowledge": {"$ref": "#/$defs/id"}, "output_request": {"$ref": "#/$defs/id"},
+        "output_data": {"$ref": "#/$defs/id"},
+        "matched_delay_fs": {"$ref": "#/$defs/time"}, "data_delay_fs": {"$ref": "#/$defs/time"},
+        "cell_delay_fs": {"$ref": "#/$defs/time"}, "latch_delay_fs": {"$ref": "#/$defs/time"},
+        "output_delay_fs": {"$ref": "#/$defs/time"}, "provenance": {"type": "string"}, "assumptions": {"type": "string"}
+      }
+    },
+    "captureTiming": {
       "type": "object", "required": ["id", "kind", "launch", "transaction", "data_valid", "capture", "captured", "setup_fs", "hold_fs", "mode", "provenance", "pulse_policy"],
       "properties": {"id": {"$ref": "#/$defs/id"}, "kind": {"const": "bundled-setup-hold-v1"},
         "setup_fs": {"$ref": "#/$defs/time"}, "hold_fs": {"$ref": "#/$defs/time"}, "mode": {"const": "digital-model"}}

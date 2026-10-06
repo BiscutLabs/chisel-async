@@ -84,4 +84,4 @@ python verification/compare_controllers.py
 
 ## Next implementation gate
 
-Freeze and independently check the exact fully decoupled, long-hold event graph, reset state, cell connections and timing obligations before adding a production stage. Then implement it with distinct input/output types and an explicit timing policy, and run it against the stronger existing buffer oracle as well as delay variation. Validate the logical-channel/encoding split with minimal bundled, dual-rail and clocked examples before CA-06. Do not promote this reference, close L0 or resume the component catalog merely because the random sweep passes.
+The [fully decoupled long-hold implementation](long-hold-controller.md) now checks its published event graph, emitted cell connections, typed transforms and explicit timing policy against the stronger buffer oracle and a separate delay campaign. Next, validate the logical-channel/encoding split with minimal bundled, dual-rail and clocked examples, then scalable observation/export before CA-06. This Muller reference still has its own distinct contract; its passing random sweep alone does not close L0.

@@ -20,9 +20,15 @@ For verification accounting, input acknowledgement rising accepts a token and ou
 
 The SV view updates data and request in the same zero-delay scheduling interval; sample offered payloads after settling. Passive control listeners remain armed on value changes. The data-hold observer allows initial settling at the request timestamp, then checks subsequent changes throughout the handshake. It is not a gate-level delta-glitch or setup/hold checker. No setup/hold guarantee follows. This is a functional storage primitive used to establish interfaces and a reference corpus before structural controller implementation.
 
+## Published long-hold stage
+
+`FourPhaseStage[A, B](inGen, outGen, transform, timing, domain)` checks the transformed payload against the distinct output type. `LongHoldBuffer[T]` is the identity specialization. Both use the Furber–Day long-hold topology with explicit primitive boundaries and require a timing policy: named `FunctionalOnly` or validated `Digital`. [Controller documentation](long-hold-controller.md) specifies the source, added timing guards, atomic input polarity, reset and ideal-wire assumptions, and independent evidence.
+
+These stages use the same accepted/delivered/reserved accounting and full-handshake hold contract above. Their latch may transparently track data while idle; output data has no validity then. Reset takes the declared propagation time and must be held until quiescent. The new policy does not claim physical setup/hold closure. The historical behavioral buffer remains a separate reference model.
+
 ## Withdrawn structural stage (regression only)
 
-The former `FourPhaseStage[T]` and `StructuralFourPhaseBuffer[T]` are withdrawn. They survive as `experimental.UnsafeFourPhaseStage` and `UnsafeFourPhaseBuffer` to retain the historical zero-delay corpus and a reproducible internal delay race. Do not compose new library components from them. [Review response](review-response.md) records the counterexample and replacement criteria.
+The former single-type custom `FourPhaseStage[T]` and `StructuralFourPhaseBuffer[T]` are withdrawn. They survive as `experimental.UnsafeFourPhaseStage` and `UnsafeFourPhaseBuffer` to retain the historical zero-delay corpus and a reproducible internal delay race. The new two-type `bundled.FourPhaseStage[A, B]` is a different published controller, with a required timing argument. Do not compose new library components from the withdrawn classes. [Review response](review-response.md) records the counterexample and replacement criteria.
 
 The control specification is independent of the implementation equations:
 

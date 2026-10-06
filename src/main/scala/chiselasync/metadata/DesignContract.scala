@@ -88,6 +88,24 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
       "pulse_policy" -> "one outstanding launch; identity travels with data; capture on rising edge")
   }
 
+  def longHoldTiming(id: String, policy: BundledTiming, request: String, inputData: String,
+                     latchData: String, latchClosed: String, acknowledge: String,
+                     outputRequest: String, outputData: String): Unit = {
+    claim(id)
+    Seq(request, inputData, latchData, latchClosed, acknowledge, outputRequest, outputData).foreach { ref =>
+      require(endpoints.exists(_._1 == ref), s"missing timing endpoint: $ref")
+    }
+    obligations += ujson.Obj("id" -> id, "kind" -> "long-hold-bundling-v1", "mode" -> policy.mode,
+      "request" -> request, "input_data" -> inputData, "latch_data" -> latchData,
+      "latch_closed" -> latchClosed, "acknowledge" -> acknowledge,
+      "output_request" -> outputRequest, "output_data" -> outputData,
+      "matched_delay_fs" -> policy.matchedDelay.fs.toString, "data_delay_fs" -> policy.dataDelay.fs.toString,
+      "cell_delay_fs" -> policy.cellDelay.fs.toString, "latch_delay_fs" -> policy.latchDelay.fs.toString,
+      "output_delay_fs" -> policy.outputDelay.fs.toString,
+      "provenance" -> "explicit model policy; not technology timing closure",
+      "assumptions" -> "atomic asymmetric cells including input bubbles; ideal forks; zero latch aperture; coordinated quiescent reset")
+  }
+
   private def layout(data: Data): ujson.Value = {
     var offset = 0
     val leaves = ArrayBuffer.empty[ujson.Value]

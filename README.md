@@ -2,7 +2,7 @@
 
 A Chisel library for asynchronous hardware, developed independently under Apache 2.0.
 
-**Status: controller redesign required before library expansion.** The custom structural stage is withdrawn. The new [published-controller comparison](docs/controller-comparison.md) passes 300 random-delay cases for each Muller reference depth on Windows and Linux-under-WSL, while rejecting the withdrawn design in 254/300 cases. Muller has different capacity and data-validity semantics; it is not the production replacement. See the [review response and revised priorities](docs/review-response.md). macOS qualification is explicitly deferred.
+**Status: published long-hold controller implemented; architecture gate still open.** `FourPhaseStage[A, B]` now uses the Furber–Day fully decoupled long-hold topology with explicit timing policies. Its [bounded digital campaign](docs/long-hold-controller.md) checks full-handshake data hold, capacity, typed transforms and internal event order. The custom controller remains withdrawn. Logical-channel separation, small dual-rail/clocked examples and scalable export precede catalog expansion. macOS qualification is explicitly deferred.
 
 The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip implementation. This library works with an existing simulator and does not depend on Chiselator, Yosys, a PDK, ACT or a GPU.
 
@@ -12,13 +12,14 @@ The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip im
 - `FourPhase[T]`: request/data toward the consumer, acknowledgement toward the producer. Supports sized UInt/SInt/Bool and nested Bundle/Vec payloads.
 - `FourPhase.connect`: rejects incompatible shapes, implicit resizing and different reset-domain objects. Exported channels must share their owner's `ResetDomain`.
 - `FourPhaseBuffer[T]`: one captured token, backpressure, stable output data through return to idle, and coordinated reset flushing.
+- `FourPhaseStage[A, B]` / `LongHoldBuffer[T]`: published long-hold control through explicit primitive cells; type-changing transforms and required `BundledTiming` policy. Direct N-input/asymmetric C-element models preserve atomic input polarity.
 - `CElement`: unanimity updates the output; disagreement holds state; reset forces zero. An external four-state diagnostic test checks unknown propagation.
 - `Latch`, `DelayLine`, `ModelTime`: explicit reset, transparent storage, transport/inertial delay, captured values and reset cancellation, with exact integer femtoseconds.
 - `TimedCapture[T]`: pure transform, independent data/control delays and a latch, with transaction identity and observed setup/hold checks.
 - `ExportDesign`: versioned manifest, scoped semantic IDs, payload layouts, reset domains, primitive parameters/resources and timing obligations. Actual RTL elaboration and active bit probes validate the retained endpoints.
 - Packaged SV behavioral views, executable examples, Scala API tests, passive protocol monitors, independent token accounting and eight deliberately corrupted-model controls.
 
-`FourPhaseBuffer` is a zero-delay **behavioral storage model**, not a hardware controller. The failed structural experiment now lives under `chiselasync.experimental.UnsafeFourPhaseStage` / `UnsafeFourPhaseBuffer` solely for regression. `TimedCapture` separately exercises declared digital delays; it cannot repair controller races. Published-controller comparison and small bundled/QDI/clocked architecture examples precede catalog expansion in the revised [roadmap](docs/roadmap.md).
+`FourPhaseBuffer` is a zero-delay **behavioral storage model**, not a hardware controller. The failed structural experiment lives under `chiselasync.experimental.UnsafeFourPhaseStage` / `UnsafeFourPhaseBuffer` solely for regression. The replacement has bounded digital evidence under stated atomic-cell, ideal-wire and bundling assumptions; no physical cell mapping is supplied. Small bundled/QDI/clocked architecture examples precede catalog expansion in the revised [roadmap](docs/roadmap.md).
 
 ## Using the library versus qualifying the repository
 
@@ -42,12 +43,14 @@ python tools/bootstrap_jdk.py
 python tools/bootstrap.py
 python tools/sbt.py --bootstrap test "examples/runMain chiselasync.examples.EmitFixtures target/generated"
 python tools/sbt.py "examples/runMain chiselasync.examples.EmitControllerComparison target/generated/comparison_unsafe"
+python tools/sbt.py "examples/runMain chiselasync.examples.EmitLongHold target/generated"
 python tools/check_export.py
-python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py verification/test_controller_comparison.py -q
+python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py verification/test_controller_comparison.py verification/test_longhold.py -q
 python verification/run.py
 python verification/controller_race.py
 python verification/compare_controllers.py
 python verification/run_timing.py
+python verification/run_longhold.py
 python tools/consumer_smoke.py
 ```
 
@@ -55,7 +58,7 @@ python tools/consumer_smoke.py
 
 For native Windows simulation, install `mingw-w64-ucrt-x86_64-iverilog` in an [MSYS2 UCRT64 environment](https://www.msys2.org/) and add its `ucrt64/bin` directory to PATH in the shell running Python. This runs Windows executables and does not require WSL. On Linux, install the build dependencies listed in the CI workflow, run `python tools/build_iverilog.py`, then add `.tools/iverilog/bin` to PATH. The runner checks the engine version rather than silently using another simulator.
 
-`tools/consumer_smoke.py` publishes to the local Ivy cache, creates a separate consumer project under `target/consumers`, and runs its behavioral buffer, structural buffer/transform, latch, delays and timing fixtures through the same export/event checks. The proposed Maven coordinates are `io.github.biscutlabs:chisel-async_2.13:0.1.0-SNAPSHOT`; publication namespace ownership remains to be established.
+`tools/consumer_smoke.py` publishes to the local Ivy cache and creates a separate consumer project under `target/consumers`. It checks behavioral/withdrawn regression fixtures, long-hold buffering and type-changing transforms, packaged primitive models, timing tests and a short long-hold delay sweep with all fault controls. The proposed Maven coordinates are `io.github.biscutlabs:chisel-async_2.13:0.1.0-SNAPSHOT`; publication namespace ownership remains to be established.
 
 ## A clockless buffer
 
@@ -77,7 +80,7 @@ Run `python tools/check_export.py generated` to resolve and validate the export.
 
 ## Evidence and limits
 
-The expanded functional campaign requires 52 positive event tests and eight fault controls. The timing campaign adds seven passing cases, two intended setup/hold violations and five corrupted-model controls. Scala and Python checks cover API misuse, deterministic export, compiler corruption, exact time, independent reference models and harness failures. An unrelated assertion, crash or timeout cannot count as successful rejection.
+The functional campaign requires 74 positive event tests and eight fault controls, including 22 new long-hold cases. The separate long-hold campaign requires 628 delayed cases, three activated faults, 5,184 primitive state/delay checks and 776 typed transfers. The timing campaign adds seven passing cases, two intended setup/hold violations and five corrupted-model controls. Scala and Python checks cover API misuse, deterministic export, compiler corruption, exact time, independent reference models and harness failures. An unrelated assertion, crash or timeout cannot count as successful rejection.
 
 Passive observers enforce handshake order and data hold while independent transaction accounting checks capacity, delivery and reset abortion. Tests include walking-one/walking-zero patterns for every payload bit, full-pipeline reset with a pending request, and completed post-reset transfers. Each single-buffer fixture runs 18 legal two-token orders with both equal and distinct payloads, 68 reset prefixes, and six coincident/one-picosecond boundary cases. The C-element checks 1,024 Boolean transitions. These are bounded functional experiments; see the [verification method and acceptance criteria](docs/verification.md).
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 import chisel3._
-import chiselasync.bundled.{FourPhaseBuffer, TimedCapture}
+import chiselasync.bundled.{FourPhaseBuffer, FourPhaseStage, LongHoldBuffer, TimedCapture}
 import chiselasync.experimental.{UnsafeFourPhaseStage, UnsafeFourPhaseBuffer}
 import chiselasync.core.AsyncModule
-import chiselasync.metadata.{DelayPolicy, ExportDesign, ModelTime}
+import chiselasync.metadata.{BundledTiming, DelayPolicy, ExportDesign, ModelTime}
 import chiselasync.primitives.{DelayLine, Latch}
 import java.nio.file.Paths
 
@@ -11,6 +11,29 @@ class BufferExample extends FourPhaseBuffer(UInt(8.W))
 // Regression-only checks that the withdrawn experiment stays reproducible in the JAR.
 class StructuralBufferExample extends UnsafeFourPhaseBuffer(UInt(8.W))
 class TransformExample extends UnsafeFourPhaseStage(UInt(8.W), (value: UInt) => value ^ 0x55.U(8.W))
+
+object ConsumerTiming {
+  val digital = BundledTiming.Digital(ModelTime.ps(40000), ModelTime.ps(8000),
+    ModelTime.ps(1000), ModelTime.ps(1000), ModelTime.ps(40000))
+}
+class LongHoldExample extends LongHoldBuffer(UInt(8.W), BundledTiming.FunctionalOnly)
+class LongHoldComparisonExample extends LongHoldBuffer(UInt(40.W), ConsumerTiming.digital)
+class Operands extends Bundle { val left = UInt(8.W); val right = UInt(8.W) }
+class LongHoldSumExample extends FourPhaseStage(new Operands, UInt(9.W),
+  (p: Operands) => p.left +& p.right, ConsumerTiming.digital)
+class SignedResult extends Bundle {
+  val value = SInt(10.W)
+  val nonnegative = Bool()
+  val lanes = Vec(2, UInt(4.W))
+}
+class LongHoldSignedExample extends FourPhaseStage(SInt(9.W), new SignedResult, (v: SInt) => {
+  val result = Wire(new SignedResult)
+  result.value := v +& (-17).S(9.W)
+  result.nonnegative := v >= 0.S
+  result.lanes(0) := v.asUInt(3, 0)
+  result.lanes(1) := v.asUInt(7, 4)
+  result
+}, ConsumerTiming.digital)
 
 class ConsumerDelay(policy: DelayPolicy) extends AsyncModule {
   val d = IO(Input(UInt(9.W)))
@@ -46,6 +69,10 @@ object Consumer {
     ExportDesign.emit(new BufferExample, Paths.get("generated/buffer"))
     ExportDesign.emit(new StructuralBufferExample, Paths.get("generated/structural"))
     ExportDesign.emit(new TransformExample, Paths.get("generated/transform"))
+    ExportDesign.emit(new LongHoldExample, Paths.get("generated/longhold"))
+    ExportDesign.emit(new LongHoldComparisonExample, Paths.get("generated/longhold_comparison"))
+    ExportDesign.emit(new LongHoldSumExample, Paths.get("generated/longhold_sum"))
+    ExportDesign.emit(new LongHoldSignedExample, Paths.get("generated/longhold_signed"))
     ExportDesign.emit(new ConsumerDelay(DelayPolicy.Transport), Paths.get("generated/transport"))
     ExportDesign.emit(new ConsumerDelay(DelayPolicy.Inertial), Paths.get("generated/inertial"))
     ExportDesign.emit(new ConsumerLatch, Paths.get("generated/latch"))

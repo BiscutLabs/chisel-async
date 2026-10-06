@@ -2,7 +2,8 @@
 // Environment/scoreboard only. It has no controller state transition equations.
 `timescale 1ns/1ps
 module ControllerBench;
-  parameter DEPTH=3, MULLER=1, FORWARD_NS=40, ACK_NS=20;
+  parameter DEPTH=3, MULLER=1, FORWARD_NS=40, ACK_NS=20, LONGHOLD=0;
+  integer epoch=0;
   reg reset=0, source_req=0, sink_ack=0;
   reg [39:0] source_bits=0;
   wire [DEPTH:0] req, ack;
@@ -12,7 +13,26 @@ module ControllerBench;
   assign bits[0]=source_bits;
   genvar k;
   generate for (k=0; k<DEPTH; k=k+1) begin: stages
-    if (MULLER) begin
+    if (LONGHOLD) begin: published
+      LongHoldComparisonExample dut(
+        .reset(reset), .in_req(req[k]), .in_bits(bits[k]), .in_ack(ack[k]),
+        .out_req(req[k+1]), .out_bits(bits[k+1]), .out_ack(ack[k+1]));
+      // Observe the internal events against a separate published Petri-net model.
+      always @(dut.ca_primitive_request_delay.q) if (!reset && epoch>0)
+        $display("STG stage=%0d event=Rin%s",k,dut.ca_primitive_request_delay.q ? "+" : "-");
+      always @(dut.ca_primitive_a.q) if (!reset && epoch>0)
+        $display("STG stage=%0d event=A%s",k,dut.ca_primitive_a.q ? "+" : "-");
+      always @(dut.ca_primitive_b.q) if (!reset && epoch>0)
+        $display("STG stage=%0d event=B%s",k,dut.ca_primitive_b.q ? "+" : "-");
+      always @(dut.ca_primitive_long_hold.q) if (!reset && epoch>0)
+        $display("STG stage=%0d event=Lt%s",k,dut.ca_primitive_long_hold.q ? "+" : "-");
+      always @(ack[k]) if (!reset && epoch>0)
+        $display("STG stage=%0d event=Ain%s",k,ack[k] ? "+" : "-");
+      always @(req[k+1]) if (!reset && epoch>0)
+        $display("STG stage=%0d event=Rout%s",k,req[k+1] ? "+" : "-");
+      always @(ack[k+1]) if (!reset && epoch>0)
+        $display("STG stage=%0d event=Aout%s",k,ack[k+1] ? "+" : "-");
+    end else if (MULLER) begin
       MullerComparisonStage #(.BASE(k*100), .FORWARD_NS(FORWARD_NS), .ACK_NS(ACK_NS)) dut(
         .reset(reset), .in_req(req[k]), .in_bits(bits[k]), .in_ack(ack[k]),
         .out_req(req[k+1]), .out_bits(bits[k+1]), .out_ack(ack[k+1]));
@@ -24,7 +44,8 @@ module ControllerBench;
   end endgenerate
 
   integer accepted=0, delivered=0, aborted=0, returned=0, offered=0;
-  integer head=0, tail=0, epoch=0, serial=0, scenario=0, reset_cases=0;
+  integer reserved=0;
+  integer head=0, tail=0, serial=0, scenario=0, reset_cases=0;
   integer source_pause=1, sink_pause=1, source_return=1, sink_return=1;
   integer i, j, before_accept, before_delivery, before_abort;
   reg [39:0] queue [0:1023];
@@ -37,6 +58,7 @@ module ControllerBench;
   always @(posedge reset) begin
     aborted=aborted+tail-head;
     head=0; tail=0; epoch=epoch+1;
+    reserved=0;
     $display("EVENT t=%0t epoch=%0d reset=1 accepted=%0d delivered=%0d aborted=%0d", $time,epoch,accepted,delivered,aborted);
   end
   generate for (k=0; k<=DEPTH; k=k+1) begin: observe
@@ -56,11 +78,14 @@ module ControllerBench;
     always @(posedge ack[k]) if (!reset) begin
       if (phase[k] != 1) $fatal(1, "PROTOCOL_ACK_RISE channel=%0d", k);
       phase[k]=2;
-      // Early validity: data must hold through the accepting acknowledgement.
+      // Published long-hold stage retains data through the COMPLETE handshake.
+      // The older comparison intentionally retains its separate early contract.
       if (bits[k] !== held[k]) $fatal(1, "DATA_HOLD channel=%0d", k);
-      holding[k]=0;
+      if (!LONGHOLD) holding[k]=0;
       if (k==0) begin
         queue[tail]=bits[k]; tail=tail+1; accepted=accepted+1;
+        reserved=reserved+1;
+        if (LONGHOLD && reserved>DEPTH) $fatal(1,"CAPACITY_EXCEEDED");
         if (tail-head > peak) peak=tail-head;
         if (tail-head > (MULLER ? (DEPTH+1)/2 : DEPTH)) $fatal(1,"CAPACITY_EXCEEDED");
       end
@@ -79,8 +104,9 @@ module ControllerBench;
     always @(negedge ack[k]) if (!reset && epoch>0) begin
       if (phase[k] != 3) $fatal(1, "PROTOCOL_ACK_FALL channel=%0d", k);
       phase[k]=0;
+      holding[k]=0;
       $display("EVENT t=%0t epoch=%0d channel=%0d ack=0", $time,epoch,k);
-      if (k==DEPTH) returned=returned+1;
+      if (k==DEPTH) begin returned=returned+1; reserved=reserved-1; end
     end
   end endgenerate
 
@@ -122,6 +148,7 @@ module ControllerBench;
       #500;
       if (head!=tail || req[DEPTH]!==0 || ack[0]!==0 || accepted!=delivered+aborted)
         $fatal(1, "INCOMPLETE_OR_DUPLICATE");
+      if (LONGHOLD && reserved!=0) $fatal(1,"INCOMPLETE_OR_DUPLICATE");
       for (j=0; j<=DEPTH; j=j+1)
         if (phase[j]!=0) $fatal(1, "INCOMPLETE_CHANNEL channel=%0d", j);
     end
@@ -173,6 +200,7 @@ module ControllerBench;
     #5000;
     disable filling;
     if (accepted-before_accept != (MULLER ? (DEPTH+1)/2 : DEPTH)) $fatal(1,"CAPACITY_COUNT");
+    if (LONGHOLD && (source_req!==1 || ack[0]!==0)) $fatal(1,"CAPACITY_PENDING_OFFER");
     if (delivered!=before_delivery) $fatal(1,"DELIVERY_WITHOUT_SINK");
     initialize();
     if (aborted-before_abort != (MULLER ? (DEPTH+1)/2 : DEPTH)) $fatal(1,"RESET_ABORT_COUNT");
