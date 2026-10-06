@@ -6,10 +6,11 @@ These are digital, coordinated-reset contracts. Physical CDC placement, metastab
 
 ## Memory port
 
+Inside an `AsyncModule`, register the child and inherit its coordinated reset:
+
 ```scala
-val port = Module(new AsyncMemoryPort(
-  MemoryShape(addressBits = 24, dataBits = 32), stages = 2, domain = resetDomain))
-port.reset := reset
+val port = asyncChild("memory")(d => new AsyncMemoryPort(
+  MemoryShape(addressBits = 24, dataBits = 32), stages = 2, domain = d))
 port.clock := memoryClock
 // request / response: four-phase channels
 // backendRequest / backendResponse: ordinary Decoupled channels
@@ -49,6 +50,8 @@ Nested ready/valid gates need simultaneous stored controls for observation mappi
 `PendingEventBridge(width, stages = 2, domain)` has explicit `clock`/`reset`, input `levels`, and four-phase `out`. Each level bit is independently synchronized and rising-edge detected. **Both high and low must span at least `stages + 1` destination rising edges** to qualify for capture. A stopped clock does not capture short pulses. This is not a clockless always-on wake-up cell.
 
 Each bit coalesces repeated events while pending. Taking a snapshot transfers the old set into the output bridge and clears only that pending bank. A rise on the snapshot edge wins over clear and enters the next batch. Events during a stalled output also enter that next batch, including another event on an already offered bit. Acknowledging the old batch never clears newer events. A continuously high input produces one rising event.
+
+Bits are independent events; batch grouping follows their sampled arrival times. This interface does not promise an atomic multi-bit crossing of `levels`.
 
 Reset discards both banks. Hold inputs low to establish idle; a level held high through reset is observed as a new event after local release. Both cases are tested. Preserving interrupts across CPU-only reset needs a separate always-on reset/restart protocol outside this adapter's contract.
 
