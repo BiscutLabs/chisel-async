@@ -328,6 +328,68 @@
               "$ref": "#/$defs/id"
             }
           }
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "role",
+            "reset_domain",
+            "layout",
+            "environment",
+            "token_contract",
+            "protocol",
+            "phases",
+            "request",
+            "data",
+            "acknowledge"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "role": {
+              "enum": [
+                "input",
+                "output"
+              ]
+            },
+            "reset_domain": {
+              "$ref": "#/$defs/id"
+            },
+            "layout": {
+              "type": "array",
+              "minItems": 1
+            },
+            "environment": {
+              "type": "string"
+            },
+            "token_contract": {
+              "const": "ordered-lossless-reset-abort-v1"
+            },
+            "protocol": {
+              "const": "two-phase-bundled-v1"
+            },
+            "phases": {
+              "const": [
+                "00",
+                "10",
+                "11",
+                "01",
+                "00"
+              ]
+            },
+            "request": {
+              "$ref": "#/$defs/id"
+            },
+            "data": {
+              "$ref": "#/$defs/id"
+            },
+            "acknowledge": {
+              "$ref": "#/$defs/id"
+            }
+          }
         }
       ]
     },
@@ -385,6 +447,12 @@
         },
         {
           "$ref": "#/$defs/longHoldFork"
+        },
+        {
+          "$ref": "#/$defs/phaseTiming"
+        },
+        {
+          "$ref": "#/$defs/encodingTiming"
         }
       ]
     },
@@ -732,6 +800,132 @@
           "const": "0"
         },
         "a_min_fs": {
+          "$ref": "#/$defs/time"
+        }
+      }
+    },
+    "phaseTiming": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "marker",
+        "direction",
+        "cells",
+        "return_delay_fs",
+        "assumptions",
+        "input_request",
+        "input_acknowledge",
+        "output_request",
+        "output_acknowledge"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "phase-conversion-v1"
+        },
+        "marker": {
+          "$ref": "#/$defs/id"
+        },
+        "direction": {
+          "enum": [
+            "two-to-four",
+            "four-to-two"
+          ]
+        },
+        "cells": {
+          "$ref": "#/$defs/delayBounds"
+        },
+        "return_delay_fs": {
+          "$ref": "#/$defs/time"
+        },
+        "assumptions": {
+          "type": "string"
+        },
+        "input_request": {
+          "$ref": "#/$defs/id"
+        },
+        "input_acknowledge": {
+          "$ref": "#/$defs/id"
+        },
+        "output_request": {
+          "$ref": "#/$defs/id"
+        },
+        "output_acknowledge": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "encodingTiming": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "marker",
+        "direction",
+        "assumptions",
+        "input_data",
+        "input_control",
+        "input_acknowledge",
+        "output_data",
+        "output_control",
+        "output_acknowledge",
+        "cells",
+        "data_delay",
+        "matched_delay_fs",
+        "return_delay_fs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "encoding-boundary-v1"
+        },
+        "marker": {
+          "$ref": "#/$defs/id"
+        },
+        "direction": {
+          "enum": [
+            "bundled-to-dual",
+            "dual-to-bundled"
+          ]
+        },
+        "assumptions": {
+          "type": "string"
+        },
+        "input_data": {
+          "$ref": "#/$defs/id"
+        },
+        "input_control": {
+          "$ref": "#/$defs/id"
+        },
+        "input_acknowledge": {
+          "$ref": "#/$defs/id"
+        },
+        "output_data": {
+          "$ref": "#/$defs/id"
+        },
+        "output_control": {
+          "$ref": "#/$defs/id"
+        },
+        "output_acknowledge": {
+          "$ref": "#/$defs/id"
+        },
+        "cells": {
+          "$ref": "#/$defs/delayBounds"
+        },
+        "data_delay": {
+          "$ref": "#/$defs/delayBounds"
+        },
+        "matched_delay_fs": {
+          "$ref": "#/$defs/time"
+        },
+        "return_delay_fs": {
           "$ref": "#/$defs/time"
         }
       }

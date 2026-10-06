@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.util.Cat
 import chiselasync.core.AsyncModule
 import chiselasync.metadata.ModelTime
-import chiselasync.primitives.{AsymmetricCElement, ControlGate, GateOperation}
+import chiselasync.primitives.{AsymmetricCElement, ClosingLatch, ControlGate, GateOperation, Toggle, XorGate}
 
 private[bundled] class AtomicAnd(count: Int, delay: ModelTime, invert: BigInt)
     extends ExtModule(Map("INPUTS" -> IntParam(count), "DELAY_FS" -> IntParam(delay.fs),
@@ -28,10 +28,38 @@ private[bundled] class ProtocolGuard(lanes: Int, mode: Int)
 }
 
 /** Stateless gates and published C-element rendezvous; no Boolean feedback synthesis. */
-private[bundled] final class CompositionCells(owner: AsyncModule, delay: ModelTime) {
+private[chiselasync] final class CompositionCells(owner: AsyncModule, delay: ModelTime) {
   require(delay.fs > 0, "composition requires positive cell delay (including feedback)")
   private val resetRef = owner.contract.endpoint("reset", owner.reset)
   private def packed(values: Seq[Bool]): UInt = Cat(values.reverse)
+
+  def invert(id: String, input: Bool): Bool = {
+    val cell = Module(new ControlGate(1, GateOperation.Invert, delay, resetValue = 1))
+    cell.reset := owner.reset; cell.a := input.asUInt; cell.b := 0.U
+    owner.contract.primitive(id, cell, Map("WIDTH" -> BigInt(1), "OP" -> BigInt(1),
+      "DELAY_FS" -> BigInt(delay.fs), "RESET_VALUE" -> BigInt(1)), resetRef, "atomic inverter; idle-high reset; ideal wire forks")
+    cell.q.asBool
+  }
+  def xor(id: String, a: Bool, b: Bool): Bool = {
+    val cell = Module(new XorGate(delay))
+    cell.reset := owner.reset; cell.a := a; cell.b := b
+    owner.contract.primitive(id, cell, Map("DELAY_FS" -> BigInt(delay.fs)), resetRef, "atomic phase comparison")
+    cell.q
+  }
+  def latch(id: String, data: UInt, closed: Bool): UInt = {
+    val cell = Module(new ClosingLatch(data.getWidth, delay))
+    cell.reset := owner.reset; cell.d := data; cell.closed := closed
+    owner.contract.primitive(id, cell, Map("WIDTH" -> BigInt(data.getWidth), "DELAY_FS" -> BigInt(delay.fs)),
+      resetRef, "transparent-low; zero modeled aperture; inertial output propagation")
+    cell.q
+  }
+  def toggle(id: String, trigger: Bool): Bool = {
+    val cell = Module(new Toggle(delay))
+    cell.reset := owner.reset; cell.trigger := trigger
+    owner.contract.primitive(id, cell, Map("DELAY_FS" -> BigInt(delay.fs)), resetRef,
+      "rising-handshake-event T flip-flop; reset phase zero; event spacing exceeds propagation")
+    cell.q
+  }
 
   def buffer(id: String, data: UInt, propagation: ModelTime): UInt = {
     val cell = Module(new ControlGate(data.getWidth, GateOperation.Buffer, propagation))

@@ -108,7 +108,7 @@ def test_glue_budget_is_explicit_and_bound_to_exported_model(fixture,logic):
     marker=next(p for p in node['primitives'] if p['id']==path['marker'])
     assert marker['parameters']['KIND']=='3' and marker['parameters']['DATA_MAX_FS']=='10000000'
     if fixture=='merge':
-        assert next(e for e in node['endpoints'] if e['id']==path['source'])['width']==27
+        assert next(e for e in node['endpoints'] if e['id']==path['source'])['width']==30
 
 
 @pytest.mark.parametrize('fault,diagnostic', [('missing','MISSING_MUX_CONSTRAINT'),

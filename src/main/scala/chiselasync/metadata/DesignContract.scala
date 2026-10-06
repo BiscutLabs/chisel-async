@@ -6,7 +6,7 @@ import chisel3.reflect.DataMirror
 import chisel3.probe.{Probe, ProbeValue, define}
 import chisel3.experimental.noPrefix
 import chiselasync.core.AsyncModule
-import chiselasync.protocol.{Channel, DualRail, FourPhase, Payload}
+import chiselasync.protocol.{Channel, DualRail, FourPhase, Payload, TwoPhase}
 import chisel3.util.DecoupledIO
 import scala.collection.mutable.ArrayBuffer
 
@@ -60,6 +60,21 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
       "phases" -> ujson.Arr("00", "10", "11", "01", "00"),
       "token_contract" -> "ordered-lossless-reset-abort-v1",
       "environment" -> "binary inputs; coordinated reset; data held through return to idle"))
+  }
+
+  def twoPhaseChannel[T <: Data](id: String, port: TwoPhase[T], role: String): Unit = {
+    claim(id)
+    require(port.domain eq owner.resetDomain, s"unbound reset domain: $id")
+    require(Set("input", "output").contains(role), "invalid channel role")
+    val req = endpoint(s"${id}_request", port.req)
+    val bits = endpoint(s"${id}_data", port.bits)
+    val ack = endpoint(s"${id}_acknowledge", port.ack)
+    channels += (() => ujson.Obj("id" -> id, "protocol" -> "two-phase-bundled-v1", "role" -> role,
+      "request" -> req, "data" -> bits, "acknowledge" -> ack,
+      "reset_domain" -> owner.resetDomain.id, "layout" -> layout(port.bits),
+      "phases" -> ujson.Arr("00", "10", "11", "01", "00"),
+      "token_contract" -> "ordered-lossless-reset-abort-v1",
+      "environment" -> "binary inputs; coordinated reset to 00; every ack edge delivers; data held while req != ack"))
   }
 
   def dualRailChannel[T <: Data](id: String, port: DualRail[T], role: String): Unit = {
@@ -198,6 +213,44 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
       "aout" -> aout, "state_a" -> stateA, "early_pin" -> "long_hold.b",
       "late_pin" -> "long_hold.a", "relation" -> "Aout+ strictly before A- at OR inputs",
       "model_wire_skew_fs" -> "0", "a_min_fs" -> policy.controls.a.min.fs.toString)
+  }
+
+  def phaseTiming(id: String, direction: String, policy: PhaseTiming): Unit = {
+    require(Set("two-to-four", "four-to-two").contains(direction), "invalid phase converter direction")
+    claim(id)
+    val refs = Seq("in_request", "in_acknowledge", "out_request", "out_acknowledge")
+    val guard = if (direction == "two-to-four") policy.returnDelay.fs else 0L
+    val marker = timingMarker(id, refs, Map("KIND" -> BigInt(5), "OUTPUT_FS" -> BigInt(guard),
+      "A_MIN_FS" -> BigInt(policy.cells.min.fs), "A_MAX_FS" -> BigInt(policy.cells.max.fs),
+      "A_MODEL_FS" -> BigInt(policy.cells.model.fs)))
+    obligations += ujson.Obj("id" -> id, "kind" -> "phase-conversion-v1", "marker" -> marker,
+      "direction" -> direction, "input_request" -> refs(0), "input_acknowledge" -> refs(1),
+      "output_request" -> refs(2), "output_acknowledge" -> refs(3),
+      "cells" -> ujson.Obj("min_fs" -> policy.cells.min.fs.toString, "max_fs" -> policy.cells.max.fs.toString,
+        "model_fs" -> policy.cells.model.fs.toString), "return_delay_fs" -> guard.toString,
+      "assumptions" -> "ideal forks; zero latch aperture; sequential full-return conversion; no analog timing claim")
+  }
+
+  def encodingTiming(id: String, direction: String, timing: BundledTiming, phase: PhaseTiming): Unit = {
+    require(Set("bundled-to-dual", "dual-to-bundled").contains(direction), "invalid encoding direction")
+    claim(id)
+    val decode = direction == "dual-to-bundled"
+    val refs = if (decode) Seq("in_one", "in_zero", "in_acknowledge", "out_data", "out_request", "out_acknowledge")
+      else Seq("in_data", "in_request", "in_acknowledge", "out_one", "out_zero", "out_acknowledge")
+    def bounds(value: DelayBounds): ujson.Value = ujson.Obj("min_fs" -> value.min.fs.toString,
+      "max_fs" -> value.max.fs.toString, "model_fs" -> value.model.fs.toString)
+    val guard = if (decode) phase.returnDelay.fs else 0L
+    val marker = timingMarker(id, refs, Map("KIND" -> BigInt(if (decode) 7 else 6),
+      "OUTPUT_FS" -> BigInt(guard), "MATCHED_FS" -> BigInt(timing.matchedDelay.fs),
+      "A_MIN_FS" -> BigInt(phase.cells.min.fs), "A_MAX_FS" -> BigInt(phase.cells.max.fs),
+      "A_MODEL_FS" -> BigInt(phase.cells.model.fs), "DATA_MIN_FS" -> BigInt(timing.dataDelay.min.fs),
+      "DATA_MAX_FS" -> BigInt(timing.dataDelay.max.fs), "DATA_MODEL_FS" -> BigInt(timing.dataDelay.model.fs)))
+    obligations += ujson.Obj("id" -> id, "kind" -> "encoding-boundary-v1", "marker" -> marker,
+      "direction" -> direction, "input_data" -> refs(0), "input_control" -> refs(1), "input_acknowledge" -> refs(2),
+      "output_data" -> refs(3), "output_control" -> refs(4), "output_acknowledge" -> refs(5),
+      "cells" -> bounds(phase.cells), "data_delay" -> bounds(timing.dataDelay),
+      "matched_delay_fs" -> timing.matchedDelay.fs.toString, "return_delay_fs" -> guard.toString,
+      "assumptions" -> "monotonic RTZ rails; all-valid/all-spacer completion; ideal forks; matched delay guards decoder admission and storage request; decoder latch and storage data delays are additive")
   }
 
   private def timingMarker(id: String, refs: Seq[String], values: Map[String, BigInt]): String = {

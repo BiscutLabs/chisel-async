@@ -94,10 +94,11 @@ class FourPhaseMerge[T <: Data](gen: T, val inputs: Int, timing: BundledTiming, 
   private val cells = new CompositionCells(this, cellDelay)
   private val storage = asyncChild("storage")(d => new LongHoldBuffer(gen, timing, d))
   storage.in.req := cells.or("request", in.map(_.req).toSeq)
-  // Request-controlled mux is inside the stage's declared source-to-capture data path.
-  storage.in.bits := Mux1H(in.map(_.req), in.map(_.bits))
+  // The selected input remains live through acknowledge return. This Boolean
+  // expression is datapath glue inside the declared whole-path budget, not control.
+  storage.in.bits := Mux1H(in.map(p => p.req || p.ack), in.map(_.bits))
   // Include both mux selection and payload arrival in the downstream data budget.
-  contract.endpoint("mux_sources", chisel3.util.Cat(in.reverse.map(p => chisel3.util.Cat(p.req, p.bits.asUInt))))
+  contract.endpoint("mux_sources", chisel3.util.Cat(in.reverse.map(p => chisel3.util.Cat(p.req, p.ack, p.bits.asUInt))))
   private val muxResult = Wire(gen.cloneType)
   muxResult := storage.in.bits
   contract.endpoint("mux_result", muxResult)

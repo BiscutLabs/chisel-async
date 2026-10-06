@@ -13,13 +13,15 @@ import org.scalatest.funsuite.AnyFunSuite
 class ChannelSpec extends AnyFunSuite {
   class Packet extends Bundle { val signed = SInt(9.W); val flags = Vec(2, Bool()) }
 
-  test("one logical payload binds to three distinct electrical interfaces") {
+  test("one logical payload binds to four distinct electrical interfaces") {
     val text = ChiselStage.emitCHIRRTL(new AsyncModule {
       val flow = new Channel(new Packet, resetDomain)
       val bundled = IO(flow.bundled)
+      val transition = IO(flow.twoPhase)
       val dual = IO(flow.dualRail)
       val clocked = IO(flow.decoupled)
       bundled.bits := 0.U.asTypeOf(new Packet); bundled.req := false.B
+      transition.bits := 0.U.asTypeOf(new Packet); transition.req := false.B
       dual.zero := 0.U.asTypeOf(new Packet);dual.one := 0.U.asTypeOf(new Packet)
       clocked.bits := 0.U.asTypeOf(new Packet);clocked.valid := false.B
       flow.requireCompatible(new Channel(new Packet, resetDomain))

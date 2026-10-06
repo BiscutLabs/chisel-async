@@ -13,6 +13,7 @@ final class Channel[T <: Data](val payload: T, val domain: ResetDomain) {
   Payload.validateType(payload)
   val tokenContract: String = "ordered-lossless-reset-abort-v1"
   def bundled: FourPhase[T] = new FourPhase(payload.cloneType, Some(domain))
+  def twoPhase: TwoPhase[T] = new TwoPhase(payload.cloneType, domain)
   def dualRail: DualRail[T] = new DualRail(payload.cloneType, domain)
   def decoupled: DecoupledIO[T] = Decoupled(payload.cloneType)
   def requireCompatible[U <: Data](other: Channel[U]): Unit = {

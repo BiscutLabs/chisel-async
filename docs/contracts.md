@@ -4,7 +4,7 @@ These contracts describe the first functional slice. They do not specify a mappe
 
 ## Logical token stream
 
-`Channel[T]` separates payload/reset intent from its electrical binding. Bundled, dual-rail RTZ and Decoupled have distinct transfer, hold and commit semantics; see [logical-channel contracts](logical-channels.md). Clocked conversion uses explicit storage and synchronized control; it does not turn a clock into an implicit library assumption.
+`Channel[T]` separates payload/reset intent from its electrical binding. Four-phase bundled, two-phase bundled, dual-rail RTZ and Decoupled have distinct transfer, hold and commit semantics; see [logical-channel contracts](logical-channels.md). Clocked conversion uses explicit storage and synchronized control; it does not turn a clock into an implicit library assumption.
 
 ## Four-phase channel
 
@@ -12,7 +12,7 @@ The producer drives `req` and `bits`; the consumer drives `ack`. Idle is `(req, 
 
 Initial traffic requires coordinated reset, with external request and acknowledgement held low before reset release. On an in-flight reset, assert reset before withdrawing held requests or changing their data, then return the attached domain to idle while reset is asserted. Inputs are binary during normal operation; unknown or malformed handshake behavior is outside the current buffer contract. There is no implicit periodic clock. `FourPhase.connect` requires matching domain objects; exporting a channel requires the owner's explicit domain. Direct Chisel wiring can bypass the helper, so export probes also compare actual primitive/child reset signals with the root reset. A general public protocol-monitor API remains planned.
 
-## Two-phase baseline (specification only)
+## Two-phase channel
 
 Two-phase bundled data encodes a token by a request transition and its completion by an acknowledgement transition. The following parity table follows the transition-signalling convention in Sparsø, [Introduction to Asynchronous Circuit Design](https://orbit.dtu.dk/en/publications/introduction-to-asynchronous-circuit-design/), §2.1. Our baseline chooses coordinated reset to `00` and data held from before request changes until acknowledgement matches request.
 
@@ -23,7 +23,7 @@ Two-phase bundled data encodes a token by a request transition and its completio
 | 11 | Idle | req falls |
 | 01 | Pending token | ack falls; token delivered |
 
-Both acknowledgement polarities deliver tokens, even for repeated payloads. Reset restores `00`, aborts pending work and preserves prior delivery accounting. `TwoPhaseContract` tests all four states, illegal edges, both completion polarities and reset. This establishes CA-02's reference convention; production two-phase hardware and converters remain CA-07 work.
+Both acknowledgement polarities deliver tokens, even for repeated payloads. Reset restores `00`, aborts pending work and preserves prior delivery accounting. `TwoPhaseContract` tests all four states, illegal edges, both completion polarities and reset. CA-07 implements typed `TwoPhase[T]` channels, sequential phase adapters, storage/routing counterparts and converters under this convention. See [arbitration and conversion contracts](arbitration-and-two-phase.md) for capacities, timing assumptions and the finite digital MUTEX policy.
 
 ## Observation traces
 

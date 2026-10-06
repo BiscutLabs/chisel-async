@@ -96,7 +96,7 @@ def validate_manifest(document):
             require(type(item["width"]) is int and item["width"] > 0, "INVALID_ENDPOINT_WIDTH")
         for channel in node["channels"]:
             common = "id protocol role reset_domain layout phases environment token_contract "
-            if channel["protocol"] == "four-phase-bundled-v1":
+            if channel["protocol"] in ("four-phase-bundled-v1", "two-phase-bundled-v1"):
                 shape(channel, common + "request data acknowledge")
                 refs, payload, controls = ("request", "data", "acknowledge"), "data", ("request", "acknowledge")
                 phases = ["00", "10", "11", "01", "00"]
@@ -155,6 +155,58 @@ def validate_manifest(document):
                 refs = ("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
                 times = ("matched_delay_fs", "output_delay_fs")
                 require(timing["mode"] in ("functional-only", "digital-model"), "UNSUPPORTED_TIMING")
+            elif timing.get("kind") == "encoding-boundary-v1":
+                shape(timing, "id kind marker direction input_data input_control input_acknowledge output_data output_control output_acknowledge cells data_delay matched_delay_fs return_delay_fs assumptions")
+                refs = ("input_data", "input_control", "input_acknowledge", "output_data", "output_control", "output_acknowledge")
+                times = ("matched_delay_fs", "return_delay_fs")
+                decode = timing["direction"] == "dual-to-bundled"
+                require(timing["direction"] in ("bundled-to-dual", "dual-to-bundled"), "INVALID_ENCODING_DIRECTION")
+                protocols = {c["id"]: c["protocol"] for c in node["channels"]}
+                expected_protocols = ["dual-rail-rtz-v1", "four-phase-bundled-v1"]
+                require([protocols.get("in"), protocols.get("out")] == (expected_protocols if decode else expected_protocols[::-1]), "INVALID_ENCODING_DIRECTION")
+                expected = ("in_one", "in_zero", "in_acknowledge", "out_data", "out_request", "out_acknowledge") if decode else (
+                    "in_data", "in_request", "in_acknowledge", "out_one", "out_zero", "out_acknowledge")
+                require(tuple(timing[r] for r in refs) == expected, "INVALID_ENCODING_BINDING")
+                for bound in (timing["cells"], timing["data_delay"]):
+                    shape(bound, "min_fs max_fs model_fs")
+                    require(all(type(v) is str and re.fullmatch(r"0|[1-9][0-9]*", v) and int(v) <= 2**63-1 for v in bound.values()), "INVALID_MODEL_TIME")
+                    require(int(bound["min_fs"]) <= int(bound["model_fs"]) <= int(bound["max_fs"]), "INVALID_DELAY_BOUNDS")
+                require(int(timing["cells"]["min_fs"]) > 0, "INVALID_DELAY_BOUNDS")
+                require(all(type(timing[t]) is str and re.fullmatch(r"0|[1-9][0-9]*", timing[t]) for t in times), "INVALID_MODEL_TIME")
+                owner = next((c["contract"] for c in node["children"] if c["id"] == "storage"), None)
+                policy = next((t for t in owner["timing"] if t["kind"] == "long-hold-bundling-v2"), None) if owner else None
+                require(policy and policy["mode"] == "digital-model" and policy["data_delay"] == timing["data_delay"] and
+                        policy["matched_delay_fs"] == timing["matched_delay_fs"], "ENCODING_BUDGET_MISMATCH")
+                maximum = int(timing["cells"]["max_fs"])
+                require((int(timing["return_delay_fs"]) > maximum and int(timing["matched_delay_fs"]) > maximum+int(timing["data_delay"]["max_fs"]))
+                        if decode else timing["return_delay_fs"] == "0", "INVALID_ENCODING_GUARD")
+                for p in node["primitives"]:
+                    if p["view"] == "behavioral":
+                        delay = (timing["return_delay_fs"] if p["id"] == "acknowledge_guard" else
+                                 timing["matched_delay_fs"] if p["id"] == "decoded_request_guard" else timing["cells"]["model_fs"])
+                        require(p["parameters"].get("DELAY_FS") == delay, "ENCODING_PARAMETER_MISMATCH")
+            elif timing.get("kind") == "phase-conversion-v1":
+                shape(timing, "id kind marker direction input_request input_acknowledge output_request output_acknowledge cells return_delay_fs assumptions")
+                refs, times = ("input_request", "input_acknowledge", "output_request", "output_acknowledge"), ("return_delay_fs",)
+                require(tuple(timing[r] for r in refs) == ("in_request", "in_acknowledge", "out_request", "out_acknowledge"), "INVALID_PHASE_BINDING")
+                bound = timing["cells"]
+                shape(bound, "min_fs max_fs model_fs")
+                require(all(type(v) is str and re.fullmatch(r"[1-9][0-9]*", v) and int(v) <= 2**63-1 for v in bound.values()), "INVALID_MODEL_TIME")
+                require(int(bound["min_fs"]) <= int(bound["model_fs"]) <= int(bound["max_fs"]), "INVALID_DELAY_BOUNDS")
+                direction = timing["direction"]
+                require(direction in ("two-to-four", "four-to-two"), "INVALID_PHASE_DIRECTION")
+                protocols = {c["id"]: c["protocol"] for c in node["channels"]}
+                expected = ["two-phase-bundled-v1", "four-phase-bundled-v1"]
+                require([protocols.get("in"), protocols.get("out")] == (expected if direction == "two-to-four" else expected[::-1]), "INVALID_PHASE_DIRECTION")
+                require(type(timing["return_delay_fs"]) is str and re.fullmatch(r"0|[1-9][0-9]*", timing["return_delay_fs"]), "INVALID_MODEL_TIME")
+                guard = int(timing["return_delay_fs"])
+                require((guard > int(bound["max_fs"]) if direction == "two-to-four" else guard == 0), "INVALID_PHASE_RETURN_GUARD")
+                primitives = {p["id"]: p for p in node["primitives"]}
+                names = ("master_close", "phase", "returned", "request") if direction == "two-to-four" else ("history", "request_phase", "acknowledge")
+                for name in names:
+                    require(name in primitives and primitives[name]["parameters"].get("DELAY_FS") == bound["model_fs"], "PHASE_PARAMETER_MISMATCH")
+                if direction == "two-to-four":
+                    require(primitives.get("return_guard", {}).get("parameters", {}).get("DELAY_FS") == str(guard), "PHASE_PARAMETER_MISMATCH")
             elif timing.get("kind") == "bundled-data-path-v1":
                 shape(timing, "id kind marker source sink logic logic_model_fs budget delay_owner delay_cell accounting")
                 refs, times = ("source", "sink"), ("logic_model_fs",)
@@ -228,6 +280,10 @@ def validate_manifest(document):
         # Required obligations cannot be silently deleted and rehashed.
         kinds = [t["kind"] for t in node["timing"]]
         primitive_ids = {p["id"] for p in node["primitives"]}
+        if "request_phase" in primitive_ids or {"master_close", "phase", "returned"} <= primitive_ids:
+            require(kinds.count("phase-conversion-v1") == 1, "MISSING_PHASE_CONSTRAINT")
+        if "decoded" in primitive_ids or {"zero0", "one0"} <= primitive_ids and any(c["id"] == "storage" for c in node["children"]):
+            require(kinds.count("encoding-boundary-v1") == 1, "MISSING_ENCODING_CONSTRAINT")
         if "long-hold-bundling-v2" in kinds or {"a", "b", "acknowledge", "long_hold", "payload"} <= primitive_ids:
             require(kinds.count("long-hold-bundling-v2") == 1 and kinds.count("long-hold-fork-v1") == 1 and
                     sum(t.get("logic") == "chisel-transform-including-decode" for t in node["timing"]) == 1,
@@ -244,6 +300,8 @@ def validate_manifest(document):
 
 
 def timing_refs(timing):
+    if timing["kind"] == "encoding-boundary-v1": return ("input_data", "input_control", "input_acknowledge", "output_data", "output_control", "output_acknowledge")
+    if timing["kind"] == "phase-conversion-v1": return ("input_request", "input_acknowledge", "output_request", "output_acknowledge")
     if timing["kind"] == "bundled-data-path-v1": return ("source", "sink")
     if timing["kind"] == "long-hold-fork-v1": return ("aout", "state_a")
     return (("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
@@ -256,7 +314,15 @@ def marker_parameters(timing, endpoints):
     result = {name: "0" for name in ("KIND", "WIDTH", "SETUP_FS", "HOLD_FS", "MATCHED_FS", "OUTPUT_FS")}
     result.update({f"{r}_{b}_FS": "0" for r in roles for b in ("MIN", "MAX", "MODEL")})
     result["WIDTH"] = str(sum(endpoints[timing[ref]]["width"] for ref in timing_refs(timing)))
-    if timing["kind"] == "long-hold-bundling-v2":
+    if timing["kind"] == "encoding-boundary-v1":
+        result.update(KIND="7" if timing["direction"] == "dual-to-bundled" else "6",
+                      OUTPUT_FS=timing["return_delay_fs"], MATCHED_FS=timing["matched_delay_fs"])
+        for role, key in (("A", "cells"), ("DATA", "data_delay")):
+            result.update({f"{role}_{b.upper()}_FS": timing[key][b+"_fs"] for b in ("min", "max", "model")})
+    elif timing["kind"] == "phase-conversion-v1":
+        result.update(KIND="5", OUTPUT_FS=timing["return_delay_fs"])
+        result.update({f"A_{b.upper()}_FS": timing["cells"][b+"_fs"] for b in ("min", "max", "model")})
+    elif timing["kind"] == "long-hold-bundling-v2":
         result.update(KIND="2", MATCHED_FS=timing["matched_delay_fs"], OUTPUT_FS=timing["output_delay_fs"])
         bounds = {**{k.upper(): v for k,v in timing["control_delays"].items()}, "DATA": timing["data_delay"], "LATCH": timing["latch_delay"]}
         for role, values in bounds.items():
@@ -456,7 +522,7 @@ def validate_port_abi(directory, manifest, scopes):
         endpoints = {e["id"]: e for e in node["endpoints"]}
         for channel in node["channels"]:
             protocol = channel["protocol"]
-            if protocol == "four-phase-bundled-v1":
+            if protocol in ("four-phase-bundled-v1", "two-phase-bundled-v1"):
                 members, forward, reverse, payload = {"request": "req", "data": "bits", "acknowledge": "ack"}, ("request",), "acknowledge", "data"
             elif protocol == "dual-rail-rtz-v1":
                 members, forward, reverse, payload = {"zero": "zero", "one": "one", "acknowledge": "ack"}, (), "acknowledge", "one"
@@ -587,7 +653,10 @@ def main():
                 "longhold_packet", "longhold_pipeline", "longhold_comparison", "longhold_sum", "longhold_signed",
                 "dualrail", "to_async", "to_clocked", "bridge_roundtrip", "replicated", "replicated_debug",
                 "fifo_one", "fifo", "initialized_fifo", "initial_tokens", "initial_wide", "fork", "join", "select",
-                "merge", "fork_join", "feedback")
+                "merge", "fork_join", "feedback", "phase_to_four", "phase_to_two", "arbiter",
+                "two_buffer", "two_wide", "two_fifo", "two_initialized", "two_initial", "two_fork", "two_join",
+                "two_select", "two_merge", "two_arbiter", "two_transform", "encoding_to_dual",
+                "encoding_from_dual", "encoding_roundtrip", "phase_roundtrip")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

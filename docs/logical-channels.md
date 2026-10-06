@@ -1,17 +1,18 @@
 # Logical channels and first encoding probes
 
-`Channel[T]` describes a sized payload, a coordinated reset domain and an ordered token stream. It creates no wires or storage until an encoding is selected. Its `bundled`, `dualRail` and `decoupled` factories return distinct electrical interfaces. This keeps payload validation and token intent common without inventing a handshake that could represent all three encodings.
+`Channel[T]` describes a sized payload, a coordinated reset domain and an ordered token stream. It creates no wires or storage until an encoding is selected. Its `bundled`, `twoPhase`, `dualRail` and `decoupled` factories return distinct electrical interfaces. This keeps payload validation and token intent common without inventing a handshake that could represent all four encodings.
 
 ```scala
 val flow = new Channel(new Packet, resetDomain)
 val bundled = IO(flow.bundled)     // FourPhase[Packet]
+val transition = IO(flow.twoPhase) // TwoPhase[Packet]
 val dual = IO(flow.dualRail)       // DualRail[Packet]
 val clocked = IO(flow.decoupled)   // standard Chisel DecoupledIO[Packet]
 ```
 
-Each interface needs its own driver. These declarations do not connect or convert them. `requireCompatible` checks payload shape and reset identity; it does not authorize electrical wiring between different encodings or clocks. `FourPhase.connect` and `DualRail.connect` check their concrete encodings. Raw Chisel connections can bypass library checks. Decoupled uses the standard Chisel interface, with an explicit clock endpoint in the exported contract. No implicit clock or automatic CDC conversion is introduced.
+Each interface needs its own driver. These declarations do not connect or convert them. `requireCompatible` checks payload shape and reset identity; it does not authorize electrical wiring between different encodings or clocks. `FourPhase.connect`, `TwoPhase.connect` and `DualRail.connect` check their concrete encodings. Raw Chisel connections can bypass library checks. Decoupled uses the standard Chisel interface, with an explicit clock endpoint in the exported contract. No implicit clock or automatic CDC conversion is introduced.
 
-The existing long-hold stage now constructs its distinct input/output ports from logical channels. Explicit `DecoupledToFourPhase` and `FourPhaseToDecoupled` modules demonstrate conversion, including the storage and control state that conversion requires. The [round-trip example](../examples/src/main/scala/chiselasync/examples/EmitArchitecture.scala) composes both with a long-hold stage and separate source/sink clocks. Dual-rail conversion and richer dataflow composition remain future components; this probe does not pretend a wire rename supplies them.
+The existing long-hold stage now constructs its distinct input/output ports from logical channels. Explicit `DecoupledToFourPhase` and `FourPhaseToDecoupled` modules demonstrate conversion, including the storage and control state that conversion requires. The [round-trip example](../examples/src/main/scala/chiselasync/examples/EmitArchitecture.scala) composes both with a long-hold stage and separate source/sink clocks. CA-06 adds four-phase composition; [CA-07](arbitration-and-two-phase.md) adds two-phase counterparts, arbitration and explicit two/four-phase and bundled/dual-rail converter pairs. Each conversion has storage, phase state and timing obligations.
 
 ## Shared intent, different transfer rules
 
@@ -20,6 +21,7 @@ The common contract is ordered delivery without duplication or loss during norma
 | Encoding | Transfer / retention rule | Idle and reset |
 | --- | --- | --- |
 | Four-phase bundled | Request, acknowledge, request return, acknowledge return; data held through the complete cycle | Request and acknowledge low; reset aborts outstanding work |
+| Two-phase bundled | Either request edge offers; acknowledgement matching request completes; data held through completion | Equal parity is idle; coordinated reset restores 00 |
 | Dual-rail RTZ | Each bit is one of two asserted rails; rails rise monotonically to a complete word, acknowledgement rises, rails return monotonically to spacer, acknowledgement falls | Every pair is 00 spacer; 11 is illegal |
 | Decoupled | A transfer occurs at a rising clock edge with valid and ready both high; input data/valid may change when no transfer occurs | Valid/ready do not encode a four-phase return; bridge outputs are inactive during reset |
 
