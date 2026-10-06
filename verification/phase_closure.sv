@@ -42,19 +42,34 @@ module ReviewAdapterBench;
       transfers=transfers+1;
     end
   endtask
-  // Fast source path without a competing watchdog branch in the transaction.
+  // Fast source path with a per-request propagation assertion.
+  task automatic burst_offer;
+    reg old_phase;
+    begin
+      old_phase=req2;
+      fork
+        begin req4=1; wait(ack4); req4=0; wait(!ack4); end
+        begin
+          // A persistent request must produce the opposite output phase after
+          // exactly the modeled toggle + guard path, irrespective of the sink.
+          #(T+G+1);
+          if(req2!==!old_phase) $fatal(1,"REQUEST_PHASE_LOST");
+        end
+      join
+    end
+  endtask
   task automatic burst;
     begin
       fork
         begin
           for(i=0;i<8;i=i+1) begin
-            req4=1; wait(ack4); req4=0; wait(!ack4);
+            burst_offer();
           end
         end
         begin repeat(8) begin receive(0); wait(!ack4); end end
         begin
           #(100*(C+T+H+X+G+1));
-          if(req4 || ack4 || req2!==ack2) $fatal(1,"REQUEST_PHASE_LOST");
+          if(req4 || ack4 || req2!==ack2) $fatal(1,"BURST_PROGRESS_DEADLINE");
         end
       join
       transfers=transfers+8;
