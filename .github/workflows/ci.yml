@@ -8,6 +8,10 @@ on:
         description: Run the frozen L0 candidate (includes full qualification)
         type: boolean
         default: false
+      l1:
+        description: Run frozen L1 acceptance after complete qualification
+        type: boolean
+        default: false
 permissions:
   contents: read
 
@@ -60,6 +64,13 @@ jobs:
       - name: Run frozen L0 acceptance
         if: inputs.l0 == true
         run: python verification/run_l0.py
+      - name: Run frozen L1 acceptance
+        if: inputs.l1 == true && inputs.l0 != true
+        run: >-
+          python -c "import os, subprocess;
+          subprocess.run(['.venv/Scripts/python.exe' if os.name == 'nt' else '.venv/bin/python',
+          'verification/l1_acceptance.py', '--candidate', 'qualification/l1-candidate-1.json',
+          '--output', 'target/verification/l1/ci-${{ github.run_id }}-${{ github.run_attempt }}'], check=True)"
       - name: Retain test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

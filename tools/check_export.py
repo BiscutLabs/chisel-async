@@ -208,6 +208,16 @@ def validate_manifest(document):
                     require(name in primitives and primitives[name]["parameters"].get("DELAY_FS") == bound["model_fs"], "PHASE_PARAMETER_MISMATCH")
                 if direction == "two-to-four":
                     require(primitives.get("return_guard", {}).get("parameters", {}).get("DELAY_FS") == str(guard), "PHASE_PARAMETER_MISMATCH")
+                    for name, model, parameters in (
+                        ("master_close", "ChiselAsyncControlGate_v1", {"WIDTH": "1", "OP": "1", "RESET_VALUE": "1"}),
+                        ("phase", "ChiselAsyncClosingLatch_v1", {"WIDTH": "1"}),
+                        ("returned", "ChiselAsyncClosingLatch_v1", {"WIDTH": "1"}),
+                        ("request", "ChiselAsyncXor_v1", {}),
+                        ("return_guard", "ChiselAsyncControlGate_v1", {"WIDTH": "1", "OP": "0", "RESET_VALUE": "0"}),
+                    ):
+                        cell = primitives[name]
+                        require(cell["model"] == model and all(cell["parameters"].get(k) == v for k, v in parameters.items()),
+                                "PHASE_GUARD_CELL_MISMATCH")
                 if direction == "four-to-two":
                     require(timing.get("history_closed") == "history_closed", "MISSING_PHASE_CLOSURE")
                     closure = timing["history_closure"]
@@ -248,6 +258,9 @@ def validate_manifest(document):
                 require(int(budget["min_fs"]) <= int(budget["model_fs"]) <= int(budget["max_fs"]), "INVALID_DELAY_BOUNDS")
                 cell = next((p for p in budget_owner["primitives"] if p["id"] == timing["delay_cell"]), None)
                 require(cell and cell["parameters"].get("DELAY_FS") == budget["model_fs"], "DATA_PATH_PARAMETER_MISMATCH")
+                require(cell["model"] == "ChiselAsyncControlGate_v1" and
+                        all(cell["parameters"].get(k) == v for k, v in {"OP": "0", "RESET_VALUE": "0"}.items()),
+                        "DATA_PATH_CELL_MISMATCH")
                 owner_policy = next((t for t in budget_owner["timing"] if t["kind"] == "long-hold-bundling-v2"), None)
                 if owner_policy:
                     require(budget == owner_policy["data_delay"], "DATA_PATH_BUDGET_MISMATCH")
@@ -262,6 +275,16 @@ def validate_manifest(document):
                          "Aout+ strictly before A- at OR inputs", "0"), "INVALID_HOLD_FORK")
                 policy = next((t for t in node["timing"] if t["kind"] == "long-hold-bundling-v2"), None)
                 require(policy and timing["a_min_fs"] == policy["control_delays"]["a"]["min_fs"], "HOLD_FORK_BOUND_MISMATCH")
+                hold = next((p for p in node["primitives"] if p["id"] == "long_hold"), None)
+                require(hold and hold["model"] == "ChiselAsyncControlGate_v1" and
+                        all(hold["parameters"].get(k) == v for k, v in {"WIDTH": "1", "OP": "2", "RESET_VALUE": "0"}.items()),
+                        "HOLD_FORK_CELL_MISMATCH")
+                state = next((p for p in node["primitives"] if p["id"] == "a"), None)
+                state_parameters = {"COMMON": "1", "RISING": "1", "FALLING": "1", "COMMON_INVERT": "1",
+                                    "RISING_INVERT": "0", "FALLING_INVERT": "1", "RESET_VALUE": "0"}
+                require(state and state["model"] == "ChiselAsyncAsymmetricC_v1" and
+                        all(state["parameters"].get(k) == v for k, v in state_parameters.items()),
+                        "HOLD_FORK_CELL_MISMATCH")
             else:
                 shape(timing, "id kind marker launch transaction data_valid capture captured setup_fs hold_fs mode provenance pulse_policy")
                 require(timing["kind"] == "bundled-setup-hold-v1" and timing["mode"] == "digital-model", "UNSUPPORTED_TIMING")
@@ -426,7 +449,7 @@ def source_path(node, target):
 def probe_source(manifest, scopes):
     top = manifest["top"]
     lines = ["module ContractProbe; timeunit 1fs; timeprecision 1fs;"]
-    comparisons, coverage, drivers = [], [], []
+    comparisons, timing_bindings, coverage, drivers = [], [], [], []
     for node in nodes(manifest["design"]):
         comparisons.append(f'if ({node["rtl_path"]}.reset !== {top}.reset) $fatal(1, "RESET_BINDING_MISMATCH");')
         layouts = {}
@@ -475,11 +498,44 @@ def probe_source(manifest, scopes):
             marker = next(p for p in node["primitives"] if p["id"] == timing["marker"])
             expression = "{" + ", ".join(endpoint_by_id[timing[ref]]["rtl_path"] for ref in reversed(timing_refs(timing))) + "}"
             comparisons.append(f'if ({marker["rtl_path"]}.values !== {expression}) $fatal(1, "TIMING_MARKER_BINDING_MISMATCH");')
+            if timing["kind"] == "bundled-data-path-v1":
+                owner = node
+                for child_id in timing["delay_owner"]:
+                    owner = next(c["contract"] for c in owner["children"] if c["id"] == child_id)
+                cell = next(p for p in owner["primitives"] if p["id"] == timing["delay_cell"])["rtl_path"]
+                sink = endpoint_by_id[timing["sink"]]["rtl_path"]
+                if timing["logic"] == "exclusive-merge-input-mux":
+                    storage_input = next(e for e in owner["endpoints"] if e["id"] == "in_data")["rtl_path"]
+                    pairs = [(sink, storage_input), (sink, cell + ".a")]
+                else:
+                    pairs = [(sink, cell + ".q")]
+                if timing["logic"] == "chisel-transform-including-decode":
+                    payload = next(p for p in node["primitives"] if p["id"] == "payload")["rtl_path"]
+                    pairs += [(sink, payload + ".d"),
+                              (endpoint_by_id["latch_closed"]["rtl_path"], payload + ".closed")]
+                timing_bindings += [f'if ({a} !== {b}) $fatal(1, "DATA_PATH_BINDING_MISMATCH");' for a, b in pairs]
             if timing["kind"] == "long-hold-fork-v1":
                 hold = next(p for p in node["primitives"] if p["id"] == "long_hold")
+                state = next(p for p in node["primitives"] if p["id"] == "a")
                 comparisons.append(f'if ({hold["rtl_path"]}.b !== {endpoint_by_id[timing["aout"]]["rtl_path"]} || '
-                                   f'{hold["rtl_path"]}.a !== {endpoint_by_id[timing["state_a"]]["rtl_path"]}) '
+                                   f'{hold["rtl_path"]}.a !== {endpoint_by_id[timing["state_a"]]["rtl_path"]} || '
+                                   f'{state["rtl_path"]}.falling !== {endpoint_by_id[timing["aout"]]["rtl_path"]} || '
+                                   f'{state["rtl_path"]}.q !== {endpoint_by_id[timing["state_a"]]["rtl_path"]}) '
                                    '$fatal(1, "HOLD_FORK_BINDING_MISMATCH");')
+            if timing['kind'] == 'phase-conversion-v2' and timing['direction'] == 'two-to-four':
+                cells = {p['id']: p['rtl_path'] for p in node['primitives']}
+                endpoint = lambda key: endpoint_by_id[timing[key]]['rtl_path']
+                pairs = [(cells['master_close'] + '.a', endpoint('output_acknowledge')),
+                         (cells['master_close'] + '.q', cells['phase'] + '.closed'),
+                         (cells['phase'] + '.d', endpoint('input_request')),
+                         (cells['phase'] + '.q', cells['returned'] + '.d'),
+                         (cells['returned'] + '.closed', endpoint('output_acknowledge')),
+                         (cells['returned'] + '.q', cells['return_guard'] + '.a'),
+                         (cells['return_guard'] + '.q', endpoint('input_acknowledge')),
+                         (cells['request'] + '.a', endpoint('input_request')),
+                         (cells['request'] + '.b', cells['phase'] + '.q'),
+                         (cells['request'] + '.q', endpoint('output_request'))]
+                comparisons += [f'if ({a} !== {b}) $fatal(1, "PHASE_RETURN_BINDING_MISMATCH");' for a, b in pairs]
             if timing['kind'] == 'phase-conversion-v2' and timing['direction'] == 'four-to-two':
                 cells = {p['id']:p['rtl_path'] for p in node['primitives']}
                 endpoint = lambda key: endpoint_by_id[timing[key]]['rtl_path']
@@ -509,7 +565,9 @@ def probe_source(manifest, scopes):
             comparisons.append(f'if ({primitive["rtl_path"]}.reset !== {reset_endpoint["rtl_path"]} || '
                                f'{reset_endpoint["rtl_path"]} !== {node["rtl_path"]}.reset) '
                                '$fatal(1, "RESET_BINDING_MISMATCH");')
-    lines += ["task check; begin", *comparisons, "end endtask", "initial begin",
+    # Establish each probe's source mapping before comparing it across a child
+    # boundary, so a bad child alias retains its precise mapping diagnostic.
+    lines += ["task check; begin", *comparisons, *timing_bindings, "end endtask", "initial begin",
               f"force {top}.reset = 1'b1; #1;"]
     checks = 0
     # A mux needs simultaneous control and data activity. Independent uninitialized
@@ -677,7 +735,8 @@ def validate_export(directory: Path):
     require(built.returncode == 0, "RTL_PROBE_ELABORATION_FAILED")
     simulation = subprocess.run(["vvp", "contract_probe.vvp"], cwd=directory, text=True, capture_output=True, timeout=60)
     (directory / "contract_simulation.log").write_text(simulation.stdout + simulation.stderr, encoding="utf-8")
-    for diagnostic in ("RESET_BINDING_MISMATCH", "TIMING_MARKER_BINDING_MISMATCH", "PHASE_CLOSURE_BINDING_MISMATCH"):
+    for diagnostic in ("RESET_BINDING_MISMATCH", "TIMING_MARKER_BINDING_MISMATCH", "PHASE_CLOSURE_BINDING_MISMATCH",
+                       "PHASE_RETURN_BINDING_MISMATCH", "DATA_PATH_BINDING_MISMATCH", "HOLD_FORK_BINDING_MISMATCH"):
         require(diagnostic not in simulation.stdout, diagnostic)
     require(simulation.returncode == 0 and f"CONTRACT_PROBES_PASS:{checks}" in simulation.stdout,
             "ENDPOINT_MAPPING_MISMATCH")
