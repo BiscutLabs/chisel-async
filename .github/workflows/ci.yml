@@ -28,7 +28,7 @@ jobs:
         uses: msys2/setup-msys2@ec48f7c5447b3140e2b088413ae3a55687bccb6e # v2
         with:
           msystem: UCRT64
-          install: mingw-w64-ucrt-x86_64-iverilog
+          install: mingw-w64-ucrt-x86_64-iverilog mingw-w64-ucrt-x86_64-verilator mingw-w64-ucrt-x86_64-gcc make
       - name: Expose native Windows simulator
         if: runner.os == 'Windows'
         shell: pwsh
@@ -45,10 +45,18 @@ jobs:
           name: evidence-${{ matrix.os }}
           path: |
             target/test-reports
+            verification/chiselsim/target/test-reports
+            build/chiselsim/**/simulation-log.txt
+            build/chiselsim/**/execution-script.txt
+            build/chiselsim/**/compilation-log.txt
+            build/consumer/**/simulation-log.txt
+            build/consumer/**/execution-script.txt
+            build/consumer/**/compilation-log.txt
             target/verification
             target/generated/**/contract.json
             target/generated/**/resolved.json
             target/generated/**/design.hw.mlir
+            target/generated/**/ref_*.sv
             target/generated/**/contract_*.log
             target/consumers/**/verification
           if-no-files-found: error

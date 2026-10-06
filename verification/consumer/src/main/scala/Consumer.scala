@@ -69,8 +69,8 @@ object Consumer {
   def main(args: Array[String]): Unit = {
     ConsumerArchitecture.main(Array("generated"))
     ExportDesign.emit(new BufferExample, Paths.get("generated/buffer"))
-    ExportDesign.emit(new StructuralBufferExample, Paths.get("generated/structural"))
-    ExportDesign.emit(new TransformExample, Paths.get("generated/transform"))
+    ExportDesign.emit(new StructuralBufferExample, Paths.get("generated/structural"), ExportDesign.Debug)
+    ExportDesign.emit(new TransformExample, Paths.get("generated/transform"), ExportDesign.Debug)
     ExportDesign.emit(new LongHoldExample, Paths.get("generated/longhold"))
     ExportDesign.emit(new LongHoldComparisonExample, Paths.get("generated/longhold_comparison"))
     ExportDesign.emit(new LongHoldSumExample, Paths.get("generated/longhold_sum"))

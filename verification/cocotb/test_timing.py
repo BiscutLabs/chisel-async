@@ -120,11 +120,12 @@ class TimingMonitor:
     def __init__(self, dut, evidence):
         contract = json.loads(Path(os.environ["CONTRACT"]).read_text())["manifest"]["design"]
         refs = {e["id"]: e for e in contract["endpoints"]}
+        paths = json.loads(Path(os.environ["CONTRACT"]).with_name("resolved.json").read_text())["probe_paths"]
         timing = contract["timing"][0]
         def resolve(ref):
             handle = dut
-            for name in refs[ref]["rtl_path"].split(".")[1:]:
-                handle = getattr(handle, name)
+            for name in paths[refs[ref]["probe"]].split(".")[1:]:
+                handle = handle[name]  # Compiler references may start with '_'.
             return handle
         self.signals = {key: resolve(timing[key]) for key in
                         ("launch", "transaction", "data_valid", "capture", "captured")}

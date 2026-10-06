@@ -6,6 +6,7 @@ SystemVerilog syntax. Actual compilation rejects unbound instances and duplicate
 """
 from __future__ import annotations
 import argparse
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -17,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "verification"))
 from run import read_sources
 
-OPTIONS = ["-O=debug", "--no-dedup", "--preserve-values=named", "--strip-fir-debug-info",
+OPTIONS = ["-O=release", "--strip-fir-debug-info",
            "--lowering-options=disallowPortDeclSharing,disallowLocalVariables"]
 IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
 
@@ -61,13 +62,14 @@ def nodes(node):
 def validate_manifest(document):
     shape(document, "semantic_sha256 manifest")
     manifest = document["manifest"]
-    shape(manifest, "schema time_unit time_range top toolchain resources rtl_semantic_sha256 design")
+    shape(manifest, "schema time_unit time_range top toolchain resources rtl_semantic_sha256 probe_abi design")
     require(document["semantic_sha256"] == semantic_hash(manifest), "SEMANTIC_HASH_MISMATCH")
-    require(manifest["schema"] == "chisel-async-contract-v1" and manifest["time_unit"] == "fs"
+    require(manifest["schema"] == "chisel-async-contract-v2" and manifest["time_unit"] == "fs"
             and manifest["time_range"] == "0..9223372036854775807", "UNSUPPORTED_SCHEMA")
-    require(manifest["toolchain"] == {"chisel": "7.16.0", "scala": "2.13.18", "firtool": "1.160.0", "options": OPTIONS},
+    require(manifest["toolchain"] == {"chisel": "7.16.0", "scala": "2.13.18", "firtool": "1.160.0", "options": manifest["toolchain"]["options"]},
             "UNQUALIFIED_COMPILER")
     require(re.fullmatch(IDENT, manifest["top"]), "INVALID_TOP")
+    require(manifest["toolchain"]["options"] in (OPTIONS, ["-O=debug", "--no-dedup", "--preserve-values=named", *OPTIONS[1:]]), "UNQUALIFIED_TOOLCHAIN")
     require(manifest["design"]["rtl_path"] == manifest["top"], "TOP_PATH_MISMATCH")
     all_paths, resources = set(), set()
     domain = manifest["design"]["reset_domain"]
@@ -85,11 +87,12 @@ def validate_manifest(document):
         all_paths.add(path)
         endpoints = {item["id"]: item for item in node["endpoints"]}
         for item in endpoints.values():
-            shape(item, "id rtl_path width source")
+            shape(item, "id rtl_path width source probe")
             require(item["rtl_path"].startswith(path + ".") and
                     re.fullmatch(IDENT, item["rtl_path"][len(path) + 1:]), "INVALID_ENDPOINT_PATH")
             require(item["rtl_path"] not in all_paths, "AMBIGUOUS_RTL_PATH")
             all_paths.add(item["rtl_path"])
+            require(item["rtl_path"].endswith(f'.ca_p_{len(item["id"])}_{item["id"]}'), "ENDPOINT_MISMATCH")
             require(type(item["width"]) is int and item["width"] > 0, "INVALID_ENDPOINT_WIDTH")
         for channel in node["channels"]:
             common = "id protocol role reset_domain layout phases environment token_contract "
@@ -135,7 +138,8 @@ def validate_manifest(document):
             require(primitive["reset_domain"] == domain, "RESET_DOMAIN_MISMATCH")
             require(primitive["reset"] in endpoints and endpoints[primitive["reset"]]["width"] == 1,
                     "MISSING_RESET_ENDPOINT")
-            require(primitive["view"] == "behavioral" and primitive["version"] == 1, "INVALID_VIEW")
+            require(primitive["view"] in ("behavioral", "constraint-marker") and primitive["version"] == 1, "INVALID_VIEW")
+            require((primitive["view"] == "constraint-marker") == (primitive["model"] == "ChiselAsyncTimingMarker_v1"), "INVALID_VIEW")
             require(re.fullmatch(r"ChiselAsync[A-Za-z0-9]+_v1", primitive["model"]), "INVALID_MODEL")
             require(primitive["resource"] == f'chiselasync/sv/{primitive["model"]}.sv', "INVALID_RESOURCE")
             require(primitive["rtl_path"].startswith(path + ".") and
@@ -145,17 +149,19 @@ def validate_manifest(document):
             resources.add(primitive["resource"])
         for timing in node["timing"]:
             if timing.get("kind") == "long-hold-bundling-v2":
-                shape(timing, "id kind mode request input_data latch_data latch_closed acknowledge output_request output_data "
+                shape(timing, "id kind marker mode request input_data latch_data latch_closed acknowledge output_request output_data "
                       "matched_delay_fs data_delay control_delays latch_delay output_delay_fs provenance assumptions")
                 refs = ("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
                 times = ("matched_delay_fs", "output_delay_fs")
                 require(timing["mode"] in ("functional-only", "digital-model"), "UNSUPPORTED_TIMING")
             else:
-                shape(timing, "id kind launch transaction data_valid capture captured setup_fs hold_fs mode provenance pulse_policy")
+                shape(timing, "id kind marker launch transaction data_valid capture captured setup_fs hold_fs mode provenance pulse_policy")
                 require(timing["kind"] == "bundled-setup-hold-v1" and timing["mode"] == "digital-model", "UNSUPPORTED_TIMING")
                 refs = ("launch", "transaction", "data_valid", "capture", "captured")
                 times = ("setup_fs", "hold_fs")
             require(all(timing[ref] in endpoints for ref in refs), "MISSING_TIMING_ENDPOINT")
+            marker = next((p for p in node["primitives"] if p["id"] == timing["marker"]), None)
+            require(marker and marker["view"] == "constraint-marker", "MISSING_TIMING_MARKER")
             for name in times:
                 require(type(timing[name]) is str and re.fullmatch(r"0|[1-9][0-9]*", timing[name])
                         and int(timing[name]) <= 2**63 - 1, "INVALID_MODEL_TIME")
@@ -180,10 +186,46 @@ def validate_manifest(document):
                 for cell_id, delay in model_delays.items():
                     require(cell_id in primitives and primitives[cell_id]["parameters"].get("DELAY_FS") == str(delay),
                             "BUNDLING_PARAMETER_MISMATCH")
+            require(marker["parameters"] == marker_parameters(timing, endpoints), "TIMING_MARKER_PARAMETER_MISMATCH")
         for child in node["children"]:
             shape(child, "id contract")
     require(resources == set(manifest["resources"]), "RESOURCE_INVENTORY_MISMATCH")
     return manifest
+
+
+def timing_refs(timing):
+    return (("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
+            if timing["kind"] == "long-hold-bundling-v2" else
+            ("launch", "transaction", "data_valid", "capture", "captured"))
+
+
+def marker_parameters(timing, endpoints):
+    roles = ("A", "B", "ACKNOWLEDGE", "LONG_HOLD", "DATA", "LATCH")
+    result = {name: "0" for name in ("KIND", "WIDTH", "SETUP_FS", "HOLD_FS", "MATCHED_FS", "OUTPUT_FS")}
+    result.update({f"{r}_{b}_FS": "0" for r in roles for b in ("MIN", "MAX", "MODEL")})
+    result["WIDTH"] = str(sum(endpoints[timing[ref]]["width"] for ref in timing_refs(timing)))
+    if timing["kind"] == "long-hold-bundling-v2":
+        result.update(KIND="2", MATCHED_FS=timing["matched_delay_fs"], OUTPUT_FS=timing["output_delay_fs"])
+        bounds = {**{k.upper(): v for k,v in timing["control_delays"].items()}, "DATA": timing["data_delay"], "LATCH": timing["latch_delay"]}
+        for role, values in bounds.items():
+            for bound in ("min", "max", "model"):
+                result[f"{role}_{bound.upper()}_FS"] = values[bound+"_fs"]
+    else:
+        result.update(KIND="1", SETUP_FS=timing["setup_fs"], HOLD_FS=timing["hold_fs"])
+    return result
+
+
+def read_probe_abi(text, top):
+    macros = {}
+    for line in text.splitlines():
+        if not line.strip() or line.startswith("//"):
+            continue
+        match = re.fullmatch(r"`define ref_" + re.escape(top) + "_(" + IDENT + ") (" + IDENT + r"(?:\." + IDENT + ")*)", line)
+        require(match, "UNSUPPORTED_PROBE_ABI")
+        require(match[1] not in macros, "AMBIGUOUS_PROBE_ABI")
+        macros[match[1]] = match[2]
+    require(macros, "EMPTY_PROBE_ABI")
+    return macros
 
 
 def read_vvp(contents):
@@ -195,7 +237,7 @@ def read_vvp(contents):
             key, kind, name, model, tail = scope.groups()
             parent = re.search(r", (S_\w+)$", tail)
             parent_path = scopes[parent[1]]["path"] + "." if parent else ""
-            current = {"path": parent_path + name, "kind": kind, "model": model, "ports": {}, "parameters": {}, "registers": {}}
+            current = {"path": parent_path + name, "kind": kind, "model": model, "ports": {}, "parameters": {}, "registers": {}, "nets": {}}
             require(key not in scopes and current["path"] not in paths, "AMBIGUOUS_ELABORATED_SCOPE")
             scopes[key] = paths[current["path"]] = current
         elif ".scope " in line and not line.lstrip().startswith(".scope"):
@@ -205,6 +247,9 @@ def read_vvp(contents):
             direction, width, name = port.groups()
             require(name not in current["ports"], "AMBIGUOUS_ELABORATED_PORT")
             current["ports"][name] = {"name": name, "direction": direction.lower(), "width": int(width)}
+        net = re.match(r'v\w+ \.(?:net(?:/\w+)?|var) "(' + IDENT + r')", (\d+) (\d+),?', line)
+        if net and current:
+            current["nets"][net[1]] = int(net[2]) - int(net[3]) + 1
         register = re.match(r'v\w+ \.var "(' + IDENT + r')", (\d+) 0;', line)
         if register and current:
             current["registers"][register[1]] = int(register[2]) + 1
@@ -245,10 +290,28 @@ def probe_source(manifest, scopes):
                 layouts[channel["data"]] = channel["layout"]
         for endpoint in node["endpoints"]:
             fields = layouts.get(endpoint["id"], [{"source": endpoint["source"], "lsb": 0, "width": endpoint["width"]}])
-            expr = "{" + ", ".join(source_path(node, f["source"]) for f in reversed(fields)) + "}"
+            # Public boundary/packing references remain an independent oracle.
+            # For internal timing nodes optimized away, use the marker's wired
+            # endpoint slice; behavioral timing tests separately exercise the path.
+            source = source_path(node, endpoint["source"])
+            if not fields[0]["source"] == endpoint["source"] or source.rsplit(".",1)[1] in scopes[node["rtl_path"]]["nets"]:
+                expr = "{" + ", ".join(source_path(node, f["source"]) for f in reversed(fields)) + "}"
+            else:
+                candidates = []
+                for timing in node["timing"]:
+                    offset = 0
+                    marker = next(p for p in node["primitives"] if p["id"] == timing["marker"])
+                    for ref in timing_refs(timing):
+                        width = endpoint_by_id[timing[ref]]["width"]
+                        if timing[ref] == endpoint["id"]:
+                            candidates.append(f'{marker["rtl_path"]}.values[{offset} +: {width}]')
+                        offset += width
+                require(candidates, "UNRESOLVED_SOURCE_TARGET")
+                expr = candidates[0]
             path, width, index = endpoint["rtl_path"], endpoint["width"], len(coverage)
             lines.append(f"reg [{width-1}:0] ones_{index}=0, zeros_{index}=0;")
             comparisons.append(f'if ({path} !== {expr}) $fatal(1, "ENDPOINT_MAPPING_MISMATCH:{path}");')
+            comparisons.append(f'if ($bits({path}) != {width}) $fatal(1, "ENDPOINT_WIDTH_MISMATCH");')
             for bit in range(width):
                 value = path if width == 1 else f"{path}[{bit}]"
                 comparisons += [f"if ({value} === 1'b1) ones_{index}[{bit}] = 1'b1;",
@@ -256,6 +319,10 @@ def probe_source(manifest, scopes):
             coverage.append(f"if (ones_{index} !== {width}'h{(1<<width)-1:x} || "
                             f"zeros_{index} !== {width}'h{(1<<width)-1:x}) "
                             f'$fatal(1, "INACTIVE_ENDPOINT:{path}");')
+        for timing in node["timing"]:
+            marker = next(p for p in node["primitives"] if p["id"] == timing["marker"])
+            expression = "{" + ", ".join(endpoint_by_id[timing[ref]]["rtl_path"] for ref in reversed(timing_refs(timing))) + "}"
+            comparisons.append(f'if ({marker["rtl_path"]}.values !== {expression}) $fatal(1, "TIMING_MARKER_BINDING_MISMATCH");')
         if node["rtl_path"] == top:
             drivers += [(top + "." + name, p["width"])
                         for name, p in scopes[top]["ports"].items() if p["direction"] == "input"]
@@ -292,6 +359,22 @@ def validate_export(directory: Path):
     document = json.loads((directory / "contract.json").read_text(), object_pairs_hook=unique_json)
     manifest = validate_manifest(document)
     sources = read_sources(directory)
+    abi = manifest["probe_abi"]
+    shape(abi, "file sha256")
+    require(abi["file"] == f'ref_{manifest["top"]}.sv', "INVALID_PROBE_ABI")
+    abi_path = directory / abi["file"]
+    require(abi_path.is_file(), "MISSING_PROBE_ABI")
+    abi_text = abi_path.read_text()
+    require(sha(abi_text.encode()) == abi["sha256"], "PROBE_ABI_HASH_MISMATCH")
+    macros = read_probe_abi(abi_text, manifest["top"])
+    expected_probes = [e["probe"] for n in nodes(manifest["design"]) for e in n["endpoints"]]
+    require(len(expected_probes) == len(set(expected_probes)), "AMBIGUOUS_PROBE")
+    require(set(macros) == set(expected_probes), "ENDPOINT_MISMATCH")
+    # Keep the source contract immutable; lower only a copy for active checks.
+    manifest = copy.deepcopy(manifest)
+    for node in nodes(manifest["design"]):
+        for endpoint in node["endpoints"]:
+            endpoint["rtl_path"] = manifest["top"] + "." + macros[endpoint["probe"]]
     require(manifest["rtl_semantic_sha256"] == {s.name: rtl_hash(s) for s in sources}, "RTL_HASH_MISMATCH")
     for source in sources:
         require(source.read_text().startswith("// Generated by CIRCT firtool-1.160.0\n"), "UNQUALIFIED_RTL")
@@ -310,11 +393,11 @@ def validate_export(directory: Path):
     resolved = []
     for node in nodes(manifest["design"]):
         require(node["rtl_path"] in scopes, "MISSING_MODULE")
-        require(node["module"] == scopes[node["rtl_path"]]["model"], "MODULE_MISMATCH")
+        require(not any(name.startswith("ca_") for name in scopes[node["rtl_path"]]["ports"]), "HARDWARE_OBSERVATION_PORT")
         expected_scopes.add(node["rtl_path"])
         for endpoint in node["endpoints"]:
-            port = scopes[node["rtl_path"]]["ports"].get(endpoint["rtl_path"].rsplit(".", 1)[1])
-            require(port and port["direction"] == "output" and port["width"] == endpoint["width"], "ENDPOINT_MISMATCH")
+            path, name = endpoint["rtl_path"].rsplit(".", 1)
+            require(path in scopes and scopes[path]["nets"].get(name) == endpoint["width"], "ENDPOINT_MISMATCH")
             resolved.append(endpoint["rtl_path"])
         for primitive in node["primitives"]:
             expected_scopes.add(primitive["rtl_path"])
@@ -331,11 +414,16 @@ def validate_export(directory: Path):
     require(built.returncode == 0, "RTL_PROBE_ELABORATION_FAILED")
     simulation = subprocess.run(["vvp", "contract_probe.vvp"], cwd=directory, text=True, capture_output=True, timeout=60)
     (directory / "contract_simulation.log").write_text(simulation.stdout + simulation.stderr, encoding="utf-8")
-    require("RESET_BINDING_MISMATCH" not in simulation.stdout, "RESET_BINDING_MISMATCH")
+    for diagnostic in ("RESET_BINDING_MISMATCH", "TIMING_MARKER_BINDING_MISMATCH"):
+        require(diagnostic not in simulation.stdout, diagnostic)
     require(simulation.returncode == 0 and f"CONTRACT_PROBES_PASS:{checks}" in simulation.stdout,
             "ENDPOINT_MAPPING_MISMATCH")
     result = {"status": "PASS", "semantic_sha256": document["semantic_sha256"], "endpoints": resolved,
-              "mapping_checks": checks, "source_sha256": {s.name: sha(s.read_bytes()) for s in sources},
+              "mapping_checks": checks,
+              "module_definitions": sorted({s["model"] for s in scopes.values()}),
+              "instances": {path: scope["model"] for path, scope in scopes.items()},
+              "probe_abi_sha256": abi["sha256"],
+              "probe_paths": {e["probe"]: e["rtl_path"] for n in nodes(manifest["design"]) for e in n["endpoints"]}, "source_sha256": {s.name: sha(s.read_bytes()) for s in sources},
               "hw_ir_sha256": sha((directory / "design.hw.mlir").read_bytes()),
               "resolver_sha256": sha(Path(__file__).read_bytes()), "simulator": "Icarus 13.0"}
     output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
@@ -350,7 +438,7 @@ def main():
                 "timed_early", "timed_equal", "timed_late", "structural", "structural_wide",
                 "structural_packet", "structural_pipeline", "transform", "longhold", "longhold_wide",
                 "longhold_packet", "longhold_pipeline", "longhold_comparison", "longhold_sum", "longhold_signed",
-                "dualrail", "to_async", "to_clocked", "bridge_roundtrip")
+                "dualrail", "to_async", "to_clocked", "bridge_roundtrip", "replicated", "replicated_debug")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

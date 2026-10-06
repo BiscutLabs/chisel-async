@@ -36,6 +36,9 @@ def main() -> int:
     if not java:
         raise RuntimeError("A JDK is required; install JDK 21 or set JAVA_HOME.")
     environment = dict(os.environ)
+    if any("simulation/" in arg for arg in args):
+        from svsim_windows import configure
+        configure(environment)
     # A local, explicitly installed compiler is convenient; never select another version.
     if "CHISEL_FIRTOOL_PATH" not in environment:
         executable = "firtool.exe" if os.name == "nt" else "firtool"

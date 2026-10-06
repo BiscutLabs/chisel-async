@@ -12,6 +12,6 @@ class ControllerComparisonExample extends UnsafeFourPhaseBuffer(UInt(40.W))
 object EmitControllerComparison {
   def main(args: Array[String]): Unit = {
     require(args.length == 1, "usage: EmitControllerComparison <output-directory>")
-    ExportDesign.emit(new ControllerComparisonExample, Paths.get(args(0)))
+    ExportDesign.emit(new ControllerComparisonExample, Paths.get(args(0)), ExportDesign.Debug)
   }
 }

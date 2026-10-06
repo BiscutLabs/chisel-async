@@ -80,8 +80,8 @@ def run_case(generated, destination, gate_delay):
         if source.name == "StructuralBufferExample.sv":
             contents = replace_once(contents, ".enable (take | full & release_0)",
                                     ".enable (take | delayed_release)")
-            contents = replace_once(contents, "  wire       out_req_0 =",
-                f"  wire #{gate_delay} delayed_release = full & release_0;\n  wire       out_req_0 =")
+            contents = replace_once(contents, "  assign out_req_0 =",
+                f"  wire #{gate_delay} delayed_release = full & release_0;\n  assign out_req_0 =")
         elif source.name == "ChiselAsyncLatch_v1.sv":
             # Captured-value nonblocking delay on all latch assignments, including reset.
             # Not an inertial gate model, analog model, or production resource change.

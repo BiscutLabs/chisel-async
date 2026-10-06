@@ -140,7 +140,7 @@ def main():
             raise RuntimeError(f"Matched-delay fault did not activate intended checker: {result}")
         # Delete downstream-ack feedback only from the long-hold OR (actual emitted RTL).
         original = build / "LongHoldComparisonExample.sv"
-        mutated, count = re.subn(r"(ca_primitive_long_hold\s*\(.*?\.b\s*\()out_ack_0(\))", r"\g<1>1'b0\2",
+        mutated, count = re.subn(r"(ca_primitive_long_hold\s*\(.*?\.b\s*\()out_ack(?:_0)?(\))", r"\g<1>1'b0\2",
                                 original.read_text(encoding="utf-8"), flags=re.S)
         if count != 1:
             raise RuntimeError("Long-hold feedback mutation target changed")
@@ -155,7 +155,7 @@ def main():
             raise RuntimeError(f"Long-hold fault did not activate intended checker: {result}")
         evidence["mutation_sha256"] = sha(mutant)
         # A separate delay on an inverted input is NOT the published atomic cell.
-        split, count = re.subn(r"(ca_primitive_a\s*\(.*?\.falling\s*\()out_ack_0(\))", r"\g<1>late_ack\2",
+        split, count = re.subn(r"(ca_primitive_a\s*\(.*?\.falling\s*\()out_ack(?:_0)?(\))", r"\g<1>late_ack\2",
                               original.read_text(encoding="utf-8"), flags=re.S)
         if count != 1:
             raise RuntimeError("Split input-bubble mutation target changed")

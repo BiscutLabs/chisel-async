@@ -15,11 +15,11 @@ def main():
     subprocess.run([sys.executable, str(ROOT / "tools/sbt.py"), "publishLocal"], check=True)
     artifact = ROOT / "target/scala-2.13/chisel-async_2.13-0.1.0-SNAPSHOT.jar"
     with zipfile.ZipFile(artifact) as library:
-        for name in ("META-INF/LICENSE", "chiselasync/contract-v1.schema.json", "chiselasync/sv/ChiselAsyncCElement_v1.sv",
+        for name in ("META-INF/LICENSE", "chiselasync/contract-v2.schema.json", "chiselasync/sv/ChiselAsyncCElement_v1.sv",
                      "chiselasync/sv/ChiselAsyncFourPhaseStorage_v1.sv",
                      "chiselasync/sv/ChiselAsyncLatch_v1.sv", "chiselasync/sv/ChiselAsyncDelayLine_v1.sv",
                      "chiselasync/sv/ChiselAsyncAsymmetricC_v1.sv", "chiselasync/sv/ChiselAsyncControlGate_v1.sv",
-                     "chiselasync/sv/ChiselAsyncClosingLatch_v1.sv"):
+                     "chiselasync/sv/ChiselAsyncClosingLatch_v1.sv", "chiselasync/sv/ChiselAsyncTimingMarker_v1.sv"):
             if not library.read(name):
                 raise RuntimeError(f"Empty published resource: {name}")
     # The space in the path is intentional. Keep outputs for diagnosis/replay.
@@ -42,6 +42,19 @@ def main():
                "-Dsbt.override.build.repos=true", f"-Dsbt.repository.config={ROOT / 'project/repositories'}",
                "-jar", str(ROOT / ".tools/sbt-launch-1.12.4.jar"), "runMain Consumer"]
     subprocess.run(command, cwd=consumer, env=environment, check=True, timeout=180)
+    test_source = consumer / "src/test/scala/chiselasync/BridgeSimulationSpec.scala"
+    test_source.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy(ROOT / "verification/chiselsim/src/test/scala/chiselasync/BridgeSimulationSpec.scala", test_source)
+    # Keep native tool paths below Windows MAX_PATH, including Verilator's
+    # generated layer files; GNU make also requires a path without spaces.
+    environment["CA_CHISELSIM_DIRECTORY"] = str(ROOT / "build/consumer" / consumer.name.rsplit(" ", 1)[-1])
+    from svsim_windows import configure
+    configure(environment)
+    sys.path.insert(0, str(ROOT / "verification"))
+    from run_chiselsim import run_suite
+    run_suite([*command[:-1], "test"], environment, consumer,
+              consumer / "target/test-reports/TEST-chiselasync.BridgeSimulationSpec.xml",
+              consumer / "verification/chiselsim")
     subprocess.run([sys.executable, str(ROOT / "verification/run.py"), "--fixtures", "buffer", "structural", "transform", "longhold",
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification")],
                    cwd=ROOT, check=True, timeout=180)

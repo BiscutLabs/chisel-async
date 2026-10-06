@@ -1,0 +1,610 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:chisel-async:contract:v2",
+  "title": "chisel-async optimized read-probe export v2",
+  "type": "object",
+  "required": [
+    "semantic_sha256",
+    "manifest"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "semantic_sha256": {
+      "$ref": "#/$defs/hash"
+    },
+    "manifest": {
+      "type": "object",
+      "required": [
+        "schema",
+        "time_unit",
+        "time_range",
+        "top",
+        "toolchain",
+        "resources",
+        "rtl_semantic_sha256",
+        "design",
+        "probe_abi"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "schema": {
+          "const": "chisel-async-contract-v2"
+        },
+        "time_unit": {
+          "const": "fs"
+        },
+        "time_range": {
+          "const": "0..9223372036854775807"
+        },
+        "top": {
+          "$ref": "#/$defs/id"
+        },
+        "toolchain": {
+          "type": "object",
+          "required": [
+            "chisel",
+            "scala",
+            "firtool",
+            "options"
+          ]
+        },
+        "resources": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/hash"
+          }
+        },
+        "rtl_semantic_sha256": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/hash"
+          }
+        },
+        "design": {
+          "$ref": "#/$defs/node"
+        },
+        "probe_abi": {
+          "type": "object",
+          "required": [
+            "file",
+            "sha256"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "file": {
+              "type": "string"
+            },
+            "sha256": {
+              "$ref": "#/$defs/hash"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "time": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "description": "Exact fs; validator additionally enforces signed 64-bit range."
+    },
+    "endpoint": {
+      "type": "object",
+      "required": [
+        "id",
+        "rtl_path",
+        "width",
+        "source",
+        "probe"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "rtl_path": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "source": {
+          "type": "string"
+        },
+        "probe": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "channel": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "role",
+            "reset_domain",
+            "layout",
+            "environment",
+            "token_contract",
+            "protocol",
+            "phases",
+            "request",
+            "data",
+            "acknowledge"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "role": {
+              "enum": [
+                "input",
+                "output"
+              ]
+            },
+            "reset_domain": {
+              "$ref": "#/$defs/id"
+            },
+            "layout": {
+              "type": "array",
+              "minItems": 1
+            },
+            "environment": {
+              "type": "string"
+            },
+            "token_contract": {
+              "const": "ordered-lossless-reset-abort-v1"
+            },
+            "protocol": {
+              "const": "four-phase-bundled-v1"
+            },
+            "phases": {
+              "const": [
+                "00",
+                "10",
+                "11",
+                "01",
+                "00"
+              ]
+            },
+            "request": {
+              "$ref": "#/$defs/id"
+            },
+            "data": {
+              "$ref": "#/$defs/id"
+            },
+            "acknowledge": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "role",
+            "reset_domain",
+            "layout",
+            "environment",
+            "token_contract",
+            "protocol",
+            "phases",
+            "zero",
+            "one",
+            "acknowledge"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "role": {
+              "enum": [
+                "input",
+                "output"
+              ]
+            },
+            "reset_domain": {
+              "$ref": "#/$defs/id"
+            },
+            "layout": {
+              "type": "array",
+              "minItems": 1
+            },
+            "environment": {
+              "type": "string"
+            },
+            "token_contract": {
+              "const": "ordered-lossless-reset-abort-v1"
+            },
+            "protocol": {
+              "const": "dual-rail-rtz-v1"
+            },
+            "phases": {
+              "const": [
+                "spacer",
+                "data",
+                "acknowledged",
+                "spacer",
+                "idle"
+              ]
+            },
+            "zero": {
+              "$ref": "#/$defs/id"
+            },
+            "one": {
+              "$ref": "#/$defs/id"
+            },
+            "acknowledge": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "role",
+            "reset_domain",
+            "layout",
+            "environment",
+            "token_contract",
+            "protocol",
+            "phases",
+            "valid",
+            "data",
+            "ready",
+            "clock"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/id"
+            },
+            "role": {
+              "enum": [
+                "input",
+                "output"
+              ]
+            },
+            "reset_domain": {
+              "$ref": "#/$defs/id"
+            },
+            "layout": {
+              "type": "array",
+              "minItems": 1
+            },
+            "environment": {
+              "type": "string"
+            },
+            "token_contract": {
+              "const": "ordered-lossless-reset-abort-v1"
+            },
+            "protocol": {
+              "const": "decoupled-v1"
+            },
+            "phases": {
+              "const": [
+                "rising-edge-fire"
+              ]
+            },
+            "valid": {
+              "$ref": "#/$defs/id"
+            },
+            "data": {
+              "$ref": "#/$defs/id"
+            },
+            "ready": {
+              "$ref": "#/$defs/id"
+            },
+            "clock": {
+              "$ref": "#/$defs/id"
+            }
+          }
+        }
+      ]
+    },
+    "primitive": {
+      "type": "object",
+      "required": [
+        "id",
+        "rtl_path",
+        "model",
+        "view",
+        "version",
+        "resource",
+        "parameters",
+        "reset",
+        "reset_domain",
+        "effects",
+        "ports"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "view": {
+          "enum": [
+            "behavioral",
+            "constraint-marker"
+          ]
+        },
+        "version": {
+          "const": 1
+        },
+        "parameters": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^-?[0-9]+$"
+          }
+        },
+        "ports": {
+          "type": "array",
+          "minItems": 1
+        }
+      }
+    },
+    "timing": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/captureTiming"
+        },
+        {
+          "$ref": "#/$defs/longHoldTiming"
+        }
+      ]
+    },
+    "longHoldTiming": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "mode",
+        "request",
+        "input_data",
+        "latch_data",
+        "latch_closed",
+        "acknowledge",
+        "output_request",
+        "output_data",
+        "matched_delay_fs",
+        "output_delay_fs",
+        "provenance",
+        "assumptions",
+        "data_delay",
+        "latch_delay",
+        "control_delays",
+        "marker"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "long-hold-bundling-v2"
+        },
+        "mode": {
+          "enum": [
+            "functional-only",
+            "digital-model"
+          ]
+        },
+        "request": {
+          "$ref": "#/$defs/id"
+        },
+        "input_data": {
+          "$ref": "#/$defs/id"
+        },
+        "latch_data": {
+          "$ref": "#/$defs/id"
+        },
+        "latch_closed": {
+          "$ref": "#/$defs/id"
+        },
+        "acknowledge": {
+          "$ref": "#/$defs/id"
+        },
+        "output_request": {
+          "$ref": "#/$defs/id"
+        },
+        "output_data": {
+          "$ref": "#/$defs/id"
+        },
+        "matched_delay_fs": {
+          "$ref": "#/$defs/time"
+        },
+        "output_delay_fs": {
+          "$ref": "#/$defs/time"
+        },
+        "provenance": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "string"
+        },
+        "data_delay": {
+          "$ref": "#/$defs/delayBounds"
+        },
+        "latch_delay": {
+          "$ref": "#/$defs/delayBounds"
+        },
+        "control_delays": {
+          "type": "object",
+          "required": [
+            "a",
+            "b",
+            "acknowledge",
+            "long_hold"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "a": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "b": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "acknowledge": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "long_hold": {
+              "$ref": "#/$defs/delayBounds"
+            }
+          }
+        },
+        "marker": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "captureTiming": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "launch",
+        "transaction",
+        "data_valid",
+        "capture",
+        "captured",
+        "setup_fs",
+        "hold_fs",
+        "mode",
+        "provenance",
+        "pulse_policy",
+        "marker"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "bundled-setup-hold-v1"
+        },
+        "setup_fs": {
+          "$ref": "#/$defs/time"
+        },
+        "hold_fs": {
+          "$ref": "#/$defs/time"
+        },
+        "mode": {
+          "const": "digital-model"
+        },
+        "marker": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": [
+        "rtl_path",
+        "module",
+        "reset_domain",
+        "capacity",
+        "endpoints",
+        "channels",
+        "primitives",
+        "timing",
+        "children"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "rtl_path": {
+          "type": "string"
+        },
+        "module": {
+          "$ref": "#/$defs/id"
+        },
+        "reset_domain": {
+          "type": "string"
+        },
+        "capacity": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 1
+            }
+          ]
+        },
+        "endpoints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/endpoint"
+          }
+        },
+        "channels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/channel"
+          }
+        },
+        "primitives": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/primitive"
+          }
+        },
+        "timing": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/timing"
+          }
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "contract"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/id"
+              },
+              "contract": {
+                "$ref": "#/$defs/node"
+              }
+            }
+          }
+        }
+      }
+    },
+    "delayBounds": {
+      "type": "object",
+      "required": [
+        "min_fs",
+        "max_fs",
+        "model_fs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "min_fs": {
+          "$ref": "#/$defs/time"
+        },
+        "max_fs": {
+          "$ref": "#/$defs/time"
+        },
+        "model_fs": {
+          "$ref": "#/$defs/time"
+        }
+      }
+    }
+  }
+}

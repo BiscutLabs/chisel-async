@@ -94,7 +94,10 @@ object EmitFixtures {
     fixtures.foreach { case (name, gen) =>
       val destination = Paths.get(args(0), name).toAbsolutePath
       Files.createDirectories(destination)
-      ExportDesign.emit(gen(), destination)
+      // Preserve the withdrawn controller's original Boolean decomposition for
+      // its historical delay counterexample; production fixtures use release.
+      val mode = if (name.startsWith("structural") || name == "transform") ExportDesign.Debug else ExportDesign.Optimized
+      ExportDesign.emit(gen(), destination, mode)
     }
   }
 }

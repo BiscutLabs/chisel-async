@@ -62,7 +62,7 @@ def main():
             raise RuntimeError("The active qualification scope is Windows/Linux; macOS is deferred")
         environment = dict(os.environ)
         candidates = [args.simulator_dir] if args.simulator_dir else []
-        candidates += [ROOT / ".tools/iverilog/bin"]
+        candidates += [ROOT / ".tools/iverilog/bin", ROOT / ".tools/verilator/bin"]
         if os.name == "nt":
             candidates.append(Path("C:/msys64/ucrt64/bin"))
         environment["PATH"] = os.pathsep.join(str(p) for p in candidates if p and p.is_dir()) + os.pathsep + environment.get("PATH", "")
@@ -93,18 +93,38 @@ def main():
                 raise RuntimeError("Install Linux build prerequisites: " + ", ".join(missing))
             setup.append(("iverilog", [python, str(ROOT / "tools/build_iverilog.py")]))
             environment["PATH"] = str(ROOT / ".tools/iverilog/bin") + os.pathsep + environment["PATH"]
+        if os.name == "nt":
+            verilator = shutil.which("verilator_bin.exe", path=environment["PATH"])
+        else:
+            verilator = shutil.which("verilator", path=environment["PATH"])
+        qualified = verilator and subprocess.run([verilator, "--version"], capture_output=True, text=True).stdout.startswith("Verilator 5.046 ")
+        if not qualified:
+            if args.no_setup or os.name == "nt":
+                raise RuntimeError("ChiselSim requires native Verilator 5.046; see README prerequisites")
+            missing = [name for name in ("autoconf", "bison", "flex", "g++", "make", "perl") if not shutil.which(name)]
+            if missing:
+                raise RuntimeError("Install Verilator build prerequisites: " + ", ".join(missing))
+            setup.append(("verilator", [python, str(ROOT / "tools/build_verilator.py")]))
+            environment["PATH"] = str(ROOT / ".tools/verilator/bin") + os.pathsep + environment["PATH"]
+        # Some sbt runMain failures on background threads can return exit 0.
+        # A generator must replace every contract before any consumer can pass.
+        for contract in (ROOT / "target/generated").rglob("contract.json"):
+            contract.write_text('{"status":"INVALIDATED"}\n', encoding="utf-8")
         build = [python, str(ROOT / "tools/sbt.py")] + ([] if args.no_setup else ["--bootstrap"]) + ["test",
                  "examples/runMain chiselasync.examples.EmitFixtures target/generated",
                  "examples/runMain chiselasync.examples.EmitControllerComparison target/generated/comparison_unsafe",
                  "examples/runMain chiselasync.examples.EmitLongHold target/generated",
-                 "examples/runMain chiselasync.examples.EmitArchitecture target/generated"]
+                 "examples/runMain chiselasync.examples.EmitArchitecture target/generated",
+                 "examples/runMain chiselasync.examples.EmitOptimized target/generated"]
         steps = setup + [("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
             ("python", [python, "-m", "pytest", *[str(p) for p in sorted((ROOT / "verification").glob("test_*.py"))], "-q"])]
         steps += [(name, [python, str(ROOT / path)]) for name, path in (
             ("functional", "verification/run.py"), ("counterexample", "verification/controller_race.py"),
             ("comparison", "verification/compare_controllers.py"), ("timing", "verification/run_timing.py"),
             ("longhold", "verification/run_longhold.py"), ("architecture", "verification/run_architecture.py"),
-            ("consumer", "tools/consumer_smoke.py"))]
+            ("optimized", "verification/run_optimized.py"))]
+        steps += [("chiselsim", [python, str(ROOT / "verification/run_chiselsim.py")]),
+                  ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")])]
         run_steps(steps, environment, output)
     except BaseException as error:
         # run_steps already preserves per-step evidence; preflight failures need status too.

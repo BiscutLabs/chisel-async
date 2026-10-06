@@ -27,3 +27,8 @@ lazy val examples = (project in file("examples"))
   .dependsOn(root)
   .settings(commonSettings)
   .settings(name := "chisel-async-examples", publish / skip := true)
+
+lazy val simulation = (project in file("verification/chiselsim"))
+  .dependsOn(root)
+  .settings(commonSettings)
+  .settings(name := "chisel-async-simulation", publish / skip := true)

@@ -94,10 +94,10 @@ def instrument(source):
         return name
 
     def wire(match):
-        name, rhs = match.groups()
-        return f"wire {name} = {expand(expression(rhs))};"
+        kind, name, rhs = match.groups()
+        return f"{kind} {name} = {expand(expression(rhs))};"
 
-    source = re.sub(r"\bwire\s+(\w+)\s*=\s*([^;]+);", wire, source)
+    source = re.sub(r"\b(wire|assign)\s+(\w+)\s*=\s*([^;]+);", wire, source)
 
     def latch(match):
         params, name, ports = match.groups()

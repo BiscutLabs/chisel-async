@@ -4,6 +4,8 @@ target/
 project/target/
 project/project/
 examples/target/
+verification/chiselsim/target/
+build/
 .bsp/
 .metals/
 __pycache__/

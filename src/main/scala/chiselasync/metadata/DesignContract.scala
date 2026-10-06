@@ -3,6 +3,7 @@ package chiselasync.metadata
 
 import chisel3._
 import chisel3.reflect.DataMirror
+import chisel3.probe.{Probe, ProbeValue, define}
 import chiselasync.core.AsyncModule
 import chiselasync.protocol.{Channel, DualRail, FourPhase, Payload}
 import chisel3.util.DecoupledIO
@@ -12,6 +13,10 @@ import scala.collection.mutable.ArrayBuffer
 final class DesignContract private[chiselasync] (owner: AsyncModule) {
   private val ids = scala.collection.mutable.Set.empty[String]
   private val endpoints = ArrayBuffer.empty[(String, Data, UInt)]
+  private val observations = ArrayBuffer.empty[(Vector[String], UInt)]
+
+  private def probeName(path: Vector[String]): String =
+    "ca_p_" + path.map(id => s"${id.length}_$id").mkString("_")
   private val channels = ArrayBuffer.empty[() => ujson.Value]
   private val primitives = ArrayBuffer.empty[() => ujson.Value]
   private val children = ArrayBuffer.empty[(String, AsyncModule)]
@@ -28,14 +33,16 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     require(ids.add(id), s"duplicate semantic ID: $id")
   }
 
-  /** A ground output is the supported compiler anchor; export validation resolves it in RTL. */
+  /** Read-only references lower to the compiler's probe ABI, never hardware ports. */
   def endpoint(id: String, signal: Data): String = {
     claim(id)
     require(signal.isWidthKnown && signal.getWidth > 0, s"unknown endpoint width: $id")
-    val anchor = IO(Output(UInt(signal.getWidth.W))).suggestName(s"ca_$id")
-    anchor := signal.asUInt
-    dontTouch(anchor)
+    val anchor = IO(Output(Probe(UInt(signal.getWidth.W)))).suggestName(probeName(Vector(id)))
+    val packed = Wire(UInt(signal.getWidth.W))
+    packed := signal.asUInt
+    define(anchor, ProbeValue(packed))
     endpoints += ((id, signal, anchor))
+    observations += Vector(id) -> anchor
     id
   }
 
@@ -87,12 +94,13 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
   }
 
   def primitive(id: String, instance: ExtModule, parameters: Map[String, BigInt],
-                resetEndpoint: String, effects: String): Unit = {
+                resetEndpoint: String, effects: String, view: String = "behavioral"): Unit = {
     claim(id)
+    require(Set("behavioral", "constraint-marker").contains(view), "invalid primitive view")
     require(endpoints.exists(_._1 == resetEndpoint), s"missing primitive reset endpoint: $resetEndpoint")
     instance.suggestName(s"ca_primitive_$id")
     primitives += (() => ujson.Obj("id" -> id, "rtl_path" -> instance.pathName,
-      "model" -> instance.desiredName, "view" -> "behavioral", "version" -> 1,
+      "model" -> instance.desiredName, "view" -> view, "version" -> 1,
       "resource" -> s"chiselasync/sv/${instance.desiredName}.sv",
       "parameters" -> ujson.Obj.from(parameters.toSeq.sortBy(_._1).map { case (k, v) => k -> ujson.Str(v.toString) }),
       "reset" -> resetEndpoint, "reset_domain" -> owner.resetDomain.id, "effects" -> effects,
@@ -107,6 +115,14 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     require(module.resetDomain eq owner.resetDomain, "child reset domains differ")
     module.suggestName(s"ca_child_$id")
     children += id -> module
+    // Forward references, not dataflow. The top-level ref_<top>.sv ABI contains
+    // every semantic endpoint even when identical child definitions deduplicate.
+    module.contract.observations.foreach { case (path, probe) =>
+      val key = id +: path
+      val forwarded = IO(Output(Probe(UInt(probe.getWidth.W)))).suggestName(probeName(key))
+      define(forwarded, probe)
+      observations += key -> forwarded
+    }
   }
 
   def setupHold(id: String, launch: String, transaction: String, dataValid: String,
@@ -115,7 +131,9 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     Seq(launch, transaction, dataValid, capture, captured).foreach { ref =>
       require(endpoints.exists(_._1 == ref), s"missing timing endpoint: $ref")
     }
-    obligations += ujson.Obj("id" -> id, "kind" -> "bundled-setup-hold-v1", "launch" -> launch,
+    val refs = Seq(launch, transaction, dataValid, capture, captured)
+    val marker = timingMarker(id, refs, Map("KIND" -> BigInt(1), "SETUP_FS" -> BigInt(setup.fs), "HOLD_FS" -> BigInt(hold.fs)))
+    obligations += ujson.Obj("id" -> id, "kind" -> "bundled-setup-hold-v1", "marker" -> marker, "launch" -> launch,
       "transaction" -> transaction, "data_valid" -> dataValid, "capture" -> capture,
       "captured" -> captured, "setup_fs" -> setup.fs.toString, "hold_fs" -> hold.fs.toString,
       "mode" -> "digital-model", "provenance" -> "explicit fixture contract",
@@ -131,7 +149,14 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     }
     def bounds(value: DelayBounds): ujson.Value = ujson.Obj("min_fs" -> value.min.fs.toString,
       "max_fs" -> value.max.fs.toString, "model_fs" -> value.model.fs.toString)
-    obligations += ujson.Obj("id" -> id, "kind" -> "long-hold-bundling-v2", "mode" -> policy.mode,
+    val limits = Seq("A" -> policy.controls.a, "B" -> policy.controls.b,
+      "ACKNOWLEDGE" -> policy.controls.acknowledge, "LONG_HOLD" -> policy.controls.longHold,
+      "DATA" -> policy.dataDelay, "LATCH" -> policy.latchDelay).flatMap { case (role, value) =>
+      Seq(s"${role}_MIN_FS" -> BigInt(value.min.fs), s"${role}_MAX_FS" -> BigInt(value.max.fs),
+        s"${role}_MODEL_FS" -> BigInt(value.model.fs))
+    }.toMap ++ Map("KIND" -> BigInt(2), "MATCHED_FS" -> BigInt(policy.matchedDelay.fs), "OUTPUT_FS" -> BigInt(policy.outputDelay.fs))
+    val marker = timingMarker(id, Seq(request, inputData, latchData, latchClosed, acknowledge, outputRequest, outputData), limits)
+    obligations += ujson.Obj("id" -> id, "kind" -> "long-hold-bundling-v2", "marker" -> marker, "mode" -> policy.mode,
       "request" -> request, "input_data" -> inputData, "latch_data" -> latchData,
       "latch_closed" -> latchClosed, "acknowledge" -> acknowledge,
       "output_request" -> outputRequest, "output_data" -> outputData,
@@ -142,6 +167,20 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
       "output_delay_fs" -> policy.outputDelay.fs.toString,
       "provenance" -> "explicit model policy; not technology timing closure",
       "assumptions" -> "atomic asymmetric cells including input bubbles; ideal forks; zero latch aperture; coordinated quiescent reset")
+  }
+
+  private def timingMarker(id: String, refs: Seq[String], values: Map[String, BigInt]): String = {
+    val signals = refs.map(ref => endpoints.find(_._1 == ref).get._2)
+    val parameters = TimingMarker.defaults ++ values + ("WIDTH" -> BigInt(signals.map(_.getWidth).sum))
+    val marker = Module(new TimingMarker(parameters))
+    marker.reset := owner.reset
+    marker.values := chisel3.util.Cat(signals.reverse.map(_.asUInt))
+    val markerId = s"${id}_marker"
+    val resetRef = endpoints.find(_._2 eq owner.reset).map(_._1)
+      .getOrElse(throw new IllegalArgumentException("timing marker requires a registered reset endpoint"))
+    primitive(markerId, marker, parameters, resetRef,
+      "passive constraint carrier; endpoint list packed least-significant first; no hardware behavior", "constraint-marker")
+    markerId
   }
 
   private def layout(data: Data): ujson.Value = {
@@ -160,15 +199,17 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     ujson.Arr.from(leaves)
   }
 
-  private[chiselasync] def json: ujson.Value = ujson.Obj(
+  private[chiselasync] def json: ujson.Value = jsonAt(Vector.empty)
+
+  private def jsonAt(prefix: Vector[String]): ujson.Value = ujson.Obj(
     "rtl_path" -> owner.pathName, "module" -> owner.name, "reset_domain" -> owner.resetDomain.id,
     "capacity" -> storageCapacity.map(n => ujson.Num(n)).getOrElse(ujson.Null),
     "endpoints" -> ujson.Arr.from(endpoints.map { case (id, source, anchor) =>
       ujson.Obj("id" -> id, "rtl_path" -> anchor.pathName, "width" -> anchor.getWidth,
-        "source" -> source.toTarget.serialize)
+        "source" -> source.toTarget.serialize, "probe" -> probeName(prefix :+ id))
     }), "channels" -> ujson.Arr.from(channels.map(_())),
     "primitives" -> ujson.Arr.from(primitives.map(_())), "timing" -> ujson.Arr.from(obligations),
     "children" -> ujson.Arr.from(children.map { case (id, module) =>
-      ujson.Obj("id" -> id, "contract" -> module.contract.json)
+      ujson.Obj("id" -> id, "contract" -> module.contract.jsonAt(prefix :+ id))
     }))
 }

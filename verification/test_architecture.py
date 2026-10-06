@@ -33,10 +33,10 @@ def test_encoding_contract_cannot_be_relabelled(tmp_path,fixture,key,value,diagn
 def test_clock_anchor_rewiring_is_detected_after_rehash(tmp_path):
     directory=tmp_path/'clocked'
     shutil.copytree(ROOT/'target/generated/to_async',directory)
-    path=directory/'ToAsyncExample.sv'
+    path=directory/'ref_ToAsyncExample.sv'
     source=path.read_text()
-    assert source.count('assign ca_in_clock = clock;')==1
-    path.write_text(source.replace('assign ca_in_clock = clock;','assign ca_in_clock = reset;'))
+    assert source.count('ca_p_8_in_clock packed_3_probe')==1
+    path.write_text(source.replace('ca_p_8_in_clock packed_3_probe','ca_p_8_in_clock reset'))
     edit_manifest(directory,lambda _:None,refresh_rtl=True)
     with pytest.raises(ValueError,match='ENDPOINT_MAPPING_MISMATCH'):
         validate_export(directory)

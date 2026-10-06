@@ -9,7 +9,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
-from check_export import rtl_hash, semantic_hash, unique_json, validate_export, validate_manifest
+from check_export import sha, rtl_hash, semantic_hash, unique_json, validate_export, validate_manifest
 from run import read_sources
 
 
@@ -28,6 +28,8 @@ def edit_manifest(directory, change, refresh_rtl=False):
     document = json.loads(path.read_text())
     change(document["manifest"])
     if refresh_rtl:
+        abi = document["manifest"]["probe_abi"]
+        abi["sha256"] = sha((directory / abi["file"]).read_text().encode())
         document["manifest"]["rtl_semantic_sha256"] = {s.name: rtl_hash(s) for s in read_sources(directory)}
     document["semantic_sha256"] = semantic_hash(document["manifest"])
     path.write_text(json.dumps(document), encoding="utf-8")
@@ -74,10 +76,19 @@ def test_descriptor_corruption_is_rejected_by_specific_checks(exported, fault, d
 def test_rtl_corruption_rejected_even_with_rehashed_manifest(exported, fault, diagnostic):
     path = exported / "BufferExample.sv"
     text = path.read_text()
-    old, new = (("assign ca_in_data = in_bits_0;", "assign ca_in_data = {in_bits_0[7:2], in_bits_0[0], in_bits_0[1]};")
-                if fault == "mapping" else (".reset    (reset)", ".reset    (1'b0)"))
-    assert text.count(old) == 1
-    path.write_text(text.replace(old, new), encoding="utf-8")
+    if fault == "mapping":
+        abi = exported / "ref_BufferExample.sv"
+        refs = abi.read_text()
+        old = "ca_p_7_in_data in_bits"
+        assert refs.count(old) == 1
+        # A valid same-width reference to a deliberately permuted source.
+        text = text.replace("endmodule", "wire [7:0] wrong_bits = {in_bits[7:2],in_bits[0],in_bits[1]};\nendmodule")
+        abi.write_text(refs.replace(old, "ca_p_7_in_data wrong_bits"))
+    else:
+        old = ".reset    (reset)"
+        assert text.count(old) == 1
+        text = text.replace(old, ".reset    (1'b0)")
+    path.write_text(text, encoding="utf-8")
     edit_manifest(exported, lambda _: None, refresh_rtl=True)
     with pytest.raises(ValueError, match=f"^{diagnostic}$"):
         validate_export(exported)

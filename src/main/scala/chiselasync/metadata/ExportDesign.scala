@@ -8,14 +8,17 @@ import java.nio.file.{Files, Path}
 import java.security.MessageDigest
 import scala.jdk.CollectionConverters._
 
-/** Qualified debug export. check_export.py must validate the resulting RTL before consumption. */
+/** Read-probe export. check_export.py must validate the resulting RTL before consumption. */
 object ExportDesign {
-  val options: Seq[String] = Vector("-O=debug", "--no-dedup", "--preserve-values=named",
-    "--strip-fir-debug-info", "--lowering-options=disallowPortDeclSharing,disallowLocalVariables")
+  sealed trait Mode { def options: Seq[String] }
+  private val lowering = Vector("--strip-fir-debug-info", "--lowering-options=disallowPortDeclSharing,disallowLocalVariables")
+  case object Optimized extends Mode { def options = Vector("-O=release") ++ lowering }
+  case object Debug extends Mode { def options = Vector("-O=debug", "--no-dedup", "--preserve-values=named") ++ lowering }
+  def options: Seq[String] = Optimized.options
   private def sha(bytes: Array[Byte]): String = MessageDigest.getInstance("SHA-256").digest(bytes)
     .map(b => f"${b & 0xff}%02x").mkString
 
-  def emit(gen: => AsyncModule, destination: Path): Unit = {
+  def emit(gen: => AsyncModule, destination: Path, mode: Mode = Optimized): Unit = {
     Files.createDirectories(destination)
     Files.deleteIfExists(destination.resolve("contract.json"))
     Files.deleteIfExists(destination.resolve("resolved.json"))
@@ -26,7 +29,7 @@ object ExportDesign {
     var module: AsyncModule = null
     ChiselStage.emitSystemVerilogFile({ module = gen; module },
       Array("--target-dir", destination.toAbsolutePath.toString),
-      options.toArray ++ Array(s"--output-hw-mlir=${destination.toAbsolutePath.resolve("design.hw.mlir")}"))
+      mode.options.toArray ++ Array(s"--output-hw-mlir=${destination.toAbsolutePath.resolve("design.hw.mlir")}"))
     val contract = module.contract.json
     def resources(node: ujson.Value): Seq[String] = node("primitives").arr.map(_("resource").str).toSeq ++
       node("children").arr.flatMap(child => resources(child("contract")))
@@ -45,11 +48,14 @@ object ExportDesign {
           .mkString("\n").stripTrailing() + "\n"
         path.getFileName.toString -> ujson.Str(sha(normalized.getBytes(UTF_8)))
       }.sortBy(_._1)
-    val manifest = ujson.Obj("schema" -> "chisel-async-contract-v1", "time_unit" -> "fs",
+    val probeFile = s"ref_${module.name}.sv"
+    val probeHash = sha(Files.readString(destination.resolve(probeFile), UTF_8).replace("\r\n", "\n").getBytes(UTF_8))
+    val manifest = ujson.Obj("schema" -> "chisel-async-contract-v2", "time_unit" -> "fs",
       "time_range" -> "0..9223372036854775807", "top" -> module.name,
       "toolchain" -> ujson.Obj("chisel" -> chiselVersion, "scala" -> scalaVersion, "firtool" -> "1.160.0",
-        "options" -> ujson.Arr.from(options)), "resources" -> ujson.Obj.from(hashes),
-      "rtl_semantic_sha256" -> ujson.Obj.from(rtlHashes), "design" -> contract)
+        "options" -> ujson.Arr.from(mode.options)), "resources" -> ujson.Obj.from(hashes),
+      "rtl_semantic_sha256" -> ujson.Obj.from(rtlHashes),
+      "probe_abi" -> ujson.Obj("file" -> probeFile, "sha256" -> probeHash), "design" -> contract)
     // Hash compact insertion-ordered JSON. No filesystem paths or timestamps enter this identity.
     val semantic = ujson.write(manifest)
     val result = ujson.Obj("semantic_sha256" -> sha(semantic.getBytes(UTF_8)), "manifest" -> manifest)

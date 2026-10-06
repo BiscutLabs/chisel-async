@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Check the emitted primitive connectivity against the inspected Fig. 15.
 
-Restricted to the pinned debug RTL dialect, not a general Verilog parser.
+Restricted to the pinned emitted RTL dialect, not a general Verilog parser.
 The independent STG oracle checks temporal behavior separately.
 """
 import re
@@ -22,6 +22,8 @@ def check_topology(source):
     cells = {}
     for match in re.finditer(r"(ChiselAsync\w+_v1)\s*#\((.*?)\)\s*ca_primitive_(\w+)\s*\((.*?)\);", source, re.S):
         model, params, name, body = match.groups()
+        if model == "ChiselAsyncTimingMarker_v1":
+            continue  # Passive metadata; check_export validates all parameters and bindings.
         ports = dict(re.findall(r"\.(\w+)\s*\(([^()]+)\)", body))
         numbers = dict(re.findall(r"\.(\w+)\s*\((\d+)\)", params))
         assert name not in cells, "TOPOLOGY_DUPLICATE_CELL"
