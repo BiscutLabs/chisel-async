@@ -45,7 +45,8 @@ class DualRailToFourPhase[T <: Data](gen: T, timing: BundledTiming, phase: Phase
   private val storage = asyncChild("storage")(d => new LongHoldBuffer(gen, timing, d))
   private val present = (0 until gen.getWidth).map(i => cells.or(s"present$i", Seq(in.zero.asUInt(i), in.one.asUInt(i))))
   private val complete = cells.c("completion", present)
-  private val closed = cells.or("decode_close", Seq(complete, storage.in.ack))
+  private val closed = cells.or("decode_close", Seq(complete, storage.in.ack),
+    "OR of overlapping completion/acknowledgement; hold decoded payload until both return; ideal wires")
   storage.in.bits := cells.latch("decoded", in.one.asUInt, closed).asTypeOf(gen)
   // Completion may outrun the decoded latch's output propagation. Admission
   // must wait for the binary payload, even though the storage has its own guard.

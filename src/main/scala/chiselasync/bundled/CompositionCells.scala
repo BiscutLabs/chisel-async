@@ -76,14 +76,14 @@ private[chiselasync] final class CompositionCells(owner: AsyncModule, delay: Mod
       "INVERT" -> invert), resetRef, "atomic AND with input bubbles; stable selection during handshake")
     cell.q
   }
-  def or(id: String, inputs: Seq[Bool]): Bool = {
+  def or(id: String, inputs: Seq[Bool], effects: String = "OR of mutually exclusive handshakes; ideal wires"): Bool = {
     require(inputs.nonEmpty)
     inputs.tail.zipWithIndex.foldLeft(inputs.head) { case (a, (b, index)) =>
       val cell = Module(new ControlGate(1, GateOperation.Or, delay))
       cell.reset := owner.reset; cell.a := a.asUInt; cell.b := b.asUInt
       owner.contract.primitive(s"${id}_$index", cell, Map("WIDTH" -> BigInt(1), "OP" -> BigInt(2),
         "DELAY_FS" -> BigInt(delay.fs), "RESET_VALUE" -> BigInt(0)), resetRef,
-        "OR of mutually exclusive handshakes; ideal wires")
+        effects)
       cell.q.asBool
     }
   }

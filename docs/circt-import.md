@@ -7,3 +7,5 @@ Use the scalar continuous-assignment delay form `assign #DELAY_FS q = ...` in th
 CA-06 adds the atomic AND source to the same test: two positive delay values and one diagnostic-specific parenthesized mutation, bringing the current inventory to twelve checks. The nine-check result above remains historical evidence for its recorded revision.
 
 Successful import is not an equivalence or simulation qualification of arbitrary CIRCT passes. The independent Icarus primitive and controller campaigns continue to check digital behavior.
+
+CA-07 adds actual importer checks for the packaged XOR, toggle and finite digital MUTEX sources in `verification/test_phase.py`. Each must retain its specified 1,000,000 fs scalar delay in LLHD. Their event/protocol behavior is checked separately by the Icarus campaign; importer success does not qualify analog arbitration.
