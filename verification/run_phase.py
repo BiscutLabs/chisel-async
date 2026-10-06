@@ -255,12 +255,12 @@ def delay_overrides(manifest, seed):
     rng=random_words(seed+1); result=[]; top=manifest['top']
     for node in nodes(manifest['design']):
         policy=next((t for t in node['timing'] if t['kind']=='long-hold-bundling-v2'),None)
-        adapter=next((t for t in node['timing'] if t['kind'] in ('phase-conversion-v1','encoding-boundary-v1')),None)
+        adapter=next((t for t in node['timing'] if t['kind'] in ('phase-conversion-v2','encoding-boundary-v1')),None)
         for p in node['primitives']:
             key='RESOLVE_FS' if p['model']=='ChiselAsyncMutex_v1' else 'DELAY_FS'
-            if key not in p['parameters'] or p['id'] in ('request_delay','output_delay','return_guard','acknowledge_guard','decoded_request_guard'): continue
+            if key not in p['parameters'] or p['id'] in ('request_delay','output_delay','return_guard','acknowledge_guard','decoded_request_guard','request_guard'): continue
             delay=1000000*(1 if seed==1 else 10 if seed==2 else 1+next(rng)%10)
-            bounds=adapter['cells'] if adapter else None
+            bounds=(adapter['history_closure'] if p['id']=='history_close' else adapter['cells']) if adapter else None
             if policy:
                 bounds={**policy['control_delays'],'payload':policy['latch_delay'],'data_delay':policy['data_delay']}.get(p['id'])
             if bounds: assert int(bounds['min_fs'])<=delay<=int(bounds['max_fs']), 'OVERRIDE_OUTSIDE_POLICY'
@@ -271,13 +271,17 @@ def delay_overrides(manifest, seed):
 def execute(fixture, seed, directory, manifest, ports, sources, scenario='standard'):
     directory.mkdir(parents=True,exist_ok=True)
     overrides=delay_overrides(manifest,seed)
-    # Explore both legal collision outcomes and an alternating digital policy.
+    # Fixed policies remain as corners; later seeds vary winner and resolution per decision.
     for node in nodes(manifest['design']):
         for p in node['primitives']:
-            if p['model']=='ChiselAsyncMutex_v1': overrides.append(f'defparam dut{p["rtl_path"][len(manifest["top"]):]}.POLICY={seed%3};')
+            if p['model']=='ChiselAsyncMutex_v1':
+                path=f'dut{p["rtl_path"][len(manifest["top"]):]}'
+                overrides += [f'defparam {path}.POLICY={seed if seed<3 else 3};',
+                              f'defparam {path}.SEED={seed%0xffffffff+1};',
+                              f'defparam {path}.RESOLVE_MAX_FS=20000000;']
     text,expected=bench(fixture,manifest,ports,seed,overrides,scenario)
     path=directory/'bench.sv';path.write_text(text,encoding='utf-8')
-    command=['iverilog','-g2012','-s','PhaseBench','-o',str(directory/'sim.vvp'),str(path),*map(str,sources)]
+    command=['iverilog','-g2012','-DCHISEL_ASYNC_MUTEX_TRACE','-s','PhaseBench','-o',str(directory/'sim.vvp'),str(path),*map(str,sources)]
     compile_result=subprocess.run(command,capture_output=True,text=True,timeout=30)
     (directory/'compile.log').write_text(compile_result.stdout+compile_result.stderr,encoding='utf-8')
     assert compile_result.returncode==0, 'PHASE_COMPILE: '+compile_result.stderr

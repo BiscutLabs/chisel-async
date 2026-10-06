@@ -93,11 +93,12 @@ class TwoPhaseMerge[T <: Data](gen: T, val inputs: Int, timing: BundledTiming, p
   output("out", out, core.out); contract.capacity(1)
 }
 class TwoPhaseArbiter[T <: Data](gen: T, timing: BundledTiming, phase: PhaseTiming, cellDelay: ModelTime,
-    resolution: ModelTime, policy: MutexPolicy.Value, domain: ResetDomain = new ResetDomain("root"))
+    resolution: ModelTime, policy: MutexPolicy.Value, domain: ResetDomain = new ResetDomain("root"),
+    seed: Long = 1L, resolutionJitter: ModelTime = ModelTime(0))
     extends PhaseComposition(phase, domain) {
   val in = IO(Flipped(Vec(2, new Channel(gen, resetDomain).twoPhase)))
   val out = IO(new Channel(gen, resetDomain).twoPhase)
-  private val core = asyncChild("core")(d => new FourPhaseArbiter(gen, timing, cellDelay, resolution, policy, d))
+  private val core = asyncChild("core")(d => new FourPhaseArbiter(gen, timing, cellDelay, resolution, policy, d, seed, resolutionJitter))
   in.zipWithIndex.foreach { case (port, i) => FourPhase.connect(core.in(i), input(s"in$i", port)) }
   output("out", out, core.out); contract.capacity(1)
 }

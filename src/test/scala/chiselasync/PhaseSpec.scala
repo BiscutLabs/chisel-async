@@ -17,6 +17,22 @@ class PhaseSpec extends AnyFunSuite {
   private val timing=BundledTiming.Digital(ModelTime(4),DelayBounds.fixed(cell),
     ControlDelays.uniform(DelayBounds.fixed(cell)),DelayBounds.fixed(cell),ModelTime(4))
   private val phase=PhaseTiming(DelayBounds.fixed(cell),ModelTime(2))
+  test("history closure is independent of data-to-Q and guarded strictly") {
+    val closure=DelayBounds(ModelTime(0),ModelTime(12),ModelTime(3))
+    val policy=PhaseTiming(DelayBounds.fixed(cell),ModelTime(2),closure,ModelTime(13))
+    val text=ChiselStage.emitCHIRRTL(new FourPhaseToTwoPhase(UInt(8.W),timing,policy))
+    assert(text.contains("history_close")); assert(text.contains("request_guard"))
+    intercept[IllegalArgumentException] { policy.copy(requestDelay=ModelTime(12)) }
+    intercept[IllegalArgumentException] { policy.copy(requestDelay=ModelTime(0)) }
+  }
+  test("seeded MUTEX accepts unsigned seeds and rejects zero or overflowing bounds") {
+    def emit(seed:Long,jitter:ModelTime) = ChiselStage.emitCHIRRTL(new FourPhaseArbiter(
+      UInt(8.W),timing,cell,cell,MutexPolicy.SeededRandom,seed=seed,resolutionJitter=jitter))
+    assert(emit(0xffffffffL,ModelTime(19)).contains("RESOLVE_MAX_FS = 20"))
+    intercept[IllegalArgumentException] { emit(0L,cell) }
+    intercept[IllegalArgumentException] { emit(0x100000000L,cell) }
+    intercept[IllegalArgumentException] { emit(1L,ModelTime(Long.MaxValue)) }
+  }
   test("phase return bounds reject zero cells, equality and undersized guards") {
     intercept[IllegalArgumentException] { PhaseTiming(DelayBounds.fixed(ModelTime(0)),cell) }
     intercept[IllegalArgumentException] { PhaseTiming(DelayBounds(cell,ModelTime(10),cell),ModelTime(10)) }

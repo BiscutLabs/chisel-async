@@ -107,8 +107,8 @@ def test_arbitration_ledger_allows_either_winner_but_preserves_each_stream(winne
     with pytest.raises(AssertionError,match='ARBITRATION_PAYLOAD'): model.observe(False,'out',0,1,99,0)
 
 
-@pytest.mark.parametrize('fixture,kind', [('phase_to_four','phase-conversion-v1'),
-    ('phase_to_two','phase-conversion-v1'),('encoding_to_dual','encoding-boundary-v1'),
+@pytest.mark.parametrize('fixture,kind', [('phase_to_four','phase-conversion-v2'),
+    ('phase_to_two','phase-conversion-v2'),('encoding_to_dual','encoding-boundary-v1'),
     ('encoding_from_dual','encoding-boundary-v1')])
 def test_phase_and_encoding_constraints_survive_optimized_export(fixture,kind):
     path=ROOT/'target/generated'/fixture

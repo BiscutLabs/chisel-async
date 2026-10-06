@@ -25,18 +25,21 @@ private[chiselasync] class ToFourPhase[T <: Data](gen: T, phase: PhaseTiming, do
 }
 
 /** req4+ -> req2 edge -> ack2 edge -> ack4+ -> req4- -> ack4-.
-  * The acknowledgement history latch closes before the toggle can propagate.
+  * The request guard exceeds the explicitly modeled history closure path.
   */
 private[chiselasync] class ToTwoPhase[T <: Data](gen: T, phase: PhaseTiming, domain: ResetDomain)
     extends AsyncModule(domain) {
   val in = IO(Flipped(new Channel(gen, resetDomain).bundled))
   val out = IO(new Channel(gen, resetDomain).twoPhase)
   private val cells = new CompositionCells(this, phase.cells.model)
-  private val history = cells.latch("history", out.ack.asUInt, in.req).asBool
-  out.req := cells.toggle("request_phase", in.req)
+  private val closed = cells.buffer("history_close", in.req.asUInt, phase.historyClosure.model).asBool
+  private val history = cells.latch("history", out.ack.asUInt, closed).asBool
+  private val toggled = cells.toggle("request_phase", in.req)
+  out.req := cells.buffer("request_guard", toggled.asUInt, phase.requestDelay).asBool
   out.bits := in.bits
   in.ack := cells.xor("acknowledge", out.ack, history)
   contract.channel("in", in, "input"); contract.twoPhaseChannel("out", out, "output")
+  contract.endpoint("history_closed", closed)
   contract.phaseTiming("phase_conversion", "four-to-two", phase)
 }
 

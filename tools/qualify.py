@@ -117,7 +117,8 @@ def main():
                  "examples/runMain chiselasync.examples.EmitArchitecture target/generated",
                  "examples/runMain chiselasync.examples.EmitOptimized target/generated",
                  "examples/runMain chiselasync.examples.EmitComposition target/generated",
-                 "examples/runMain chiselasync.examples.EmitPhase target/generated"]
+                 "examples/runMain chiselasync.examples.EmitPhase target/generated",
+                 "examples/runMain chiselasync.examples.EmitReference target/generated"]
         steps = setup + [("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
             ("python", [python, "-m", "pytest", *[str(p) for p in sorted((ROOT / "verification").glob("test_*.py"))], "-q"])]
         steps += [(name, [python, str(ROOT / path)]) for name, path in (
@@ -125,7 +126,9 @@ def main():
             ("comparison", "verification/compare_controllers.py"), ("timing", "verification/run_timing.py"),
             ("longhold", "verification/run_longhold.py"), ("architecture", "verification/run_architecture.py"),
             ("optimized", "verification/run_optimized.py"), ("composition", "verification/run_composition.py"),
-            ("phase", "verification/run_phase.py"))]
+            ("phase", "verification/run_phase.py"), ("closure", "verification/run_closure.py"),
+            ("mutex", "verification/run_mutex.py"), ("dims", "verification/run_dims.py"),
+            ("reference", "verification/run_reference.py"))]
         steps += [("chiselsim", [python, str(ROOT / "verification/run_chiselsim.py")]),
                   ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")])]
         run_steps(steps, environment, output)

@@ -13,14 +13,16 @@ import chiselasync.protocol.{Channel, FourPhase}
   */
 class FourPhaseArbiter[T <: Data](gen: T, timing: BundledTiming, cellDelay: ModelTime,
     resolution: ModelTime, policy: MutexPolicy.Value,
-    domain: ResetDomain = new ResetDomain("root")) extends AsyncModule(domain) {
+    domain: ResetDomain = new ResetDomain("root"), seed: Long = 1L,
+    resolutionJitter: ModelTime = ModelTime(0)) extends AsyncModule(domain) {
   val in = IO(Flipped(Vec(2, new Channel(gen, resetDomain).bundled)))
   val out = IO(new Channel(gen, resetDomain).bundled)
   private val cells = new CompositionCells(this, cellDelay)
-  private val mutex = Module(new Mutex(resolution, policy))
+  private val mutex = Module(new Mutex(resolution, policy, seed, resolutionJitter))
   mutex.reset := reset; mutex.request := VecInit(in.map(_.req)).asUInt
   contract.primitive("mutex", mutex, Map("RESOLVE_FS" -> BigInt(resolution.fs),
-    "POLICY" -> BigInt(policy.id)), "reset",
+    "POLICY" -> BigInt(policy.id), "SEED" -> BigInt(seed),
+    "RESOLVE_MAX_FS" -> (BigInt(resolution.fs) + resolutionJitter.fs)), "reset",
     "finite digital arbitration choices; persistent requests; one-hot grants; no physical resolution-time bound")
   private val merge = asyncChild("merge")(d => new FourPhaseMerge(gen, 2, timing, cellDelay, d))
   for (i <- 0 until 2) {

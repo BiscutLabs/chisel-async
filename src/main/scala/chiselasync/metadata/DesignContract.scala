@@ -218,17 +218,28 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
   def phaseTiming(id: String, direction: String, policy: PhaseTiming): Unit = {
     require(Set("two-to-four", "four-to-two").contains(direction), "invalid phase converter direction")
     claim(id)
-    val refs = Seq("in_request", "in_acknowledge", "out_request", "out_acknowledge")
+    val toTwo = direction == "four-to-two"
+    val refs = Seq("in_request", "in_acknowledge", "out_request", "out_acknowledge") ++
+      (if (toTwo) Seq("history_closed") else Seq.empty)
     val guard = if (direction == "two-to-four") policy.returnDelay.fs else 0L
     val marker = timingMarker(id, refs, Map("KIND" -> BigInt(5), "OUTPUT_FS" -> BigInt(guard),
       "A_MIN_FS" -> BigInt(policy.cells.min.fs), "A_MAX_FS" -> BigInt(policy.cells.max.fs),
-      "A_MODEL_FS" -> BigInt(policy.cells.model.fs)))
-    obligations += ujson.Obj("id" -> id, "kind" -> "phase-conversion-v1", "marker" -> marker,
+      "A_MODEL_FS" -> BigInt(policy.cells.model.fs)) ++ (if (toTwo) Map(
+        "MATCHED_FS" -> BigInt(policy.requestDelay.fs), "B_MIN_FS" -> BigInt(policy.historyClosure.min.fs),
+        "B_MAX_FS" -> BigInt(policy.historyClosure.max.fs), "B_MODEL_FS" -> BigInt(policy.historyClosure.model.fs)) else Map.empty))
+    val record = ujson.Obj("id" -> id, "kind" -> "phase-conversion-v2", "marker" -> marker,
       "direction" -> direction, "input_request" -> refs(0), "input_acknowledge" -> refs(1),
       "output_request" -> refs(2), "output_acknowledge" -> refs(3),
       "cells" -> ujson.Obj("min_fs" -> policy.cells.min.fs.toString, "max_fs" -> policy.cells.max.fs.toString,
         "model_fs" -> policy.cells.model.fs.toString), "return_delay_fs" -> guard.toString,
-      "assumptions" -> "ideal forks; zero latch aperture; sequential full-return conversion; no analog timing claim")
+      "assumptions" -> "sequential full-return conversion; history closure path includes distribution/skew and aperture allowance; request guard strictly exceeds closure maximum; other wires ideal; no analog timing claim")
+    if (toTwo) {
+      record("history_closed") = refs(4)
+      record("history_closure") = ujson.Obj("min_fs" -> policy.historyClosure.min.fs.toString,
+        "max_fs" -> policy.historyClosure.max.fs.toString, "model_fs" -> policy.historyClosure.model.fs.toString)
+      record("request_delay_fs") = policy.requestDelay.fs.toString
+    }
+    obligations += record
   }
 
   def encodingTiming(id: String, direction: String, timing: BundledTiming, phase: PhaseTiming): Unit = {

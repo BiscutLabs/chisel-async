@@ -185,8 +185,9 @@ def validate_manifest(document):
                         delay = (timing["return_delay_fs"] if p["id"] == "acknowledge_guard" else
                                  timing["matched_delay_fs"] if p["id"] == "decoded_request_guard" else timing["cells"]["model_fs"])
                         require(p["parameters"].get("DELAY_FS") == delay, "ENCODING_PARAMETER_MISMATCH")
-            elif timing.get("kind") == "phase-conversion-v1":
-                shape(timing, "id kind marker direction input_request input_acknowledge output_request output_acknowledge cells return_delay_fs assumptions")
+            elif timing.get("kind") == "phase-conversion-v2":
+                shape(timing, "id kind marker direction input_request input_acknowledge output_request output_acknowledge cells return_delay_fs assumptions" +
+                      (" history_closed history_closure request_delay_fs" if "history_closure" in timing else ""))
                 refs, times = ("input_request", "input_acknowledge", "output_request", "output_acknowledge"), ("return_delay_fs",)
                 require(tuple(timing[r] for r in refs) == ("in_request", "in_acknowledge", "out_request", "out_acknowledge"), "INVALID_PHASE_BINDING")
                 bound = timing["cells"]
@@ -207,6 +208,23 @@ def validate_manifest(document):
                     require(name in primitives and primitives[name]["parameters"].get("DELAY_FS") == bound["model_fs"], "PHASE_PARAMETER_MISMATCH")
                 if direction == "two-to-four":
                     require(primitives.get("return_guard", {}).get("parameters", {}).get("DELAY_FS") == str(guard), "PHASE_PARAMETER_MISMATCH")
+                if direction == "four-to-two":
+                    require(timing.get("history_closed") == "history_closed", "MISSING_PHASE_CLOSURE")
+                    closure = timing["history_closure"]
+                    shape(closure, "min_fs max_fs model_fs")
+                    require(all(type(v) is str and re.fullmatch(r"0|[1-9][0-9]*", v) and int(v) <= 2**63-1 for v in closure.values()), "INVALID_MODEL_TIME")
+                    require(int(closure["min_fs"]) <= int(closure["model_fs"]) <= int(closure["max_fs"]), "INVALID_DELAY_BOUNDS")
+                    request_guard = timing["request_delay_fs"]
+                    require(type(request_guard) is str and re.fullmatch(r"[1-9][0-9]*", request_guard) and int(request_guard) <= 2**63-1, "INVALID_MODEL_TIME")
+                    require(int(request_guard) > int(closure["max_fs"]), "INVALID_PHASE_CLOSURE_GUARD")
+                    for name, value in (("history_close", closure["model_fs"]), ("request_guard", request_guard)):
+                        require(primitives.get(name, {}).get("parameters", {}).get("DELAY_FS") == value, "PHASE_PARAMETER_MISMATCH")
+                        p = primitives[name]
+                        require(p['model'] == 'ChiselAsyncControlGate_v1' and
+                                all(p['parameters'].get(k) == v for k,v in {'WIDTH':'1','OP':'0','RESET_VALUE':'0'}.items()), 'PHASE_GUARD_CELL_MISMATCH')
+                    refs += ("history_closed",)
+                else:
+                    require("history_closure" not in timing, "INVALID_PHASE_DIRECTION")
             elif timing.get("kind") == "bundled-data-path-v1":
                 shape(timing, "id kind marker source sink logic logic_model_fs budget delay_owner delay_cell accounting")
                 refs, times = ("source", "sink"), ("logic_model_fs",)
@@ -281,7 +299,7 @@ def validate_manifest(document):
         kinds = [t["kind"] for t in node["timing"]]
         primitive_ids = {p["id"] for p in node["primitives"]}
         if "request_phase" in primitive_ids or {"master_close", "phase", "returned"} <= primitive_ids:
-            require(kinds.count("phase-conversion-v1") == 1, "MISSING_PHASE_CONSTRAINT")
+            require(kinds.count("phase-conversion-v2") == 1, "MISSING_PHASE_CONSTRAINT")
         if "decoded" in primitive_ids or {"zero0", "one0"} <= primitive_ids and any(c["id"] == "storage" for c in node["children"]):
             require(kinds.count("encoding-boundary-v1") == 1, "MISSING_ENCODING_CONSTRAINT")
         if "long-hold-bundling-v2" in kinds or {"a", "b", "acknowledge", "long_hold", "payload"} <= primitive_ids:
@@ -307,7 +325,8 @@ def validate_manifest(document):
 
 def timing_refs(timing):
     if timing["kind"] == "encoding-boundary-v1": return ("input_data", "input_control", "input_acknowledge", "output_data", "output_control", "output_acknowledge")
-    if timing["kind"] == "phase-conversion-v1": return ("input_request", "input_acknowledge", "output_request", "output_acknowledge")
+    if timing["kind"] == "phase-conversion-v2":
+        return ("input_request", "input_acknowledge", "output_request", "output_acknowledge") + (("history_closed",) if timing["direction"] == "four-to-two" else ())
     if timing["kind"] == "bundled-data-path-v1": return ("source", "sink")
     if timing["kind"] == "long-hold-fork-v1": return ("aout", "state_a")
     return (("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
@@ -325,8 +344,11 @@ def marker_parameters(timing, endpoints):
                       OUTPUT_FS=timing["return_delay_fs"], MATCHED_FS=timing["matched_delay_fs"])
         for role, key in (("A", "cells"), ("DATA", "data_delay")):
             result.update({f"{role}_{b.upper()}_FS": timing[key][b+"_fs"] for b in ("min", "max", "model")})
-    elif timing["kind"] == "phase-conversion-v1":
+    elif timing["kind"] == "phase-conversion-v2":
         result.update(KIND="5", OUTPUT_FS=timing["return_delay_fs"])
+        if timing["direction"] == "four-to-two":
+            result.update(MATCHED_FS=timing["request_delay_fs"])
+            result.update({f"B_{b.upper()}_FS": timing["history_closure"][b+"_fs"] for b in ("min", "max", "model")})
         result.update({f"A_{b.upper()}_FS": timing["cells"][b+"_fs"] for b in ("min", "max", "model")})
     elif timing["kind"] == "long-hold-bundling-v2":
         result.update(KIND="2", MATCHED_FS=timing["matched_delay_fs"], OUTPUT_FS=timing["output_delay_fs"])
@@ -458,6 +480,20 @@ def probe_source(manifest, scopes):
                 comparisons.append(f'if ({hold["rtl_path"]}.b !== {endpoint_by_id[timing["aout"]]["rtl_path"]} || '
                                    f'{hold["rtl_path"]}.a !== {endpoint_by_id[timing["state_a"]]["rtl_path"]}) '
                                    '$fatal(1, "HOLD_FORK_BINDING_MISMATCH");')
+            if timing['kind'] == 'phase-conversion-v2' and timing['direction'] == 'four-to-two':
+                cells = {p['id']:p['rtl_path'] for p in node['primitives']}
+                endpoint = lambda key: endpoint_by_id[timing[key]]['rtl_path']
+                pairs = [(cells['history_close']+'.a', endpoint('input_request')),
+                         (cells['request_phase']+'.trigger', endpoint('input_request')),
+                         (cells['history']+'.closed', endpoint('history_closed')),
+                         (cells['history_close']+'.q', endpoint('history_closed')),
+                         (cells['request_guard']+'.a', cells['request_phase']+'.q'),
+                         (cells['request_guard']+'.q', endpoint('output_request')),
+                         (cells['history']+'.d', endpoint('output_acknowledge')),
+                         (cells['acknowledge']+'.a', endpoint('output_acknowledge')),
+                         (cells['acknowledge']+'.b', cells['history']+'.q'),
+                         (cells['acknowledge']+'.q', endpoint('input_acknowledge'))]
+                comparisons += [f'if ({a} !== {b}) $fatal(1,"PHASE_CLOSURE_BINDING_MISMATCH");' for a,b in pairs]
         if node["rtl_path"] == top:
             drivers += [(top + "." + name, p["width"])
                         for name, p in scopes[top]["ports"].items() if p["direction"] == "input"]
@@ -641,7 +677,7 @@ def validate_export(directory: Path):
     require(built.returncode == 0, "RTL_PROBE_ELABORATION_FAILED")
     simulation = subprocess.run(["vvp", "contract_probe.vvp"], cwd=directory, text=True, capture_output=True, timeout=60)
     (directory / "contract_simulation.log").write_text(simulation.stdout + simulation.stderr, encoding="utf-8")
-    for diagnostic in ("RESET_BINDING_MISMATCH", "TIMING_MARKER_BINDING_MISMATCH"):
+    for diagnostic in ("RESET_BINDING_MISMATCH", "TIMING_MARKER_BINDING_MISMATCH", "PHASE_CLOSURE_BINDING_MISMATCH"):
         require(diagnostic not in simulation.stdout, diagnostic)
     require(simulation.returncode == 0 and f"CONTRACT_PROBES_PASS:{checks}" in simulation.stdout,
             "ENDPOINT_MAPPING_MISMATCH")
@@ -671,7 +707,8 @@ def main():
                 "merge", "fork_join", "feedback", "phase_to_four", "phase_to_two", "arbiter",
                 "two_buffer", "two_wide", "two_fifo", "two_initialized", "two_initial", "two_fork", "two_join",
                 "two_select", "two_merge", "two_arbiter", "two_transform", "encoding_to_dual",
-                "encoding_from_dual", "encoding_roundtrip", "phase_roundtrip")
+                "encoding_from_dual", "encoding_roundtrip", "phase_roundtrip", "reference_behavioral",
+                "reference_bundled", "reference_qdi", "reference_gals", "reference_core")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

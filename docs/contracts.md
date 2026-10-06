@@ -25,6 +25,8 @@ Two-phase bundled data encodes a token by a request transition and its completio
 
 Both acknowledgement polarities deliver tokens, even for repeated payloads. Reset restores `00`, aborts pending work and preserves prior delivery accounting. `TwoPhaseContract` tests all four states, illegal edges, both completion polarities and reset. CA-07 implements typed `TwoPhase[T]` channels, sequential phase adapters, storage/routing counterparts and converters under this convention. See [arbitration and conversion contracts](arbitration-and-two-phase.md) for capacities, timing assumptions and the finite digital MUTEX policy.
 
+Four-to-two adapters now require a post-toggle request guard exceeding a separately declared history-closure bound, which includes request distribution/skew and aperture allowance. This replaces the former instantaneous-close assumption; see the [closure contract](adapter-closure-and-reference.md).
+
 The settled digital observer permits idle data to change causally after acknowledgement in the same femtosecond sample. Completion reports the payload retained at the request transition, not the new idle value. Data changes in an observed pending state still fail. This sampling convention does not establish physical hold time or distinguish delta-cycle glitches within one settled sample.
 
 ## Observation traces

@@ -6,6 +6,8 @@ A Chisel library for asynchronous hardware, developed independently under Apache
 
 The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip implementation. This library works with an existing simulator and does not depend on Chiselator, Yosys, a PDK, ACT or a GPU.
 
+The latest [adapter-closure repair and four-style adder reference](docs/adapter-closure-and-reference.md) add explicit closure timing, seeded variable-resolution arbitration, and behavioral/bundled/DIMS/GALS integration tests to the one-command qualifier. L1 acceptance remains open.
+
 ## What works now
 
 - `AsyncModule`: `RawModule` with an explicit active-high `AsyncReset`, no implicit clock.

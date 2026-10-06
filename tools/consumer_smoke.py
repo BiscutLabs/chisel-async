@@ -30,6 +30,9 @@ def main():
     parent.mkdir(parents=True, exist_ok=True)
     consumer = Path(tempfile.mkdtemp(prefix="clean consumer ", dir=parent))
     shutil.copytree(ROOT / "verification/consumer", consumer, dirs_exist_ok=True)
+    # Recompile example assembly against only the published library dependency.
+    shutil.copy(ROOT / "examples/src/main/scala/chiselasync/examples/EmitReference.scala",
+                consumer / "src/main/scala/EmitReference.scala")
     (consumer / "project").mkdir()
     shutil.copy(ROOT / "project/build.properties", consumer / "project/build.properties")
     environment = dict(os.environ)
@@ -73,9 +76,14 @@ def main():
     subprocess.run([sys.executable, str(ROOT / "verification/run_composition.py"), "--seeds", "0",
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/composition")],
                    cwd=ROOT, check=True, timeout=180)
-    subprocess.run([sys.executable, str(ROOT / "verification/run_phase.py"), "--seeds", "0", "1", "2",
+    subprocess.run([sys.executable, str(ROOT / "verification/run_phase.py"), "--seeds", "0", "1", "2", "3",
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/phase")],
                    cwd=ROOT, check=True, timeout=180)
+    for lane in ("closure", "mutex", "dims", "reference"):
+        subprocess.run([sys.executable, str(ROOT / f"verification/run_{lane}.py"),
+                        *(["--seeds", "0", "2", "3"] if lane == "reference" else []),
+                        "--generated", str(consumer / "generated"), "--output", str(consumer / "verification" / lane)],
+                       cwd=ROOT, check=True, timeout=180)
     print(f"Published artifact consumed and simulated successfully: {consumer}")
 
 

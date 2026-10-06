@@ -825,7 +825,7 @@
           "$ref": "#/$defs/id"
         },
         "kind": {
-          "const": "phase-conversion-v1"
+          "const": "phase-conversion-v2"
         },
         "marker": {
           "$ref": "#/$defs/id"
@@ -856,8 +856,35 @@
         },
         "output_acknowledge": {
           "$ref": "#/$defs/id"
+        },
+        "history_closed": {
+          "$ref": "#/$defs/id"
+        },
+        "history_closure": {
+          "$ref": "#/$defs/delayBounds"
+        },
+        "request_delay_fs": {
+          "$ref": "#/$defs/time"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "direction": {
+                "const": "four-to-two"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "history_closed",
+              "history_closure",
+              "request_delay_fs"
+            ]
+          }
+        }
+      ]
     },
     "encodingTiming": {
       "type": "object",
