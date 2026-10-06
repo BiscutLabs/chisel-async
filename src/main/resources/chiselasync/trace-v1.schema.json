@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/BiscutLabs/chisel-async/trace-v1.schema.json",
+  "title": "chisel-async v1 observation (one JSONL record)",
+  "type": "object",
+  "required": ["index", "time_fs", "time_ps", "kind"],
+  "properties": {
+    "index": {"type": "integer", "minimum": 1},
+    "time_fs": {"type": "integer", "minimum": 0, "maximum": 9223372036854775807},
+    "time_ps": {"type": "integer", "minimum": 0},
+    "kind": {"type": "string", "pattern": "\\S"}
+  },
+  "additionalProperties": true,
+  "$comment": "Reader also requires contiguous indices, nondecreasing time_fs, and time_ps == time_fs // 1000. See docs/trace-format.md."
+}

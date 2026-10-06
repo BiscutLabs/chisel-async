@@ -1,5 +1,13 @@
 name: Library qualification
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      l0:
+        description: Run the frozen L0 candidate (includes full qualification)
+        type: boolean
+        default: false
 permissions:
   contents: read
 
@@ -45,7 +53,11 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y autoconf gperf bison flex libfl-dev g++ make
       - name: Set up and run complete qualification
+        if: inputs.l0 != true
         run: python tools/qualify.py
+      - name: Run frozen L0 acceptance
+        if: inputs.l0 == true
+        run: python verification/run_l0.py
       - name: Retain test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -12,6 +12,23 @@ The producer drives `req` and `bits`; the consumer drives `ack`. Idle is `(req, 
 
 Initial traffic requires coordinated reset, with external request and acknowledgement held low before reset release. On an in-flight reset, assert reset before withdrawing held requests or changing their data, then return the attached domain to idle while reset is asserted. Inputs are binary during normal operation; unknown or malformed handshake behavior is outside the current buffer contract. There is no implicit periodic clock. `FourPhase.connect` requires matching domain objects; exporting a channel requires the owner's explicit domain. Direct Chisel wiring can bypass the helper, so export probes also compare actual primitive/child reset signals with the root reset. A general public protocol-monitor API remains planned.
 
+## Two-phase baseline (specification only)
+
+Two-phase bundled data encodes a token by a request transition and its completion by an acknowledgement transition. The following parity table follows the transition-signalling convention in Sparsø, [Introduction to Asynchronous Circuit Design](https://orbit.dtu.dk/en/publications/introduction-to-asynchronous-circuit-design/), §2.1 and chapter 11. Our baseline chooses coordinated reset to `00` and data held from before request changes until acknowledgement matches request.
+
+| req, ack | Meaning | Next legal edge |
+| --- | --- | --- |
+| 00 | Idle | req rises |
+| 10 | Pending token | ack rises; token delivered |
+| 11 | Idle | req falls |
+| 01 | Pending token | ack falls; token delivered |
+
+Both acknowledgement polarities deliver tokens, even for repeated payloads. Reset restores `00`, aborts pending work and preserves prior delivery accounting. `TwoPhaseContract` tests all four states, illegal edges, both completion polarities and reset. This establishes CA-02's reference convention; production two-phase hardware and converters remain CA-07 work.
+
+## Observation traces
+
+The packaged [v1 observation schema](../src/main/resources/chiselasync/trace-v1.schema.json) and [trace format](trace-format.md) define the existing functional/timing JSONL envelope. Readers validate femtosecond ordering, units and activity independently of test completion status. Broader component-specific trace vocabularies accompany later catalog additions.
+
 ## One-entry buffer
 
 The functional buffer captures data once when storage is empty and a new request is present. It raises input acknowledgement and presents that captured data with output request. Input acknowledgement falls after the source lowers request, independently of how long the output stalls.

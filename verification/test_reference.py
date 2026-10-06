@@ -1,7 +1,37 @@
 # SPDX-License-Identifier: Apache-2.0
 import pytest
 
-from reference import FourPhaseContract, TokenLedger, reset_prefixes, two_token_schedules
+from reference import FourPhaseContract, TwoPhaseContract, TokenLedger, reset_prefixes, two_token_schedules
+
+
+@pytest.mark.parametrize("prefix,legal", [
+    ([], ("req", 1)), ([("req", 1)], ("ack", 1)),
+    ([("req", 1), ("ack", 1)], ("req", 0)),
+    ([("req", 1), ("ack", 1), ("req", 0)], ("ack", 0)),
+])
+def test_two_phase_state_table_and_reset(prefix, legal):
+    for edge in (("req", 0), ("req", 1), ("ack", 0), ("ack", 1)):
+        model = TwoPhaseContract()
+        for prior in prefix:
+            model.edge(*prior)
+        if edge == legal:
+            model.edge(*edge)
+        else:
+            with pytest.raises(AssertionError, match="TWO_PHASE_ORDER"):
+                model.edge(*edge)
+        delivered = model.delivered
+        model.reset()
+        assert (model.req, model.ack, model.delivered) == (0, 0, delivered)
+        model.edge("req", 1)
+        model.edge("ack", 1)
+        assert model.delivered == delivered + 1
+
+
+def test_two_phase_counts_both_polarities_as_tokens():
+    model = TwoPhaseContract()
+    for edge in (("req", 1), ("ack", 1), ("req", 0), ("ack", 0)) * 3:
+        model.edge(*edge)
+    assert model.delivered == 6 and model.req == model.ack == 0
 
 
 @pytest.mark.parametrize("phase", range(4))

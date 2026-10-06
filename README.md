@@ -85,3 +85,5 @@ Reports, source/checker hashes, seeds, simulator identity, XML, logs and per-cas
 Compiler emission reports remaining `circt.VerbatimBlackBoxAnno` and `firrtl.transforms.DedupGroupAnnotation` warnings with this pinned tuple. They remain visible. The checked v2 route resolves read probes through the compiler ABI under release optimization/deduplication. Debug/no-dedup is a comparison mode and preserves the withdrawn controller’s historical delay experiments. This does not claim compatibility with arbitrary compiler transformations.
 
 Read the [roadmap](docs/roadmap.md), [contributor instructions](AGENTS.md), and [provenance record](docs/provenance.md). The repository's [Apache-2.0 license](LICENSE) applies to our code; external tools retain their own licenses.
+
+The [L0 acceptance procedure](docs/l0-acceptance.md) freezes the candidate before a fresh Windows/Linux campaign. `python verification/run_l0.py` runs the full qualification plus its declared seed/depth inventory; independent review remains a separate gate.

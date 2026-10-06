@@ -13,6 +13,8 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
+from trace_contract import validate_events
+
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = {
     "buffer": "BufferExample", "wide": "WideBufferExample",
@@ -136,7 +138,7 @@ def verify_evidence(directory: Path, expected: set[str], diagnostic: str | None,
     for case in sorted(expected):
         record = json.loads((directory / f"{case}.evidence.json").read_text(encoding="utf-8"))
         status = "FAIL" if diagnostic else "PASS"
-        if (record.get("case") != case or record.get("status") != status
+        if (record.get("schema") != 1 or record.get("case") != case or record.get("status") != status
                 or record.get("observations", 0) <= 0):
             raise RuntimeError("Missing or inactive observation evidence")
         if diagnostic and str(record.get("error", "")).partition("\n")[0] != diagnostic:
@@ -145,12 +147,7 @@ def verify_evidence(directory: Path, expected: set[str], diagnostic: str | None,
         lines = trace.read_text(encoding="utf-8").splitlines()
         if len(lines) != record["observations"] or record.get("trace") != trace.name:
             raise RuntimeError("Observation trace inventory mismatch")
-        previous_time = -1
-        for index, line in enumerate(lines, start=1):
-            event = json.loads(line)
-            if event.get("index") != index or event.get("time_ps", -1) < previous_time:
-                raise RuntimeError("Invalid observation trace ordering")
-            previous_time = event["time_ps"]
+        validate_events([json.loads(line) for line in lines])
         if not diagnostic:
             check_activity(fixture, case, record)
         record["trace_sha256"] = hashlib.sha256(trace.read_bytes()).hexdigest()

@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 from run import read_sources, verify_results
-from timing_reference import MAX_TIME
+from trace_contract import validate_events
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -50,17 +50,14 @@ def hashes(paths):
 def verify_evidence(directory, case, diagnostic, fixture, hold):
     record = json.loads((directory / f"{case}.evidence.json").read_text())
     expected = "FAIL" if diagnostic else "PASS"
-    if (record.get("case") != case or record.get("status") != expected or record.get("observations", 0) <= 0
+    if (record.get("schema") != 1 or record.get("case") != case or record.get("status") != expected or record.get("observations", 0) <= 0
             or diagnostic and str(record.get("error", "")).partition("\n")[0] != diagnostic):
         raise RuntimeError("Missing, inactive or incorrect timing evidence")
     trace = directory / f"{case}.trace.jsonl"
     events = [json.loads(line) for line in trace.read_text().splitlines()]
     if len(events) != record["observations"] or any(e["index"] != i for i, e in enumerate(events, 1)):
         raise RuntimeError("Timing trace inventory mismatch")
-    if any(type(e.get("time_fs")) is not int or not 0 <= e["time_fs"] <= MAX_TIME for e in events):
-        raise RuntimeError("Invalid integer-femtosecond trace time")
-    if any(a["time_fs"] > b["time_fs"] for a, b in zip(events, events[1:])):
-        raise RuntimeError("Timing trace order mismatch")
+    validate_events(events)
     if not diagnostic:
         coverage = record["coverage"]
         if fixture == "latch":

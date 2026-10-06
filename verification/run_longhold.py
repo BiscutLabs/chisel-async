@@ -75,15 +75,22 @@ def check_case_bounds(policy, delays):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seeds", type=int, default=300)
+    parser.add_argument("--seed-start", type=int, default=0)
+    parser.add_argument("--depths", type=int, nargs="+", default=[1, 3])
     parser.add_argument("--generated", type=Path, default=ROOT / "target/generated")
     parser.add_argument("--output", type=Path, default=ROOT / "target/verification/longhold")
     args = parser.parse_args()
     if not 1 <= args.seeds <= 10000:
         parser.error("invalid seed count")
+    if not 0 <= args.seed_start < 2**32 - args.seeds:
+        parser.error("invalid seed start")
+    if len(set(args.depths)) != len(args.depths) or any(not 1 <= depth <= 8 for depth in args.depths):
+        parser.error("depths must be unique values between 1 and 8")
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     report = output / "report.json"
-    evidence = {"status": "RUNNING", "random_seeds": args.seeds, "cases": [], "controls": []}
+    evidence = {"status": "RUNNING", "random_seeds": args.seeds, "seed_start": args.seed_start,
+                "depths": args.depths, "cases": [], "controls": []}
     def save():
         report.write_text(json.dumps(evidence, indent=2) + "\n", encoding="utf-8")
     save()
@@ -112,9 +119,10 @@ def main():
         sources = snapshots
         evidence["primitives"] = check_primitives(sources, output / "primitives")
         evidence["typed_payloads"] = check_payloads(args.generated.resolve(), output / "typed_payloads")
-        for depth in (1, 3):
+        for depth in args.depths:
             cases = [(f"depth{depth}_uniform_{d}", *case_configuration(0, depth, d)) for d in (1, 10)]
-            cases += [(f"depth{depth}_seed_{seed:03}", *case_configuration(seed, depth)) for seed in range(args.seeds)]
+            cases += [(f"depth{depth}_seed_{seed:03}", *case_configuration(seed, depth))
+                      for seed in range(args.seed_start, args.seed_start + args.seeds)]
             # Each role slow against fast surroundings, then fast against slow.
             for slow in (False, True):
                 for role in CELLS:

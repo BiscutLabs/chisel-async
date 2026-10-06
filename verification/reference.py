@@ -28,6 +28,23 @@ class FourPhaseContract:
         self.phase = 0
 
 
+class TwoPhaseContract:
+    """Contract only: each acknowledgement transition completes one token."""
+
+    def __init__(self):
+        self.req = self.ack = self.delivered = 0
+
+    def edge(self, signal, value):
+        expected = "req" if self.req == self.ack else "ack"
+        assert signal == expected and value == 1 - getattr(self, expected), "TWO_PHASE_ORDER"
+        setattr(self, signal, value)
+        if signal == "ack":
+            self.delivered += 1
+
+    def reset(self):
+        self.req = self.ack = 0
+
+
 class TokenLedger:
     def __init__(self, capacity):
         self.capacity = capacity
