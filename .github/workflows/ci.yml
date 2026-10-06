@@ -69,7 +69,8 @@ jobs:
         run: >-
           python -c "import os, subprocess;
           subprocess.run(['.venv/Scripts/python.exe' if os.name == 'nt' else '.venv/bin/python',
-          'verification/l1_acceptance.py', '--candidate', 'qualification/l1-candidate-1.json',
+          'verification/l1_acceptance.py', '--plan', 'verification/l1-plan-2.json',
+          '--candidate', 'qualification/l1-candidate-2.json',
           '--output', 'target/verification/l1/ci-${{ github.run_id }}-${{ github.run_attempt }}'], check=True)"
       - name: Retain test evidence
         if: always()
@@ -89,7 +90,6 @@ jobs:
             target/generated/**/contract.json
             target/generated/**/resolved.json
             target/generated/**/design.hw.mlir
-            target/generated/**/ref_*.sv
             target/generated/**/*.sv
             target/generated/**/filelist.f
             target/generated/**/ports.json
@@ -98,7 +98,6 @@ jobs:
             target/consumers/**/generated/**/contract.json
             target/consumers/**/generated/**/ports.json
             target/consumers/**/generated/**/resolved.json
-            target/consumers/**/generated/**/ref_*.sv
             target/consumers/**/generated/**/*.sv
             target/consumers/**/generated/**/filelist.f
             target/consumers/**/generated/**/design.hw.mlir
