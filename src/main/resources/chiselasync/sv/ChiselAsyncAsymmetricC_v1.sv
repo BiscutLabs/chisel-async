@@ -22,7 +22,7 @@ module ChiselAsyncAsymmetricC_v1 #(
   wire [COMMON-1:0] c = common ^ COMMON_INVERT;
   wire [(RISING>0?RISING:1)-1:0] r = rising ^ RISING_INVERT;
   wire [(FALLING>0?FALLING:1)-1:0] f = falling ^ FALLING_INVERT;
-  assign #(DELAY_FS) q = reset ? RESET_VALUE[0] :
+  assign #DELAY_FS q = reset ? RESET_VALUE[0] :
     ((&c) & (RISING==0 ? 1'b1 : &r)) |
     (q & ((|c) | (FALLING==0 ? 1'b0 : |f)));
 endmodule

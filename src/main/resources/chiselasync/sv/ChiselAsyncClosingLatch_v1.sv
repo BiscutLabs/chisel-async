@@ -13,5 +13,5 @@ module ChiselAsyncClosingLatch_v1 #(
     else if (reset !== 1'b0) stored <= 'x;
     else if (closed === 1'b0) stored <= d;
     else if (closed !== 1'b1 && d !== stored) stored <= 'x;
-  assign #(DELAY_FS) q = stored;
+  assign #DELAY_FS q = stored;
 endmodule

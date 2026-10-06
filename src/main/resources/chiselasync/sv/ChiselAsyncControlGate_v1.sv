@@ -9,5 +9,5 @@ module ChiselAsyncControlGate_v1 #(
   timeprecision 1fs;
   initial if (WIDTH<1 || OP<0 || OP>2 || DELAY_FS>64'h7fffffffffffffff)
     $fatal(1,"INVALID_CONTROL_GATE_PARAMETERS");
-  assign #(DELAY_FS) q = reset ? RESET_VALUE : OP==0 ? a : OP==1 ? ~a : a|b;
+  assign #DELAY_FS q = reset ? RESET_VALUE : OP==0 ? a : OP==1 ? ~a : a|b;
 endmodule
