@@ -43,7 +43,7 @@ jobs:
         run: Add-Content -LiteralPath $env:GITHUB_PATH -Value '${{ steps.msys2.outputs.msys2-location }}/ucrt64/bin'
       - name: Linux event-simulator build dependencies
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y autoconf gperf bison flex g++ make
+        run: sudo apt-get update && sudo apt-get install -y autoconf gperf bison flex libfl-dev g++ make
       - name: Set up and run complete qualification
         run: python tools/qualify.py
       - name: Retain test evidence

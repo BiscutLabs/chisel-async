@@ -15,6 +15,10 @@ SHA256 = "002bc6d92b203eb8b4612e1d198d8108517d4ec9859e131ef328015352fe6d0c"
 def main():
     if os.name == "nt":
         raise RuntimeError("Use native MSYS2 UCRT64 Verilator 5.046; see README")
+    headers = subprocess.run(["g++", "-x", "c++", "-E", "-"], input="#include <FlexLexer.h>\n",
+                             capture_output=True, text=True, timeout=30)
+    if headers.returncode:
+        raise RuntimeError("Verilator build requires FlexLexer.h (Debian/Ubuntu: install libfl-dev)")
     cache = ROOT / ".tools"
     cache.mkdir(exist_ok=True)
     archive = cache / f"verilator-{VERSION}.tar.gz"
