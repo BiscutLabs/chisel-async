@@ -56,7 +56,9 @@ class Protocol:
                     elif after == (0,0): events.append(('return', self.held)); self.held = None
             else:
                 assert self.encoding == 'two-phase-bundled-v1', 'UNKNOWN_ENCODING'
-                if self.req != self.ack: assert data == self.held, 'DATA_HOLD'
+                # Settled samples may include a causal idle-data update after ack.
+                # Completion still reports the held token, never the new idle data.
+                if self.req != self.ack and req != ack: assert data == self.held, 'DATA_HOLD'
                 if before != after:
                     assert (req != self.req) != (ack != self.ack), 'TWO_PHASE_ORDER'
                     if req != self.req:
@@ -89,12 +91,14 @@ class Ledger:
         self.pending = {}
         self.queues = {}
         self.channel_completions = Counter()
+        self.epoch_completions = []
         self.initial = [0x12, 0x12, 0xe7] if fixture in ('two_initial','two_initialized') else []
         self.join = fixture == 'two_join'
         self.merge = fixture in ('two_merge','arbiter','two_arbiter')
 
     def begin(self):
         self.epochs += 1
+        self.epoch_completions.append(Counter({c['id']: 0 for c in self.channels}))
         self.queues = {name: deque() for name in (self.inputs if self.join or self.merge else self.outputs)}
         if self.initial: self.queues['out'].extend(self.initial)
         self.pending = {}
@@ -140,7 +144,9 @@ class Ledger:
         if self.in_reset:
             self.in_reset = False; self.begin()
         for event, value in self.monitors[name].observe(req, ack, data, zero):
-            if event == 'complete': self.channel_completions[name] += 1
+            if event == 'complete':
+                self.channel_completions[name] += 1
+                self.epoch_completions[-1][name] += 1
             if name not in self.inputs and name not in self.outputs: continue
             if event == 'offer':
                 self.stats['offers'][name] += 1
@@ -153,25 +159,39 @@ class Ledger:
                     for key in self.pending.pop(name): self.queues[key].popleft()
                     self.stats['deliveries'][name] += 1
 
-    def finish(self):
+    def finish(self, witnesses, require_abort=True):
         assert self.epochs == 3, 'RESET_ACTIVITY'
         assert not self.in_reset and all(m.idle() for m in self.monitors.values()), 'NOT_IDLE'
         assert not self.pending and not any(self.queues.values()), 'TOKEN_CONSERVATION'
-        assert sum(self.stats['aborted'].values()) > 0, 'RESET_NOT_ACTIVATED'
+        if require_abort: assert sum(self.stats['aborted'].values()) > 0, 'RESET_NOT_ACTIVATED'
         assert all(self.channel_completions[c['id']] > 0 for c in self.channels), 'MISSING_CHANNEL_ACTIVITY'
+        expected = {(epoch, c['id']): counts[c['id']]
+                    for epoch, counts in enumerate(self.epoch_completions, 1) for c in self.channels}
+        assert set(witnesses) == set(expected), 'MISSING_COMPLETION_WITNESS'
+        assert witnesses == expected, 'CHANNEL_COMPLETION_MISMATCH'
         for c in self.channels:
             if c['protocol'] == 'two-phase-bundled-v1':
                 assert all(self.monitors[c['id']].completion_polarities[p] > 0 for p in (0,1)), 'MISSING_COMPLETION_POLARITY'
         return {**{k:dict(v) for k,v in self.stats.items()}, 'epochs':self.epochs,
                 'delivered':sum(self.stats['deliveries'].values()),
                 'channel_completions':dict(self.channel_completions),
+                'epoch_completions':[dict(c) for c in self.epoch_completions],
                 'polarities':{k:dict(v.completion_polarities) for k,v in self.monitors.items()}}
 
 
-def replay(fixture, channels, path, complete=True):
+def replay(fixture, channels, path, complete=True, require_abort=True):
     ledger = Ledger(fixture, channels)
+    witnesses = {}
     last = -1
-    for line in path.read_text(encoding='utf-8').splitlines():
+    lines = path.read_text(encoding='utf-8').splitlines()
+    assert lines and lines[0] == 'PHASE_TRACE|2', 'PHASE_TRACE_SCHEMA'
+    for line in lines[1:]:
+        if line.startswith('COUNTS|'):
+            _, epoch, name, count = line.split('|')
+            key = (int(epoch), name)
+            assert key not in witnesses and int(count) >= 0, 'INVALID_COMPLETION_WITNESS'
+            witnesses[key] = int(count)
+            continue
         timestamp, reset, name, req, ack, data, zero = line.split('|')
         timestamp = int(timestamp)
         assert timestamp >= last, 'TRACE_TIME_ORDER'
@@ -183,4 +203,4 @@ def replay(fixture, channels, path, complete=True):
             except AssertionError as error:
                 error.add_note(f'{name} at {timestamp} fs: {line}')
                 raise
-    return ledger.finish() if complete else ledger
+    return ledger.finish(witnesses, require_abort) if complete else ledger

@@ -36,7 +36,7 @@ def test_two_phase_both_completion_edges_and_equal_payloads(start,data):
 @pytest.mark.parametrize('edges,diagnostic', [
     ([(0,1,0)],'TWO_PHASE_ORDER'), ([(1,1,0)],'TWO_PHASE_ORDER'),
     ([(1,0,1),(0,0,1)],'TWO_PHASE_ORDER'), ([(1,0,1),(1,0,2)],'DATA_HOLD'),
-    ([(1,0,1),(1,1,2)],'DATA_HOLD')])
+    ([(1,0,1),(1,1,1),(0,1,7),(0,1,8)],'DATA_HOLD')])
 def test_two_phase_checker_rejects_bad_parity_and_hold(edges,diagnostic):
     p=Protocol('two-phase-bundled-v1',8)
     with pytest.raises(AssertionError,match='^'+diagnostic+'$'):
@@ -49,6 +49,15 @@ def test_four_phase_holds_after_acceptance_until_full_return():
     with pytest.raises(AssertionError,match='DATA_HOLD'): p.observe(0,1,8)
     # A zero-delay mux can expose idle data in the same settled sample as ack fall.
     assert p.observe(0,0,8)==[('return',7)]
+
+
+@pytest.mark.parametrize('polarity',(0,1))
+def test_two_phase_idle_update_in_completion_sample_retains_original_token(polarity):
+    p=Protocol('two-phase-bundled-v1',8)
+    if polarity==0: p.observe(1,0,9);p.observe(1,1,9)
+    p.observe(polarity,1-polarity,7)
+    assert p.observe(polarity,polarity,8)==[('complete',7),('return',7)]
+    assert p.idle()
 
 
 def test_all_small_rail_values_and_valid_spacer_arrival_orders():
@@ -143,6 +152,28 @@ def test_rehashed_encoding_constraint_corruption_fails(tmp_path,fault,diagnostic
     with pytest.raises(ValueError,match='^'+diagnostic+'$'): validate_export(directory)
 
 
+@pytest.mark.parametrize('fixture,identity',[('phase_to_four','master_close'),
+    ('phase_to_two','request_phase'),('encoding_from_dual','decoded'),('encoding_to_dual','zero0')])
+def test_renamed_cells_cannot_hide_deleted_timing_obligations(tmp_path,fixture,identity):
+    directory=tmp_path/fixture;shutil.copytree(ROOT/'target/generated'/fixture,directory)
+    def corrupt(m):
+        n=next(n for n in nodes(m['design']) if any(p['id']==identity for p in n['primitives']))
+        n['timing']=[]
+        next(p for p in n['primitives'] if p['id']==identity)['id']='renamed_cell'
+    edit_manifest(directory,corrupt)
+    with pytest.raises(ValueError,match='^TIMING_MARKER_INVENTORY$'): validate_export(directory)
+
+
+@pytest.mark.parametrize('fixture',('two_buffer','buffer','two_fork'))
+def test_bundled_protocol_label_is_bound_to_actual_chisel_type(tmp_path,fixture):
+    directory=tmp_path/fixture;shutil.copytree(ROOT/'target/generated'/fixture,directory)
+    def corrupt(m):
+        c=m['design']['channels'][0]
+        c['protocol']='four-phase-bundled-v1' if c['protocol']=='two-phase-bundled-v1' else 'two-phase-bundled-v1'
+    edit_manifest(directory,corrupt)
+    with pytest.raises(ValueError,match='^CHANNEL_PROTOCOL_MISMATCH$'): validate_export(directory)
+
+
 def test_independent_cell_sweep_rejects_narrowed_adapter_bounds():
     m=json.loads((ROOT/'target/generated/phase_to_four/contract.json').read_text())['manifest']
     n=next(c['contract'] for c in m['design']['children'] if c['id']=='adapter')
@@ -162,25 +193,30 @@ def test_mutations_require_actual_targets():
     with pytest.raises(AssertionError,match='FAULT_PIN_TARGET'): bypass_pin('module empty; endmodule','missing','0',1)
 
 
-@pytest.mark.parametrize('omit_internal',(False,True))
+@pytest.mark.parametrize('omit_internal',('none','all','last_epoch','missing_witness','wrong_count'))
 def test_trace_cannot_silently_omit_an_internal_boundary(tmp_path,omit_internal):
     channels=[dict(channel(n,r),protocol='four-phase-bundled-v1')
               for n,r in [('in','input'),('middle','internal'),('out','output')]]
-    lines=[]
+    lines=['PHASE_TRACE|2']
     def event(name,req,ack,data,reset=0):
-        if name!='middle' or not omit_internal:
+        if name!='middle' or omit_internal!='all' and not (omit_internal=='last_epoch' and epoch==2):
             lines.append(f'{len(lines)}|{reset}|{name}|{req}|{ack}|{data:x}|0')
     for epoch in range(3):
         event('in',0,0,0,reset=1)
         event('in',0,0,0)
         event('in',1,0,7)
-        if epoch==1: continue  # One offered, undelivered token is reset-aborted.
-        for name in ('middle','out'):
-            for req,ack in ((1,0),(1,1),(0,1),(0,0)): event(name,req,ack,7)
-        for req,ack in ((1,1),(0,1),(0,0)): event('in',req,ack,7)
+        if epoch!=1:  # One offered, undelivered token is reset-aborted.
+            for name in ('middle','out'):
+                for req,ack in ((1,0),(1,1),(0,1),(0,0)): event(name,req,ack,7)
+            for req,ack in ((1,1),(0,1),(0,0)): event('in',req,ack,7)
+        for name in ('in','middle','out'):
+            if omit_internal=='missing_witness' and name=='middle': continue
+            count=9 if omit_internal=='wrong_count' and name=='middle' else int(epoch!=1)
+            lines.append(f'COUNTS|{epoch+1}|{name}|{count}')
     path=tmp_path/'trace.txt';path.write_text('\n'.join(lines)+'\n',encoding='utf-8')
-    if omit_internal:
-        with pytest.raises(AssertionError,match='MISSING_CHANNEL_ACTIVITY'): replay('phase_roundtrip',channels,path)
+    if omit_internal!='none':
+        diagnostic={'all':'MISSING_CHANNEL_ACTIVITY','missing_witness':'MISSING_COMPLETION_WITNESS'}.get(omit_internal,'CHANNEL_COMPLETION_MISMATCH')
+        with pytest.raises(AssertionError,match=diagnostic): replay('phase_roundtrip',channels,path)
     else:
         assert replay('phase_roundtrip',channels,path)['delivered']==2
 

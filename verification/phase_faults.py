@@ -23,6 +23,10 @@ FAULTS = {
  'stateless_completion':('encoding_from_dual','RAIL_EARLY_SPACER'),
  'decoded_data_leak':('encoding_from_dual','DATA_HOLD'),
  'early_decoded_request':('encoding_from_dual','DATA_HOLD'),
+ 'done_stuck_low':('two_initial','DONE_NOT_ASSERTED'),
+ 'done_early':('two_initial','DONE_EARLY'),
+ 'done_withdrawn':('two_initial','DONE_WITHDRAWN'),
+ 'done_reset':('two_initial','DONE_RESET'),
 }
 
 
@@ -55,7 +59,7 @@ def run_fault(name, manifest, ports, sources, directory, make_bench, channel_lis
     originals={p.name:p.read_text(encoding='utf-8') for p in sources}
     changed=dict(originals)
     top=manifest['top']+'.sv'
-    overrides=[]
+    overrides=[];baseline_overrides=[]
     if name=='early_ack':
         changed[top],n=re.subn(r'assign in_ack = [^;]+;', 'assign in_ack = in_req;',changed[top]);assert n==1
     elif name=='level_request':
@@ -67,12 +71,27 @@ def run_fault(name, manifest, ports, sources, directory, make_bench, channel_lis
         for p in adapter['primitives']:
             if p['id'] in ('return_guard','master_close','phase'):
                 delay={'return_guard':0,'master_close':10000000,'phase':5000000}[p['id']]
-                overrides.append(f'defparam dut{p["rtl_path"][len(manifest["top"]):]}.DELAY_FS={delay};')
+                path=f'dut{p["rtl_path"][len(manifest["top"]):]}.DELAY_FS'
+                overrides.append(f'defparam {path}={delay};')
+                baseline_overrides.append(f'defparam {path}={p["parameters"]["DELAY_FS"] if p["id"]=="return_guard" else delay};')
     elif name=='early_decoded_request':
         for p in manifest['design']['primitives']:
             if p['id'] in ('decoded_request_guard','decoded'):
                 delay=0 if p['id']=='decoded_request_guard' else 10000000
-                overrides.append(f'defparam dut{p["rtl_path"][len(manifest["top"]):]}.DELAY_FS={delay};')
+                path=f'dut{p["rtl_path"][len(manifest["top"]):]}.DELAY_FS'
+                overrides.append(f'defparam {path}={delay};')
+                baseline_overrides.append(f'defparam {path}={p["parameters"]["DELAY_FS"] if p["id"]=="decoded_request_guard" else delay};')
+    elif name.startswith('done_'):
+        changed[top],n=re.subn(r'\.done\s*\(done\)', '.done (original_done)', changed[top]);assert n==1, 'FAULT_DONE_TARGET'
+        behavior={
+            'done_stuck_low': "assign done = 1'b0;",
+            'done_early': 'assign done = !reset;',
+            'done_withdrawn': 'reg withdrawn=0; always @(posedge reset) withdrawn=0; '
+                              'always @(posedge original_done) #1000000 withdrawn=1; assign done=original_done && !withdrawn;',
+            'done_reset': 'reg stale_done=0; always @(posedge original_done) stale_done=1; assign done=stale_done;',
+        }[name]
+        changed[top]=changed[top].replace(');',');\ntimeunit 1fs; timeprecision 1fs;\nwire original_done;',1)
+        changed[top]=changed[top].replace('endmodule',f'{behavior}\nendmodule')
     elif name=='both_grants':
         key='ChiselAsyncMutex_v1.sv';changed[key]=replace_once(changed[key],'assign #RESOLVE_FS grant = desired;', 'assign #RESOLVE_FS grant = reset ? 0 : request;')
     elif name=='missing_interlock':
@@ -95,7 +114,8 @@ def run_fault(name, manifest, ports, sources, directory, make_bench, channel_lis
     outcomes=[]
     for mutant in (False,True):
         out=directory/('fault' if mutant else 'baseline');out.mkdir(parents=True,exist_ok=True)
-        path=out/'bench.sv';path.write_text(text.replace('endmodule','\n'.join(overrides)+'\nendmodule') if mutant else text,encoding='utf-8')
+        selected_overrides=overrides if mutant else baseline_overrides
+        path=out/'bench.sv';path.write_text(text.replace('endmodule','\n'.join(selected_overrides)+'\nendmodule'),encoding='utf-8')
         compiled=[]
         for filename,body in (changed if mutant else originals).items():
             p=out/filename;p.write_text(body,encoding='utf-8');compiled.append(p)
@@ -106,7 +126,8 @@ def run_fault(name, manifest, ports, sources, directory, make_bench, channel_lis
         result=subprocess.run(['vvp',str(out/'sim.vvp')],cwd=out,capture_output=True,text=True,timeout=30)
         log=result.stdout+result.stderr;(out/'simulation.log').write_text(log,encoding='utf-8')
         fatals=re.findall(r'^FATAL: [^\n]*?: (\w+)',log,re.M)
-        if mutant and diagnostic=='EXCLUSIVE_MERGE_CONTENTION':
+        guard_diagnostic=diagnostic=='EXCLUSIVE_MERGE_CONTENTION' or diagnostic.startswith('DONE_')
+        if mutant and guard_diagnostic:
             assert result.returncode==1 and fatals==[diagnostic], 'WRONG_GUARD_REJECTION: '+log
         else:
             assert result.returncode==0 and not fatals and log.splitlines().count('FAULT_PREFIX_COMPLETE')==1, 'FAULT_PREFIX_FAILURE: '+log
@@ -119,7 +140,7 @@ def run_fault(name, manifest, ports, sources, directory, make_bench, channel_lis
             (out/'diagnostic.txt').write_text(str(error)+'\n'+'\n'.join(getattr(error,'__notes__',[])),encoding='utf-8')
         if not mutant:
             assert observed is None and activity and activity>0, f'FAULT_BASELINE:{name}:{observed}'
-        elif diagnostic!='EXCLUSIVE_MERGE_CONTENTION':
+        elif not guard_diagnostic:
             assert observed==diagnostic, f'WRONG_TRACE_REJECTION:{name}:{observed} expected {diagnostic}'
         outcomes.append(dict(status='EXPECTED_REJECTION' if mutant else 'PASS',diagnostic=diagnostic if mutant else None,
             deliveries=activity,compile=command,sources={p.name:sha(p) for p in compiled},bench_sha256=sha(path),

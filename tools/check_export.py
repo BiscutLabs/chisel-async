@@ -293,6 +293,12 @@ def validate_manifest(document):
                 require(any(t.get("logic") == "exclusive-merge-input-mux" for t in node["timing"]), "MISSING_MUX_CONSTRAINT")
             if primitive["id"] == "accepted0":
                 require(any(t.get("logic") == "initial-token-literal-mux" for t in node["timing"]), "MISSING_MUX_CONSTRAINT")
+        # Cell inventory is checked against elaborated RTL below. Semantic name
+        # changes must not hide a retained marker or reuse one for two obligations.
+        markers = {p["id"] for p in node["primitives"] if p["view"] == "constraint-marker"}
+        references = [t["marker"] for t in node["timing"]]
+        require(len(references) == len(set(references)) and set(references) == markers,
+                "TIMING_MARKER_INVENTORY")
         for child in node["children"]:
             shape(child, "id contract")
     require(resources == set(manifest["resources"]), "RESOURCE_INVENTORY_MISMATCH")
@@ -498,10 +504,10 @@ def validate_port_abi(directory, manifest, scopes):
     require(sha(content.encode()) == abi["sha256"], "PORT_ABI_HASH_MISMATCH")
     data = json.loads(content, object_pairs_hook=unique_json)
     shape(data, "schema top nodes")
-    require(data["schema"] == "chisel-async-port-abi-v1" and data["top"] == manifest["top"], "INVALID_PORT_ABI")
+    require(data["schema"] == "chisel-async-port-abi-v2" and data["top"] == manifest["top"], "INVALID_PORT_ABI")
     inventory = {}
     for node in data["nodes"]:
-        shape(node, "rtl_path module ports")
+        shape(node, "rtl_path module ports channels")
         require(node["rtl_path"] not in inventory, "DUPLICATE_PORT_ABI_NODE")
         inventory[node["rtl_path"]] = node
     require(set(inventory) == {n["rtl_path"] for n in nodes(manifest["design"])}, "PORT_ABI_NODE_INVENTORY")
@@ -519,6 +525,14 @@ def validate_port_abi(directory, manifest, scopes):
             ports[port["source"]] = port
             flattened[name] = {"name": name, "width": port["width"], "direction": port["direction"]}
         require(flattened == scopes[node["rtl_path"]]["ports"], "PORT_ABI_RTL_MISMATCH")
+        bindings = {}
+        for binding in actual["channels"]:
+            shape(binding, "source protocol")
+            source, protocol = binding["source"], binding["protocol"]
+            require(source not in bindings, "DUPLICATE_CHANNEL_ABI_SOURCE")
+            require(protocol in ("four-phase-bundled-v1", "two-phase-bundled-v1", "dual-rail-rtz-v1", "decoupled-v1")
+                    and any(s.startswith(source + ".") for s in ports), "INVALID_CHANNEL_ABI")
+            bindings[source] = protocol
         endpoints = {e["id"]: e for e in node["endpoints"]}
         for channel in node["channels"]:
             protocol = channel["protocol"]
@@ -534,6 +548,7 @@ def validate_port_abi(directory, manifest, scopes):
                 require(source.endswith("." + member), "CHANNEL_SOURCE_ASSOCIATION")
                 roots.append(source[:-(len(member) + 1)])
             require(len(set(roots)) == 1, "CHANNEL_SOURCE_ASSOCIATION")
+            require(bindings.get(roots[0]) == protocol, "CHANNEL_PROTOCOL_MISMATCH")
             def check_port(source, direction, width, diagnostic="CHANNEL_PORT_MISMATCH"):
                 require(source in ports, diagnostic)
                 port = ports[source]

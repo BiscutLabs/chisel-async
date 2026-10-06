@@ -51,7 +51,7 @@ object ExportDesign {
     val probeFile = s"ref_${module.name}.sv"
     val probeHash = sha(Files.readString(destination.resolve(probeFile), UTF_8).replace("\r\n", "\n").getBytes(UTF_8))
     val portFile = "ports.json"
-    val portText = ujson.write(ujson.Obj("schema" -> "chisel-async-port-abi-v1", "top" -> module.name,
+    val portText = ujson.write(ujson.Obj("schema" -> "chisel-async-port-abi-v2", "top" -> module.name,
       "nodes" -> ujson.Arr.from(module.contract.portAbi)), indent = 2) + "\n"
     Files.writeString(destination.resolve(portFile), portText, UTF_8)
     val manifest = ujson.Obj("schema" -> "chisel-async-contract-v3", "time_unit" -> "fs",

@@ -135,4 +135,24 @@ class ExportSpec extends AnyFunSuite {
       "in.bits.lanes[0]" -> (5, false, "input"), "in.bits.lanes[1]" -> (5, false, "input")))
     assert(ports.size == 13 && !ports.exists(_("source").str.contains("ca_p_")))
   }
+
+  test("port ABI reflects channel types without channel registry declarations") {
+    class ProtocolPorts extends AsyncModule {
+      contract.endpoint("reset", reset)
+      val four = IO(Flipped(new chiselasync.protocol.Channel(UInt(8.W), resetDomain).bundled))
+      val toggles = IO(Flipped(Vec(2, new chiselasync.protocol.Channel(UInt(8.W), resetDomain).twoPhase)))
+      val dual = IO(Flipped(new chiselasync.protocol.Channel(UInt(8.W), resetDomain).dualRail))
+      val sync = IO(Flipped(chisel3.util.Decoupled(UInt(8.W))))
+      four.ack := false.B; toggles.foreach(_.ack := false.B); dual.ack := false.B; sync.ready := false.B
+    }
+    val directory = Files.createTempDirectory(Paths.get("target", "export-spec"), "protocol ports ")
+    ExportDesign.emit(new ProtocolPorts, directory)
+    val abi = ujson.read(Files.readString(directory.resolve("ports.json")))
+    assert(abi("schema").str == "chisel-async-port-abi-v2")
+    val bindings = abi("nodes")(0)("channels").arr.map(c =>
+      c("source").str.split(">", 2)(1) -> c("protocol").str).toMap
+    assert(bindings == Map("four" -> "four-phase-bundled-v1", "toggles[0]" -> "two-phase-bundled-v1",
+      "toggles[1]" -> "two-phase-bundled-v1", "dual" -> "dual-rail-rtz-v1", "sync" -> "decoupled-v1"))
+    assert(ujson.read(Files.readString(directory.resolve("contract.json")))("manifest")("design")("channels").arr.isEmpty)
+  }
 }

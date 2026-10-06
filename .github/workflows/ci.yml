@@ -82,5 +82,10 @@ jobs:
             target/generated/**/ports.json
             target/generated/**/contract_*.log
             target/consumers/**/verification
+            target/consumers/**/generated/**/contract.json
+            target/consumers/**/generated/**/ports.json
+            target/consumers/**/generated/**/resolved.json
+            target/consumers/**/generated/**/ref_*.sv
+            target/consumers/**/generated/**/design.hw.mlir
             target/consumers/**/target/test-reports
           if-no-files-found: error

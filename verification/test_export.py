@@ -207,3 +207,20 @@ def test_typed_port_inventory_cannot_disagree_with_actual_rtl(exported, fault, d
     edit_manifest(exported, lambda m: m["port_abi"].update(sha256=sha(path.read_text().encode())))
     with pytest.raises(ValueError, match=f"^{diagnostic}$"):
         validate_export(exported)
+
+
+@pytest.mark.parametrize("fault,diagnostic", [
+    ("missing", "CHANNEL_PROTOCOL_MISMATCH"), ("duplicate", "DUPLICATE_CHANNEL_ABI_SOURCE"),
+    ("unknown", "INVALID_CHANNEL_ABI"), ("old_schema", "INVALID_PORT_ABI"),
+])
+def test_protocol_type_inventory_is_required_and_unambiguous(exported, fault, diagnostic):
+    path = exported / "ports.json"
+    abi = json.loads(path.read_text(encoding="utf-8"))
+    bindings = abi["nodes"][0]["channels"]
+    if fault == "missing": bindings.clear()
+    elif fault == "duplicate": bindings.append(copy.deepcopy(bindings[0]))
+    elif fault == "unknown": bindings[0]["protocol"] = "unknown"
+    else: abi["schema"] = "chisel-async-port-abi-v1"
+    path.write_text(json.dumps(abi), encoding="utf-8")
+    edit_manifest(exported, lambda m: m["port_abi"].update(sha256=sha(path.read_bytes())))
+    with pytest.raises(ValueError, match=f"^{diagnostic}$"): validate_export(exported)

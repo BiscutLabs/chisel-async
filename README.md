@@ -29,6 +29,8 @@ There is no public release yet. A consumer of a locally published snapshot needs
 
 For parent/child reset wiring, use `asyncChild("buffer")(domain => new FourPhaseBuffer(UInt(8.W), domain))` inside an `AsyncModule`. It passes the parent's domain, wires reset and registers the child contract. Separately constructed roots intentionally have separate domains. The command below is for contributors running the full qualification campaign.
 
+The [CA-07 independent review and repairs](docs/ca07-review.md) add protocol identity to port ABI v2 and require one constraint record per timing marker. Re-emit older `ports.json` inventories. Phase trace v2 checks per-boundary/per-epoch completion counts; the campaign adds eighteen directed source/reset cases and four `done` controls, for sixteen paired controls in total. Native results below identify their source revision; L1 remains open.
+
 ## Build and test
 
 Install **Python 3.12** and the platform prerequisites below, then run:

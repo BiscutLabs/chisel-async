@@ -290,19 +290,31 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     */
   private[chiselasync] def portAbi: Seq[ujson.Value] = {
     val ports = ArrayBuffer.empty[ujson.Value]
+    val bindings = ArrayBuffer.empty[ujson.Value]
     def visit(value: Data): Unit = {
-      if (!DataMirror.hasProbeTypeModifier(value)) value match {
+      if (!DataMirror.hasProbeTypeModifier(value)) {
+        // Recover encoding from the actual Chisel type, independently of channels.
+        val protocol = value match {
+          case _: FourPhase[_] => Some("four-phase-bundled-v1")
+          case _: TwoPhase[_] => Some("two-phase-bundled-v1")
+          case _: DualRail[_] => Some("dual-rail-rtz-v1")
+          case _: DecoupledIO[_] => Some("decoupled-v1")
+          case _ => None
+        }
+        protocol.foreach(p => bindings += ujson.Obj("source" -> value.toTarget.serialize, "protocol" -> p))
+        value match {
         case record: Record => record.elements.values.foreach(visit)
         case vector: Vec[_] => vector.foreach(visit)
         case _ => ports += ujson.Obj("source" -> value.toTarget.serialize,
           "width" -> value.getWidth, "signed" -> value.isInstanceOf[SInt],
           "direction" -> DataMirror.directionOf(value).toString.toLowerCase,
           "clock" -> value.isInstanceOf[Clock])
+        }
       }
     }
     DataMirror.modulePorts(owner).foreach { case (_, data) => visit(data) }
     Seq(ujson.Obj("rtl_path" -> owner.pathName, "module" -> owner.name,
-      "ports" -> ujson.Arr.from(ports))) ++ children.flatMap(_._2.contract.portAbi)
+      "ports" -> ujson.Arr.from(ports), "channels" -> ujson.Arr.from(bindings))) ++ children.flatMap(_._2.contract.portAbi)
   }
 
   private def jsonAt(prefix: Vector[String]): ujson.Value = ujson.Obj(

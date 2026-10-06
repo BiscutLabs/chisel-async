@@ -18,6 +18,8 @@ Read probes can restrict optimization of observed values. This route removes har
 
 The v3 export also writes and hashes `ports.json`. This inventories every elaborated hardware-port leaf using Chisel reflection, separately from the channel registry and payload-layout writer; probes are excluded. The resolver compares its complete per-module inventory against actual Icarus port widths/directions. Channel leaves must have exactly the declared names, sources, widths and signed flags, and controls must have the correct forward/reverse directions. Factory-defined endpoint IDs and common source-bundle roots prevent borrowing another channel’s otherwise valid request or clock.
 
+Port ABI v2 also records each hardware channel bundle's actual protocol type and source root, including channels inside vectors. The resolver compares channel declarations against those independent bindings, preventing a two-phase port from being relabelled four-phase despite identical leaf shapes. Every timing marker must have exactly one matching constraint record. Re-emit earlier exports; see the [CA-07 review and repairs](ca07-review.md).
+
 CIRCT erases SInt port signedness in SV. Signed metadata is checked against the elaborated Chisel port inventory; packed-bit mapping and typed transform tests then check the lowering behavior. This is not an independent proof of compiler type preservation. Re-emit older v1/v2 exports for this resolver. [The L0 review](l0-review.md) records the original false passes and required corruption controls.
 
 ## Timing intent in RTL
