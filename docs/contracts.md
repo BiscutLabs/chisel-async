@@ -8,13 +8,13 @@ These contracts describe the first functional slice. They do not specify a mappe
 
 ## Four-phase channel
 
-The producer drives `req` and `bits`; the consumer drives `ack`. Idle is `(req, ack) = (0, 0)`. The legal transition order is `00 → 10 → 11 → 01 → 00`. One round trip represents one transaction even if its data equals the preceding transaction. The producer establishes data before raising request and holds it through return to idle. The consumer raises acknowledgement only for an offered transaction and lowers it after request falls.
+The producer drives `req` and `bits`; the consumer drives `ack`. Idle is `(req, ack) = (0, 0)`. The legal transition order is `00 â†’ 10 â†’ 11 â†’ 01 â†’ 00`. One round trip represents one transaction even if its data equals the preceding transaction. The producer establishes data before raising request and holds it through return to idle. The consumer raises acknowledgement only for an offered transaction and lowers it after request falls.
 
 Initial traffic requires coordinated reset, with external request and acknowledgement held low before reset release. On an in-flight reset, assert reset before withdrawing held requests or changing their data, then return the attached domain to idle while reset is asserted. Inputs are binary during normal operation; unknown or malformed handshake behavior is outside the current buffer contract. There is no implicit periodic clock. `FourPhase.connect` requires matching domain objects; exporting a channel requires the owner's explicit domain. Direct Chisel wiring can bypass the helper, so export probes also compare actual primitive/child reset signals with the root reset. A general public protocol-monitor API remains planned.
 
 ## Two-phase baseline (specification only)
 
-Two-phase bundled data encodes a token by a request transition and its completion by an acknowledgement transition. The following parity table follows the transition-signalling convention in Sparsø, [Introduction to Asynchronous Circuit Design](https://orbit.dtu.dk/en/publications/introduction-to-asynchronous-circuit-design/), §2.1. Our baseline chooses coordinated reset to `00` and data held from before request changes until acknowledgement matches request.
+Two-phase bundled data encodes a token by a request transition and its completion by an acknowledgement transition. The following parity table follows the transition-signalling convention in SparsÃ¸, [Introduction to Asynchronous Circuit Design](https://orbit.dtu.dk/en/publications/introduction-to-asynchronous-circuit-design/), Â§2.1. Our baseline chooses coordinated reset to `00` and data held from before request changes until acknowledgement matches request.
 
 | req, ack | Meaning | Next legal edge |
 | --- | --- | --- |
@@ -43,11 +43,16 @@ The SV view updates data and request in the same zero-delay scheduling interval;
 
 ## Published long-hold stage
 
-`FourPhaseStage[A, B](inGen, outGen, transform, timing, domain)` checks the transformed payload against the distinct output type. `LongHoldBuffer[T]` is the identity specialization. Both use the Furber–Day long-hold topology with explicit primitive boundaries and require a timing policy: named `FunctionalOnly` or validated `Digital`. [Controller documentation](long-hold-controller.md) specifies the source, added timing guards, atomic input polarity, reset and ideal-wire assumptions, and independent evidence.
+`FourPhaseStage[A, B](inGen, outGen, transform, timing, domain)` checks the transformed payload against the distinct output type. `LongHoldBuffer[T]` is the identity specialization. Both use the Furberâ€“Day long-hold topology with explicit primitive boundaries and require a timing policy: named `FunctionalOnly` or validated `Digital`. [Controller documentation](long-hold-controller.md) specifies the source, added timing guards, atomic input polarity, reset and ideal-wire assumptions, and independent evidence.
 
 These stages use the same accepted/delivered/reserved accounting and full-handshake hold contract above. Their latch may transparently track data while idle; output data has no validity then. Reset takes the declared propagation time and must be held until quiescent. The new policy does not claim physical setup/hold closure. The historical behavioral buffer remains a separate reference model.
 
+## Four-phase composition
+
+The [CA-06 composition contracts](four-phase-composition.md) extend the long-hold foundation with exact-depth FIFO and initial tokens, unbuffered all-consumer fork, independently buffered typed join, captured select and monitored exclusive merge. Their transfer accounting differs where necessary: fork branch delivery can precede producer acknowledgement, and reset never retracts a delivered branch. Initial tokens occupy declared FIFO capacity and are reinstalled once per reset epoch. Exclusive merge serializes complete input handshakes, including return; it supplies no arbitration.
+
 ## Withdrawn structural stage (regression only)
+
 
 The former single-type custom `FourPhaseStage[T]` and `StructuralFourPhaseBuffer[T]` are withdrawn. They survive as `experimental.UnsafeFourPhaseStage` and `UnsafeFourPhaseBuffer` to retain the historical zero-delay corpus and a reproducible internal delay race. The new two-type `bundled.FourPhaseStage[A, B]` is a different published controller, with a required timing argument. Do not compose new library components from the withdrawn classes. [Review response](review-response.md) records the counterexample and replacement criteria.
 
@@ -64,7 +69,7 @@ The control specification is independent of the implementation equations:
 
 The intended control specification above remains useful, but the custom latch equations do not implement it robustly under internal delays. In the directed counterexample, returning clears before occupied's enable closes, causing a duplicate output offer. Capture enables closing through zero-delay feedback were a design defect, not merely a future pulse-width qualification task. A replacement must establish its controller assumptions and topology before catalog expansion. The independent `TimedCapture` tests do not establish these properties for any handshake controller.
 
-This is our functional decomposition, not a reproduction of a published controller. For the distinction between handshake correctness and physical bundled-data delay matching, see Sparsø, [Introduction to Asynchronous Circuit Design](https://backend.orbit.dtu.dk/ws/portalfiles/portal/215895041/JSPA_async_book_2020_PDF.pdf), §2.4.1 and chapter 10. The existing transaction ledger, bounded event orders and reset prefixes remain the external oracle; they do not duplicate latch equations.
+This is our functional decomposition, not a reproduction of a published controller. For the distinction between handshake correctness and physical bundled-data delay matching, see SparsÃ¸, [Introduction to Asynchronous Circuit Design](https://backend.orbit.dtu.dk/ws/portalfiles/portal/215895041/JSPA_async_book_2020_PDF.pdf), Â§2.4.1 and chapter 10. The existing transaction ledger, bounded event orders and reset prefixes remain the external oracle; they do not duplicate latch equations.
 
 ## C-element
 

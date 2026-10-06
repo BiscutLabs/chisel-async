@@ -19,7 +19,8 @@ def main():
                      "chiselasync/sv/ChiselAsyncFourPhaseStorage_v1.sv",
                      "chiselasync/sv/ChiselAsyncLatch_v1.sv", "chiselasync/sv/ChiselAsyncDelayLine_v1.sv",
                      "chiselasync/sv/ChiselAsyncAsymmetricC_v1.sv", "chiselasync/sv/ChiselAsyncControlGate_v1.sv",
-                     "chiselasync/sv/ChiselAsyncClosingLatch_v1.sv", "chiselasync/sv/ChiselAsyncTimingMarker_v1.sv"):
+                     "chiselasync/sv/ChiselAsyncClosingLatch_v1.sv", "chiselasync/sv/ChiselAsyncTimingMarker_v1.sv",
+                     "chiselasync/sv/ChiselAsyncAnd_v1.sv", "chiselasync/sv/ChiselAsyncProtocolGuard_v1.sv"):
             if not library.read(name):
                 raise RuntimeError(f"Empty published resource: {name}")
     # The space in the path is intentional. Keep outputs for diagnosis/replay.
@@ -66,6 +67,9 @@ def main():
                    cwd=ROOT, check=True, timeout=180)
     subprocess.run([sys.executable, str(ROOT / "verification/run_architecture.py"),
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/architecture")],
+                   cwd=ROOT, check=True, timeout=180)
+    subprocess.run([sys.executable, str(ROOT / "verification/run_composition.py"), "--seeds", "0",
+                    "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/composition")],
                    cwd=ROOT, check=True, timeout=180)
     print(f"Published artifact consumed and simulated successfully: {consumer}")
 

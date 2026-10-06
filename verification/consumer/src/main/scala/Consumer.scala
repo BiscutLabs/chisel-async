@@ -68,6 +68,7 @@ class ConsumerLatch extends AsyncModule {
 object Consumer {
   def main(args: Array[String]): Unit = {
     ConsumerArchitecture.main(Array("generated"))
+    ConsumerComposition.main(Array("generated"))
     ExportDesign.emit(new BufferExample, Paths.get("generated/buffer"))
     ExportDesign.emit(new StructuralBufferExample, Paths.get("generated/structural"), ExportDesign.Debug)
     ExportDesign.emit(new TransformExample, Paths.get("generated/transform"), ExportDesign.Debug)

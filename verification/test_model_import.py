@@ -8,7 +8,7 @@ import subprocess
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-MODELS = ("ChiselAsyncControlGate_v1", "ChiselAsyncAsymmetricC_v1", "ChiselAsyncClosingLatch_v1")
+MODELS = ("ChiselAsyncControlGate_v1", "ChiselAsyncAsymmetricC_v1", "ChiselAsyncClosingLatch_v1", "ChiselAsyncAnd_v1")
 
 
 def importer():

@@ -342,12 +342,19 @@ def probe_source(manifest, scopes):
     lines += ["task check; begin", *comparisons, "end endtask", "initial begin",
               f"force {top}.reset = 1'b1; #1;"]
     checks = 0
-    for src, width in drivers:
-        for bit in range(width):
-            for value in (1 << bit, ((1 << width) - 1) ^ (1 << bit)):
-                lines += [f"force {src} = {width}'h{value:x};", "#1; check;"]
-                checks += len(coverage)
-        lines += [f"release {src};", f"force {top}.reset = 1'b1; #1;"]
+    # A mux needs simultaneous control and data activity. Independent uninitialized
+    # forces cannot exercise its selected payload. Both backgrounds are deterministic;
+    # no public/child endpoint itself is forced to conceal an incorrect mapping.
+    for controls in (0, 1):
+        for src, width in drivers:
+            lines.append(f"force {src} = {width}'h{controls if width == 1 else 0:x};")
+        lines.append("#1;")
+        for src, width in drivers:
+            for bit in range(width):
+                for value in (1 << bit, ((1 << width) - 1) ^ (1 << bit)):
+                    lines += [f"force {src} = {width}'h{value:x};", "#1; check;"]
+                    checks += len(coverage)
+            lines += [f"force {src} = {width}'h{controls if width == 1 else 0:x};", "#1;"]
     lines += coverage
     lines += [f'$display("CONTRACT_PROBES_PASS:{checks}"); $finish; end endmodule']
     return "\n".join(lines), checks
@@ -457,7 +464,9 @@ def validate_export(directory: Path):
         require(len(matches) == 1, "MISSING_OR_AMBIGUOUS_RESOURCE")
         content = matches[0].read_text().split("\n", 1)[1].rstrip() + "\n"
         require(sha(content.encode()) == expected, "RESOURCE_HASH_MISMATCH")
-    command = ["iverilog", "-g2012", "-s", manifest["top"], "-o", "contract_probe.vvp",
+    # Mapping forces intentionally violate protocols. Only these probes disable
+    # simulation assumption guards; every behavioral campaign keeps them enabled.
+    command = ["iverilog", "-g2012", "-DCHISEL_ASYNC_MAPPING", "-s", manifest["top"], "-o", "contract_probe.vvp",
                *(str(source) for source in sources)]
     built = subprocess.run(command, cwd=directory, text=True, capture_output=True, timeout=60)
     (directory / "contract_build.log").write_text(built.stdout + built.stderr, encoding="utf-8")
@@ -514,7 +523,9 @@ def main():
                 "timed_early", "timed_equal", "timed_late", "structural", "structural_wide",
                 "structural_packet", "structural_pipeline", "transform", "longhold", "longhold_wide",
                 "longhold_packet", "longhold_pipeline", "longhold_comparison", "longhold_sum", "longhold_signed",
-                "dualrail", "to_async", "to_clocked", "bridge_roundtrip", "replicated", "replicated_debug")
+                "dualrail", "to_async", "to_clocked", "bridge_roundtrip", "replicated", "replicated_debug",
+                "fifo_one", "fifo", "initialized_fifo", "initial_tokens", "initial_wide", "fork", "join", "select",
+                "merge", "fork_join", "feedback")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

@@ -115,14 +115,15 @@ def main():
                  "examples/runMain chiselasync.examples.EmitControllerComparison target/generated/comparison_unsafe",
                  "examples/runMain chiselasync.examples.EmitLongHold target/generated",
                  "examples/runMain chiselasync.examples.EmitArchitecture target/generated",
-                 "examples/runMain chiselasync.examples.EmitOptimized target/generated"]
+                 "examples/runMain chiselasync.examples.EmitOptimized target/generated",
+                 "examples/runMain chiselasync.examples.EmitComposition target/generated"]
         steps = setup + [("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
             ("python", [python, "-m", "pytest", *[str(p) for p in sorted((ROOT / "verification").glob("test_*.py"))], "-q"])]
         steps += [(name, [python, str(ROOT / path)]) for name, path in (
             ("functional", "verification/run.py"), ("counterexample", "verification/controller_race.py"),
             ("comparison", "verification/compare_controllers.py"), ("timing", "verification/run_timing.py"),
             ("longhold", "verification/run_longhold.py"), ("architecture", "verification/run_architecture.py"),
-            ("optimized", "verification/run_optimized.py"))]
+            ("optimized", "verification/run_optimized.py"), ("composition", "verification/run_composition.py"))]
         steps += [("chiselsim", [python, str(ROOT / "verification/run_chiselsim.py")]),
                   ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")])]
         run_steps(steps, environment, output)

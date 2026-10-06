@@ -4,6 +4,7 @@ package chiselasync.metadata
 import chisel3._
 import chisel3.reflect.DataMirror
 import chisel3.probe.{Probe, ProbeValue, define}
+import chisel3.experimental.noPrefix
 import chiselasync.core.AsyncModule
 import chiselasync.protocol.{Channel, DualRail, FourPhase, Payload}
 import chisel3.util.DecoupledIO
@@ -34,7 +35,7 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
   }
 
   /** Read-only references lower to the compiler's probe ABI, never hardware ports. */
-  def endpoint(id: String, signal: Data): String = {
+  def endpoint(id: String, signal: Data): String = noPrefix {
     claim(id)
     require(signal.isWidthKnown && signal.getWidth > 0, s"unknown endpoint width: $id")
     val anchor = IO(Output(Probe(UInt(signal.getWidth.W)))).suggestName(probeName(Vector(id)))
@@ -110,7 +111,7 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
       })))
   }
 
-  def child(id: String, module: AsyncModule): Unit = {
+  def child(id: String, module: AsyncModule): Unit = noPrefix {
     claim(id)
     require(module.resetDomain eq owner.resetDomain, "child reset domains differ")
     module.suggestName(s"ca_child_$id")

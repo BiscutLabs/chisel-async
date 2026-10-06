@@ -37,7 +37,7 @@ def edit_manifest(directory, change, refresh_rtl=False):
 
 def test_export_survives_moving_to_path_with_spaces(exported):
     result = validate_export(exported)
-    assert result["status"] == "PASS" and result["mapping_checks"] == 294
+    assert result["status"] == "PASS" and result["mapping_checks"] == 588
     assert len(result["endpoints"]) == 7
 
 
