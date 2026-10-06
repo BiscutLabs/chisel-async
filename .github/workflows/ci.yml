@@ -46,15 +46,17 @@ jobs:
       - name: Install pinned native compiler
         run: python tools/bootstrap.py
       - name: Compile, test and emit examples
-        run: python tools/sbt.py --bootstrap test "examples/runMain chiselasync.examples.EmitFixtures target/generated"
+        run: python tools/sbt.py --bootstrap test "examples/runMain chiselasync.examples.EmitFixtures target/generated" "examples/runMain chiselasync.examples.EmitControllerComparison target/generated/comparison_unsafe"
       - name: Verify exported models
         run: python tools/check_export.py
       - name: Verify reference contracts and runner failure controls
-        run: python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py -q
+        run: python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py verification/test_controller_comparison.py -q
       - name: Run independent event tests and known-bad control
         run: python verification/run.py
       - name: Reproduce withdrawn controller counterexample
         run: python verification/controller_race.py
+      - name: Compare published reference under bounded internal delays
+        run: python verification/compare_controllers.py
       - name: Run timing boundaries and primitive fault controls
         run: python verification/run_timing.py
       - name: Consume published artifact outside source project

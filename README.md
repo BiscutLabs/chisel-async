@@ -2,7 +2,7 @@
 
 A Chisel library for asynchronous hardware, developed independently under Apache 2.0.
 
-**Status: controller redesign required before library expansion.** The behavioral models, timing/compiler foundation and independent tests remain useful. The custom structural stage has a reproduced internal delay race and is withdrawn from the supported API. See the [review response and revised priorities](docs/review-response.md). Windows/Linux evidence remains recorded; macOS qualification is explicitly deferred.
+**Status: controller redesign required before library expansion.** The custom structural stage is withdrawn. The new [published-controller comparison](docs/controller-comparison.md) passes 300 random-delay cases for each Muller reference depth on Windows and Linux-under-WSL, while rejecting the withdrawn design in 254/300 cases. Muller has different capacity and data-validity semantics; it is not the production replacement. See the [review response and revised priorities](docs/review-response.md). macOS qualification is explicitly deferred.
 
 The product order is chisel-async, RISCay-MCU, Chiselator, then physical chip implementation. This library works with an existing simulator and does not depend on Chiselator, Yosys, a PDK, ACT or a GPU.
 
@@ -41,10 +41,12 @@ python -m pip install --require-hashes -r verification/requirements.txt
 python tools/bootstrap_jdk.py
 python tools/bootstrap.py
 python tools/sbt.py --bootstrap test "examples/runMain chiselasync.examples.EmitFixtures target/generated"
+python tools/sbt.py "examples/runMain chiselasync.examples.EmitControllerComparison target/generated/comparison_unsafe"
 python tools/check_export.py
-python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py -q
+python -m pytest verification/test_runner.py verification/test_reference.py verification/test_timing_reference.py verification/test_timing_runner.py verification/test_export.py verification/test_controller_comparison.py -q
 python verification/run.py
 python verification/controller_race.py
+python verification/compare_controllers.py
 python verification/run_timing.py
 python tools/consumer_smoke.py
 ```
