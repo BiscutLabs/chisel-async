@@ -1,6 +1,6 @@
 # External review: controller withdrawal and revised priorities
 
-October 5, 2026. The external review identifies an architectural blocker, not merely missing timing coverage. CA-06 must not build on the custom structural controller. The [published long-hold replacement](long-hold-controller.md) is now implemented with bounded digital evidence; The first cross-encoding probes, optimized export and ChiselSim lane are implemented; broader qualification and independent review still keep L0 open.
+October 5, 2026. The external review identifies an architectural blocker, not merely missing timing coverage. CA-06 must not build on the custom structural controller. The [published long-hold replacement](long-hold-controller.md), first cross-encoding probes, optimized export and ChiselSim lane are implemented. The subsequent [frozen acceptance and fresh-context agent review](l0-acceptance.md) close L0 for native Windows/Linux after repairing two export-validation gaps. macOS stays deferred.
 
 ## Reproduced failure
 
@@ -32,7 +32,7 @@ The former custom classes have moved to `chiselasync.experimental.UnsafeFourPhas
 | Consumer setup and Scala testing | Separate consumer instructions from repository qualification. The one-command `tools/qualify.py` wrapper is implemented and shared with CI. A ScalaTest/ChiselSim lane now uses `simulate(...)` with explicit-clock bridge harnesses, payload-fault controls and published-JAR replay on Verilator 5.046. Native Windows uses a narrow generated-build adapter. Asynchronous cell timing remains with the independent Icarus event oracle. |
 | C-element families | Direct N-input/asymmetric model implemented with atomic inversion masks and exhaustive two-vector histories for six configurations at two delays. A retained non-monotonic example distinguishes a direct three-input C-element from a binary tree. Restricted completion-tree use still needs monotonic-phase assumptions. |
 
-Counterexample preservation, published comparison and bundled replacement/type-changing/timing work are implemented. Logical-channel separation now has bundled/dual-rail/clocked probes and explicit clocked converters. Per-cell timing bounds describe the sweep, and a one-command wrapper runs setup plus every required lane. Optimized observation/intent export and the ChiselSim lane now have bounded evidence. Independent review and a frozen release campaign remain before CA-06. Digital-model controller evidence does not substitute for those architecture gates.
+Counterexample preservation, published comparison and bundled replacement/type-changing/timing work are implemented. Logical-channel separation now has bundled/dual-rail/clocked probes and explicit clocked converters. Per-cell timing bounds describe the sweep, and a one-command wrapper runs setup plus every required lane. Optimized observation/intent export and the ChiselSim lane now have bounded evidence. The separate frozen L0 campaign and fresh-context agent reviews now pass for Windows/Linux. CA-06 may begin with FIFO capacity and initial-token/reset semantics; later catalog families retain their own review and qualification gates.
 
 ## Sources checked
 

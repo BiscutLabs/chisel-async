@@ -4,7 +4,7 @@ L0 is the CA-01–05 foundation gate: pinned native tools, protocol/reference co
 
 ## Candidate and prospective campaign
 
-Before executing acceptance, create and commit `qualification/l0-candidate-2.json` with `python verification/run_l0.py --freeze`. Freezing records normalized-LF SHA-256 hashes of every Git-visible source, resource, example, test, checker, tool, build/project and CI input. It refuses to overwrite an existing candidate. Documentation can record results afterwards without changing the tested source identity.
+Before executing this acceptance, `qualification/l0-candidate-2.json` was created with `python verification/run_l0.py --freeze` and committed. It now exists for replay; a future changed candidate needs a new manifest name and prospectively declared campaign. Freezing records normalized-LF SHA-256 hashes of every Git-visible source, resource, example, test, checker, tool, build/project and CI input. It refuses to overwrite an existing candidate. Documentation can record results afterwards without changing the tested source identity.
 
 Run `python verification/run_l0.py` with the README prerequisites, or manually dispatch the Library qualification workflow with `l0=true`. This runs the complete one-command qualification first, including local publication and the unrelated consumer. It then executes the published long-hold stage at depths 1, 2, 3 and 4 with seeds 10064–10127 (256 configurations), two uniform cases per depth and both polarities of six role corners per depth (56 cases). All 312 cases must pass. The three existing faults must fail specifically for payload mismatch, data hold and capacity respectively. Missing cases, duplicate cases, nonprogress, unrelated failures or source drift invalidate acceptance.
 
@@ -30,9 +30,27 @@ The local attempt is retained at `target/verification/l0/20261006T053140Z-8vl433
 
 **Candidate 1 did not close L0.** The [fresh-context agent reviews](l0-review.md) passed the controller and recorded verification evidence but found two blocking export-validation gaps. Its original automated results and manifest remain retained; they are not retroactively relabelled as a successful review.
 
-## Candidate 2: review repairs
+## Candidate 2: repaired native acceptance
 
-The v3 typed-port export and channel-association fixes, their corruption tests, and improved consumer XML retention require a new candidate. The prospective campaign uses fresh seeds 10064–10127 at depths 1–4, with the same declared uniform/corner inventory, activity and fault criteria. Candidate 2 is not yet frozen or executed. CA-06 remains gated until the repaired candidate passes native Windows/Linux acceptance and review. The next implementation item after closure is the four-phase FIFO and initial-token contract.
+The v3 typed-port export and channel-association fixes, their corruption tests, and improved consumer XML retention require a new candidate. The prospective campaign uses fresh seeds 10064–10127 at depths 1–4, with the same declared uniform/corner inventory, activity and fault criteria. Candidate 2 was frozen and committed before execution at `c85f97b731b782a0f5c5d5ac4f1b81e99a4a505d`. Its manifest binds 103 execution inputs with normalized SHA-256 `c41289da1ff1c5a0e1016f115ef8bdfd7a64b85d317835d3a4aed44f1f6b2d83`. [Native run 37421591012](https://github.com/BiscutLabs/chisel-async/actions/runs/37421591012) passes both platforms at that exact commit.
+
+| Host | Candidate 2 result and retained attempt |
+| --- | --- |
+| Local native Windows 11, CPython 3.12.13 | PASS: `20261006T060230Z-o6zsy_mw`. |
+| Native Windows Server 2025, CPython 3.12.10 | PASS: `20261006T060318Z-roh8ao0m`, artifact `evidence-windows-2025`. |
+| Native Ubuntu 24.04, CPython 3.12.13 | PASS: `20261006T060311Z-v9rd0i6z`, artifact `evidence-ubuntu-24.04`. |
+
+Each run includes 188 Python checks, 29 Scala checks, all 29 exports, the complete functional/timing/controller/architecture baseline, five ChiselSim cases and the published-JAR consumer. Each additional acceptance campaign passes all 312 cases / 15,288 deliveries, three exact fault detections, 5,184 primitive checks and 776 typed transfers. The clean consumer's five-case ChiselSim XML is now retained and hash-checked too. No candidate 2 acceptance attempt failed or required a retry.
+
+Both downloaded CI artifacts match the frozen candidate and all 312 local case summaries; the source inventory is unchanged. The normalized campaign-report digests are `c00e648bc41c60e031565d2ede452dd816691f86c17cfa11cd895bd06e166275` (Windows) and `20d1d6a397648575cce8e4402a248af330cc362c81a849d120eb94435fd330ac` (Linux). Host paths and provenance differ, so aggregate report hashes need not match.
+
+## Closure decision
+
+**L0 / CA-01–05 is closed for native Windows and Linux on October 5, 2026 (Pacific).** Candidate 2 passes the prospective campaign and the three scoped fresh-context agent reviews. The controller review remains applicable because the controller, driver and reference behavior did not change; the export reviewer independently confirmed the repairs; the verification reviewer approved the repaired candidate after auditing both native artifacts. Candidate 1 remains superseded.
+
+The final audit replayed 222,258 external channel edges and 15,288 deliveries per host with a separate queue/reservation ledger, checked published-graph transitions, and revalidated baseline/consumer traces, timing evidence and ChiselSim XML. It also rejected a one-bit payload mutation in a copy of a raw log while the original summaries stayed unchanged. All 29 qualification exports have identical semantic and typed-port ABI hashes across native hosts. The [review record](l0-review.md) preserves scope, findings and audit identities.
+
+This permits starting CA-06; it does not qualify the full catalog or a public release. Begin with the four-phase FIFO capacity and initial-token/reset contract, then implementation and independent occupancy/order/backpressure tests. Preserve the existing campaigns and add compact guard-edge/long-held-request regressions when composition grows. macOS, physical timing, arbitrary downstream synthesis, full QDI/arbitration and analog metastability qualification remain outside this closure.
 
 ## Review map
 
