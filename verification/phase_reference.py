@@ -88,6 +88,7 @@ class Ledger:
         self.in_reset = True
         self.pending = {}
         self.queues = {}
+        self.channel_completions = Counter()
         self.initial = [0x12, 0x12, 0xe7] if fixture in ('two_initial','two_initialized') else []
         self.join = fixture == 'two_join'
         self.merge = fixture in ('two_merge','arbiter','two_arbiter')
@@ -139,6 +140,7 @@ class Ledger:
         if self.in_reset:
             self.in_reset = False; self.begin()
         for event, value in self.monitors[name].observe(req, ack, data, zero):
+            if event == 'complete': self.channel_completions[name] += 1
             if name not in self.inputs and name not in self.outputs: continue
             if event == 'offer':
                 self.stats['offers'][name] += 1
@@ -156,11 +158,13 @@ class Ledger:
         assert not self.in_reset and all(m.idle() for m in self.monitors.values()), 'NOT_IDLE'
         assert not self.pending and not any(self.queues.values()), 'TOKEN_CONSERVATION'
         assert sum(self.stats['aborted'].values()) > 0, 'RESET_NOT_ACTIVATED'
+        assert all(self.channel_completions[c['id']] > 0 for c in self.channels), 'MISSING_CHANNEL_ACTIVITY'
         for c in self.channels:
             if c['protocol'] == 'two-phase-bundled-v1':
                 assert all(self.monitors[c['id']].completion_polarities[p] > 0 for p in (0,1)), 'MISSING_COMPLETION_POLARITY'
         return {**{k:dict(v) for k,v in self.stats.items()}, 'epochs':self.epochs,
                 'delivered':sum(self.stats['deliveries'].values()),
+                'channel_completions':dict(self.channel_completions),
                 'polarities':{k:dict(v.completion_polarities) for k,v in self.monitors.items()}}
 
 

@@ -128,10 +128,10 @@ def bench(fixture, manifest, ports, seed, overrides):
             else:
                 lines += [f'{s["request"]}=1; wait ({s["acknowledge"]}); #1; {s["request"]}=0; wait (!{s["acknowledge"]}); #1;']
         lines += [f'sent_{name}=sent_{name}+1;', 'end endtask']
-    for c in outputs:
+    for output_index, c in enumerate(outputs):
         name=c['id']; s=signals[name]; protocol=c['protocol']
         lines += [f'task automatic receive_{name}(input integer amount); integer k; begin', 'for(k=0;k<amount;k=k+1) begin']
-        delay=f'#(1+1000000*((k+{seed})%19));'
+        delay=f'#(1+1000000*((k+{seed}+{7*output_index})%19));'
         if protocol=='dual-rail-rtz-v1':
             lines += [f'wait (&({s["one"]}|{s["zero"]})); {delay} {s["acknowledge"]}=1;',
                       f'wait (({s["one"]}|{s["zero"]})==0); #1; {s["acknowledge"]}=0;']
@@ -139,7 +139,7 @@ def bench(fixture, manifest, ports, seed, overrides):
             lines += [f'wait ({s["request"]}!={s["acknowledge"]}); {delay} {s["acknowledge"]}={s["request"]};']
         else:
             lines += [f'wait ({s["request"]}); {delay} {s["acknowledge"]}=1;',
-                      f'wait (!{s["request"]}); #(1+1000000*(k%7)); {s["acknowledge"]}=0;']
+                      f'wait (!{s["request"]}); #(1+1000000*((k+{3*output_index})%7)); {s["acknowledge"]}=0;']
         lines += [f'#1; received_{name}=received_{name}+1; end end endtask']
     def stream(c,amount):
         return 'begin\n'+'\n'.join(f'send_{c["id"]}({widths[c["id"]]}\'h{word(c,i):x}, {i}); #(1+{1000000*((i+seed)%11)});' for i in range(amount))+'\nend'

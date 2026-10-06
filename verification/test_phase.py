@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 import pytest
-from phase_reference import Protocol, Ledger
+from phase_reference import Protocol, Ledger, replay
 from run_phase import delay_overrides, main
 from phase_faults import replace_once, bypass_pin
 from test_export import edit_manifest
@@ -160,6 +160,29 @@ def test_empty_fault_selection_cannot_reuse_success(tmp_path,monkeypatch):
 def test_mutations_require_actual_targets():
     with pytest.raises(AssertionError,match='FAULT_TARGET_COUNT'): replace_once('absent','missing','new')
     with pytest.raises(AssertionError,match='FAULT_PIN_TARGET'): bypass_pin('module empty; endmodule','missing','0',1)
+
+
+@pytest.mark.parametrize('omit_internal',(False,True))
+def test_trace_cannot_silently_omit_an_internal_boundary(tmp_path,omit_internal):
+    channels=[dict(channel(n,r),protocol='four-phase-bundled-v1')
+              for n,r in [('in','input'),('middle','internal'),('out','output')]]
+    lines=[]
+    def event(name,req,ack,data,reset=0):
+        if name!='middle' or not omit_internal:
+            lines.append(f'{len(lines)}|{reset}|{name}|{req}|{ack}|{data:x}|0')
+    for epoch in range(3):
+        event('in',0,0,0,reset=1)
+        event('in',0,0,0)
+        event('in',1,0,7)
+        if epoch==1: continue  # One offered, undelivered token is reset-aborted.
+        for name in ('middle','out'):
+            for req,ack in ((1,0),(1,1),(0,1),(0,0)): event(name,req,ack,7)
+        for req,ack in ((1,1),(0,1),(0,0)): event('in',req,ack,7)
+    path=tmp_path/'trace.txt';path.write_text('\n'.join(lines)+'\n',encoding='utf-8')
+    if omit_internal:
+        with pytest.raises(AssertionError,match='MISSING_CHANNEL_ACTIVITY'): replay('phase_roundtrip',channels,path)
+    else:
+        assert replay('phase_roundtrip',channels,path)['delivered']==2
 
 
 @pytest.mark.parametrize('model,parameter',[('ChiselAsyncXor_v1','DELAY_FS'),
