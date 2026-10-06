@@ -17,10 +17,11 @@ import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PLAN = ROOT / "verification/l1-plan.json"
-DEFAULT_CANDIDATE = ROOT / "qualification/l1-candidate-1.json"
+DEFAULT_PLAN = ROOT / "verification/l1-plan-2.json"
+DEFAULT_CANDIDATE = ROOT / "qualification/l1-candidate-2.json"
 INPUT_PREFIXES = ("src/", "examples/", "verification/", "tools/", "project/")
-ADDITIONS = {"verification/l1_acceptance.py", "verification/test_l1_acceptance.py", "verification/l1-plan.json"}
+ADDITIONS = {"verification/l1_acceptance.py", "verification/test_l1_acceptance.py",
+             "verification/l1-plan.json", "verification/l1-plan-2.json"}
 
 
 def require(condition, diagnostic):
@@ -43,6 +44,14 @@ def write(path, value):
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def check_plan(plan):
+    seeds = plan.get("seeds", [])
+    require(plan.get("schema") == "chisel-async-l1-plan-v1" and isinstance(seeds, list)
+            and len(seeds) == 4 and all(type(seed) is int and 0 < seed < 2**32 for seed in seeds)
+            and len(set(seeds)) == 4 and {seed % 2 for seed in seeds} == {0, 1}, "L1_PLAN_CONTRACT")
+    require(set(seeds).isdisjoint(plan.get("supersession", {}).get("used_seeds", [])), "L1_PLAN_REUSED_SEED")
 
 
 def git(*args, root=ROOT):
@@ -288,6 +297,36 @@ def mutex_coverage(rows, minimum):
     return len(latencies)
 
 
+def comparable_mutex_log(log, bench_path):
+    """Ignore only this case's path in Icarus's exact terminal finish record.
+
+    The original log and its hash remain untouched. Line number, finish time,
+    units, all decision/commit records and all other content remain significant.
+    """
+    pattern = (r"(?m)^" + re.escape(str(bench_path))
+               + r"(?P<finish>:\d+: \$finish called at \d+ \([^\r\n()]+\))(?P<ending>\r?\n?)\Z")
+    match = re.search(pattern, log)
+    require(match is not None, "L1_MUTEX_FINISH_IDENTITY")
+    return log[:match.start()] + "<case-bench>" + match["finish"] + match["ending"]
+
+
+def check_mutex_noise_logs(first, first_bench, second, second_bench):
+    require(comparable_mutex_log(first, first_bench) == comparable_mutex_log(second, second_bench),
+            "L1_MUTEX_GLOBAL_RNG_INTERFERENCE")
+
+
+def mutex_bench_path(row):
+    # Retained compile arguments preserve the original host path when an audit
+    # reads downloaded evidence from a different directory or operating system.
+    command = row["compile"]
+    position = command.index("-o") + 2
+    require(position < len(command), "L1_MUTEX_BENCH_IDENTITY")
+    bench = command[position]
+    require(bench.replace("\\", "/").endswith(f'/{row["seed"]}_{row["noise"]}/bench.sv'),
+            "L1_MUTEX_BENCH_IDENTITY")
+    return bench
+
+
 def run_mutex(plan, output, generated):
     source = (generated / "arbiter/ChiselAsyncMutex_v1.sv").read_text(encoding="utf-8")
     bench = (ROOT / "verification/mutex_random.sv").read_text(encoding="utf-8")
@@ -304,7 +343,8 @@ def run_mutex(plan, output, generated):
             artifact_hashes(row, directory)
             rows.append(row)
             logs.append(log)
-        require(logs[0] == logs[1], "L1_MUTEX_GLOBAL_RNG_INTERFERENCE")
+        check_mutex_noise_logs(logs[0], output / f"{seed}_0" / "bench.sv",
+                               logs[1], output / f"{seed}_1" / "bench.sv")
     distinct = mutex_coverage([r["evidence"] for r in rows], plan["mutex_min_latencies"])
     # Real primitive mutant, paired with the same fresh seed and unchanged bench.
     # Match the documented assignment, while requiring exactly one target.
@@ -332,7 +372,7 @@ def audit_mutex(plan, output):
     require(report["status"] == "PASS", "L1_MUTEX_STATUS")
     inventory(report["cases"], [(s, n) for s in plan["seeds"] for n in (0, 1)],
               ("seed", "noise"), "L1_MUTEX_INVENTORY")
-    rows, logs = [], {}
+    rows, logs, benches = [], {}, {}
     for row in report["cases"]:
         directory = output / f'{row["seed"]}_{row["noise"]}'
         require(row == read(directory / "case.json") and row["status"] == "PASS" and row["exit_code"] == 0, "L1_MUTEX_CASE")
@@ -342,7 +382,9 @@ def audit_mutex(plan, output):
         require(evidence == row["evidence"], "L1_MUTEX_SUMMARY")
         rows.append(evidence)
         logs[(row["seed"], row["noise"])] = log
-    require(all(logs[(s, 0)] == logs[(s, 1)] for s in plan["seeds"]), "L1_MUTEX_GLOBAL_RNG_INTERFERENCE")
+        benches[(row["seed"], row["noise"])] = mutex_bench_path(row)
+    for seed in plan["seeds"]:
+        check_mutex_noise_logs(logs[(seed, 0)], benches[(seed, 0)], logs[(seed, 1)], benches[(seed, 1)])
     require(mutex_coverage(rows, plan["mutex_min_latencies"]) == report["distinct_latencies"], "L1_MUTEX_SUMMARY")
     require(len(report["faults"]) == 1, "L1_MUTEX_CONTROL_INVENTORY")
     row = report["faults"][0]
@@ -451,6 +493,7 @@ def prepare_exports(plan, generated, destination):
 
 def freeze(plan_path, candidate_path):
     plan = read(plan_path)
+    check_plan(plan)
     candidate = {"schema": "chisel-async-l1-candidate-v1", "source_revision": git("rev-parse", "HEAD").decode().strip(),
                  "baseline": plan["baseline"], "production": plan["production"], "plan_sha256": sha(plan_path, True),
                  "sources": source_inventory(acceptance=True)}
@@ -471,7 +514,7 @@ def run(plan_path, candidate_path, generated, output):
     try:
         plan = read(plan_path)
         candidate = read(candidate_path)
-        require(plan["schema"] == "chisel-async-l1-plan-v1" and plan["seeds"] == [41003, 41018, 41041, 41060], "L1_PLAN_CONTRACT")
+        check_plan(plan)
         require(candidate["schema"] == "chisel-async-l1-candidate-v1" and candidate["plan_sha256"] == sha(plan_path, True)
                 and candidate["baseline"] == plan["baseline"] and candidate["production"] == plan["production"], "L1_CANDIDATE_CONTRACT")
         require(not sys.flags.optimize and not os.environ.get("PYTHONOPTIMIZE"), "L1_PYTHON_ASSERTIONS_DISABLED")
