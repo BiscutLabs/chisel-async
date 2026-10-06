@@ -71,6 +71,7 @@ object Consumer {
     ConsumerComposition.main(Array("generated"))
     ConsumerPhase.main(Array("generated"))
     chiselasync.examples.EmitReference.main(Array("generated"))
+    chiselasync.examples.EmitQdi.main(Array("generated"))
     ExportDesign.emit(new BufferExample, Paths.get("generated/buffer"))
     ExportDesign.emit(new StructuralBufferExample, Paths.get("generated/structural"), ExportDesign.Debug)
     ExportDesign.emit(new TransformExample, Paths.get("generated/transform"), ExportDesign.Debug)

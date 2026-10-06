@@ -453,6 +453,9 @@
         },
         {
           "$ref": "#/$defs/encodingTiming"
+        },
+        {
+          "$ref": "#/$defs/qdiTiming"
         }
       ]
     },
@@ -956,6 +959,261 @@
           "$ref": "#/$defs/time"
         }
       }
+    },
+    "qdiChannel": {
+      "type": "object",
+      "required": [
+        "channel",
+        "zero",
+        "one",
+        "acknowledge"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/id"
+        },
+        "zero": {
+          "$ref": "#/$defs/id"
+        },
+        "one": {
+          "$ref": "#/$defs/id"
+        },
+        "acknowledge": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
+    "qdiTiming": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "marker",
+        "indication",
+        "component",
+        "input_channels",
+        "output_channels",
+        "cells",
+        "assumptions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "qdi-digital-v1"
+        },
+        "marker": {
+          "$ref": "#/$defs/id"
+        },
+        "indication": {
+          "enum": [
+            "strong",
+            "forwarding",
+            "selected-strong"
+          ]
+        },
+        "component": {
+          "enum": [
+            "storage",
+            "dims",
+            "fork",
+            "join",
+            "demux",
+            "exclusive-merge"
+          ]
+        },
+        "input_channels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/qdiChannel"
+          }
+        },
+        "output_channels": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/qdiChannel"
+          }
+        },
+        "cells": {
+          "$ref": "#/$defs/delayBounds"
+        },
+        "assumptions": {
+          "type": "object",
+          "required": [
+            "cells",
+            "forks",
+            "reset",
+            "rails",
+            "exclusive_inputs"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "cells": {
+              "const": "atomic-digital"
+            },
+            "forks": {
+              "const": "ideal-zero-skew"
+            },
+            "reset": {
+              "const": "coordinated-quiescent"
+            },
+            "rails": {
+              "const": "monotonic-1-of-2-rtz"
+            },
+            "exclusive_inputs": {
+              "enum": [
+                "not-applicable",
+                "complete-handshake-serialized"
+              ]
+            }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "component": {
+                "const": "storage"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "indication": {
+                "const": "strong"
+              },
+              "assumptions": {
+                "properties": {
+                  "exclusive_inputs": {
+                    "const": "not-applicable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "component": {
+                "const": "dims"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "indication": {
+                "const": "strong"
+              },
+              "assumptions": {
+                "properties": {
+                  "exclusive_inputs": {
+                    "const": "not-applicable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "component": {
+                "const": "fork"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "indication": {
+                "const": "forwarding"
+              },
+              "assumptions": {
+                "properties": {
+                  "exclusive_inputs": {
+                    "const": "not-applicable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "component": {
+                "const": "join"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "indication": {
+                "const": "strong"
+              },
+              "assumptions": {
+                "properties": {
+                  "exclusive_inputs": {
+                    "const": "not-applicable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "component": {
+                "const": "demux"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "indication": {
+                "const": "selected-strong"
+              },
+              "assumptions": {
+                "properties": {
+                  "exclusive_inputs": {
+                    "const": "not-applicable"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "component": {
+                "const": "exclusive-merge"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "indication": {
+                "const": "selected-strong"
+              },
+              "assumptions": {
+                "properties": {
+                  "exclusive_inputs": {
+                    "const": "complete-handshake-serialized"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }

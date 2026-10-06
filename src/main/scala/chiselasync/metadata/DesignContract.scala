@@ -339,4 +339,45 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     "children" -> ujson.Arr.from(children.map { case (id, module) =>
       ujson.Obj("id" -> id, "contract" -> module.contract.jsonAt(prefix :+ id))
     }))
+
+  /** Bounded digital QDI-family intent. Every local public channel is listed;
+    * the resolver independently checks its type, role, rails and marker pins.
+    * Indication and ideal forks remain stated assumptions, not a circuit proof.
+    */
+  def qdiTiming(id: String, inputChannelIds: Seq[String], outputChannelIds: Seq[String],
+                timing: QdiTiming, indication: String, component: String): Unit = {
+    require(QdiMarker.components.contains(component), "invalid QDI component")
+    require(QdiMarker.indications(component) == indication, "invalid QDI indication for component")
+    require(inputChannelIds.nonEmpty && outputChannelIds.nonEmpty, "QDI channel inventories must be nonempty")
+    val channelIds = inputChannelIds ++ outputChannelIds
+    require(channelIds.distinct.size == channelIds.size, "duplicate QDI channel")
+    require(!obligations.exists(_("kind").str == "qdi-digital-v1"), "QDI timing may be declared only once")
+    claim(id)
+    val refs = channelIds.flatMap(channel => Seq(s"${channel}_zero", s"${channel}_one", s"${channel}_acknowledge"))
+    val signals = refs.map(ref => endpoints.find(_._1 == ref).map(_._2)
+      .getOrElse(throw new IllegalArgumentException(s"missing QDI endpoint: $ref")))
+    val parameters = Map("MODE" -> BigInt(QdiMarker.modes(indication)),
+      "COMPONENT" -> BigInt(QdiMarker.components(component)), "WIDTH" -> BigInt(signals.map(_.getWidth).sum),
+      "CELL_MIN_FS" -> BigInt(timing.cells.min.fs), "CELL_MAX_FS" -> BigInt(timing.cells.max.fs),
+      "CELL_MODEL_FS" -> BigInt(timing.cells.model.fs))
+    val marker = Module(new QdiMarker(parameters))
+    marker.reset := owner.reset
+    marker.values := chisel3.util.Cat(signals.reverse.map(_.asUInt))
+    val markerId = s"${id}_marker"
+    val resetRef = endpoints.find(_._2 eq owner.reset).map(_._1)
+      .getOrElse(throw new IllegalArgumentException("QDI marker requires a registered reset endpoint"))
+    primitive(markerId, marker, parameters, resetRef,
+      "passive QDI-family assumption carrier; endpoint list packed least-significant first; no hardware behavior", "constraint-marker")
+    def inventory(ids: Seq[String]): ujson.Value = ujson.Arr.from(ids.map(channel =>
+      ujson.Obj("channel" -> channel, "zero" -> s"${channel}_zero", "one" -> s"${channel}_one",
+        "acknowledge" -> s"${channel}_acknowledge")))
+    obligations += ujson.Obj("id" -> id, "kind" -> "qdi-digital-v1", "marker" -> markerId,
+      "indication" -> indication, "component" -> component,
+      "input_channels" -> inventory(inputChannelIds), "output_channels" -> inventory(outputChannelIds),
+      "cells" -> ujson.Obj("min_fs" -> timing.cells.min.fs.toString, "max_fs" -> timing.cells.max.fs.toString,
+        "model_fs" -> timing.cells.model.fs.toString),
+      "assumptions" -> ujson.Obj("cells" -> "atomic-digital", "forks" -> "ideal-zero-skew",
+        "reset" -> "coordinated-quiescent", "rails" -> "monotonic-1-of-2-rtz",
+        "exclusive_inputs" -> (if (component == "exclusive-merge") "complete-handshake-serialized" else "not-applicable")))
+  }
 }

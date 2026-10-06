@@ -10,6 +10,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import venv
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -118,7 +119,8 @@ def main():
                  "examples/runMain chiselasync.examples.EmitOptimized target/generated",
                  "examples/runMain chiselasync.examples.EmitComposition target/generated",
                  "examples/runMain chiselasync.examples.EmitPhase target/generated",
-                 "examples/runMain chiselasync.examples.EmitReference target/generated"]
+                 "examples/runMain chiselasync.examples.EmitReference target/generated",
+                 "examples/runMain chiselasync.examples.EmitQdi target/generated"]
         steps = setup + [("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
             ("python", [python, "-m", "pytest", *[str(p) for p in sorted((ROOT / "verification").glob("test_*.py"))], "-q"])]
         steps += [(name, [python, str(ROOT / path)]) for name, path in (
@@ -129,6 +131,14 @@ def main():
             ("phase", "verification/run_phase.py"), ("closure", "verification/run_closure.py"),
             ("mutex", "verification/run_mutex.py"), ("dims", "verification/run_dims.py"),
             ("reference", "verification/run_reference.py"))]
+        # Preserve every QDI attempt, including failed runs; the runner rejects
+        # an existing destination rather than accepting stale evidence.
+        qdi_parent = ROOT / "target/verification/qdi"
+        qdi_parent.mkdir(parents=True, exist_ok=True)
+        qdi_attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=qdi_parent)) / "campaign"
+        steps += [("qdi", [python, str(ROOT / "verification/run_qdi.py"), "--output", str(qdi_attempt)])]
+        steps += [("qdi-sequences", [python, str(ROOT / "verification/run_qdi_sequences.py"),
+                                      "--output", str(qdi_attempt.parent / "sequences")])]
         steps += [("chiselsim", [python, str(ROOT / "verification/run_chiselsim.py")]),
                   ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")])]
         run_steps(steps, environment, output)

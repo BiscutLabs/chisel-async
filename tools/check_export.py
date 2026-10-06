@@ -21,6 +21,11 @@ from run import read_sources
 OPTIONS = ["-O=release", "--strip-fir-debug-info",
            "--lowering-options=disallowPortDeclSharing,disallowLocalVariables"]
 IDENT = r"[A-Za-z_][A-Za-z0-9_]*"
+QDI_MODES = {"strong": "1", "forwarding": "2", "selected-strong": "3"}
+QDI_COMPONENTS = {"storage": "1", "dims": "2", "fork": "3", "join": "4", "demux": "5", "exclusive-merge": "6"}
+QDI_INDICATIONS = {"storage": "strong", "dims": "strong", "fork": "forwarding", "join": "strong",
+                   "demux": "selected-strong", "exclusive-merge": "selected-strong"}
+MARKER_MODELS = {"ChiselAsyncTimingMarker_v1", "ChiselAsyncQdiMarker_v1"}
 
 
 def require(condition, diagnostic):
@@ -57,6 +62,50 @@ def nodes(node):
     yield node
     for child in node["children"]:
         yield from nodes(child["contract"])
+
+
+def validate_qdi_timing(timing, node):
+    shape(timing, "id kind marker indication component input_channels output_channels cells assumptions")
+    component = timing["component"]
+    require(component in QDI_COMPONENTS and timing["indication"] == QDI_INDICATIONS[component],
+            "INVALID_QDI_INDICATION")
+    assumptions = {"cells": "atomic-digital", "forks": "ideal-zero-skew", "reset": "coordinated-quiescent",
+                   "rails": "monotonic-1-of-2-rtz",
+                   "exclusive_inputs": "complete-handshake-serialized" if component == "exclusive-merge" else "not-applicable"}
+    require(timing["assumptions"] == assumptions, "INVALID_QDI_ASSUMPTIONS")
+    channels = {c["id"]: c for c in node["channels"]}
+    covered = []
+    for key, role in (("input_channels", "input"), ("output_channels", "output")):
+        inventory = timing[key]
+        require(type(inventory) is list and bool(inventory), "QDI_CHANNEL_INVENTORY")
+        for entry in inventory:
+            shape(entry, "channel zero one acknowledge")
+            channel = channels.get(entry["channel"])
+            require(channel and channel["protocol"] == "dual-rail-rtz-v1" and channel["role"] == role,
+                    "QDI_CHANNEL_BINDING")
+            require(all(entry[ref] == channel[ref] for ref in ("zero", "one", "acknowledge")), "QDI_CHANNEL_BINDING")
+            covered.append(entry["channel"])
+    require(len(covered) == len(set(covered)) and set(covered) == set(channels), "QDI_CHANNEL_INVENTORY")
+    inputs, outputs = len(timing["input_channels"]), len(timing["output_channels"])
+    arities = {"storage": inputs == 1 and outputs == 1, "dims": inputs == 1 and outputs == 1,
+               "fork": inputs == 1 and outputs >= 2, "join": inputs == 2 and outputs == 1,
+               "demux": inputs == 1 and outputs == 2, "exclusive-merge": inputs >= 2 and outputs == 1}
+    require(arities[component], "QDI_COMPONENT_CHANNELS")
+    bound = timing["cells"]
+    shape(bound, "min_fs max_fs model_fs")
+    require(all(type(v) is str and re.fullmatch(r"[1-9][0-9]*", v) and int(v) <= 2**63-1 for v in bound.values()),
+            "INVALID_MODEL_TIME")
+    require(int(bound["min_fs"]) <= int(bound["model_fs"]) <= int(bound["max_fs"]), "INVALID_DELAY_BOUNDS")
+    # Bounds apply to every local delayed primitive; child contracts carry their
+    # own obligations. The marker is passive and protocol guards have no delay.
+    for cell in node["primitives"]:
+        if cell["view"] != "behavioral":
+            continue
+        time_parameters = {key for key in cell["parameters"] if key.endswith("_FS")}
+        require(not time_parameters or time_parameters == {"DELAY_FS"}, "QDI_UNSUPPORTED_CELL_TIMING")
+        if time_parameters:
+            delay = cell["parameters"]["DELAY_FS"]
+            require(int(bound["min_fs"]) <= int(delay) <= int(bound["max_fs"]), "QDI_CELL_OUTSIDE_BOUNDS")
 
 
 def validate_manifest(document):
@@ -140,7 +189,7 @@ def validate_manifest(document):
             require(primitive["reset"] in endpoints and endpoints[primitive["reset"]]["width"] == 1,
                     "MISSING_RESET_ENDPOINT")
             require(primitive["view"] in ("behavioral", "constraint-marker") and primitive["version"] == 1, "INVALID_VIEW")
-            require((primitive["view"] == "constraint-marker") == (primitive["model"] == "ChiselAsyncTimingMarker_v1"), "INVALID_VIEW")
+            require((primitive["view"] == "constraint-marker") == (primitive["model"] in MARKER_MODELS), "INVALID_VIEW")
             require(re.fullmatch(r"ChiselAsync[A-Za-z0-9]+_v1", primitive["model"]), "INVALID_MODEL")
             require(primitive["resource"] == f'chiselasync/sv/{primitive["model"]}.sv', "INVALID_RESOURCE")
             require(primitive["rtl_path"].startswith(path + ".") and
@@ -149,7 +198,10 @@ def validate_manifest(document):
             all_paths.add(primitive["rtl_path"])
             resources.add(primitive["resource"])
         for timing in node["timing"]:
-            if timing.get("kind") == "long-hold-bundling-v2":
+            if timing.get("kind") == "qdi-digital-v1":
+                validate_qdi_timing(timing, node)
+                times = ()
+            elif timing.get("kind") == "long-hold-bundling-v2":
                 shape(timing, "id kind marker mode request input_data latch_data latch_closed acknowledge output_request output_data "
                       "matched_delay_fs data_delay control_delays latch_delay output_delay_fs provenance assumptions")
                 refs = ("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
@@ -290,9 +342,11 @@ def validate_manifest(document):
                 require(timing["kind"] == "bundled-setup-hold-v1" and timing["mode"] == "digital-model", "UNSUPPORTED_TIMING")
                 refs = ("launch", "transaction", "data_valid", "capture", "captured")
                 times = ("setup_fs", "hold_fs")
-            require(all(timing[ref] in endpoints for ref in refs), "MISSING_TIMING_ENDPOINT")
+            require(all(ref in endpoints for ref in timing_refs(timing)), "MISSING_TIMING_ENDPOINT")
             marker = next((p for p in node["primitives"] if p["id"] == timing["marker"]), None)
             require(marker and marker["view"] == "constraint-marker", "MISSING_TIMING_MARKER")
+            require(marker["model"] == ("ChiselAsyncQdiMarker_v1" if timing["kind"] == "qdi-digital-v1"
+                                        else "ChiselAsyncTimingMarker_v1"), "TIMING_MARKER_MODEL_MISMATCH")
             for name in times:
                 require(type(timing[name]) is str and re.fullmatch(r"0|[1-9][0-9]*", timing[name])
                         and int(timing[name]) <= 2**63 - 1, "INVALID_MODEL_TIME")
@@ -317,9 +371,13 @@ def validate_manifest(document):
                 for cell_id, delay in model_delays.items():
                     require(cell_id in primitives and primitives[cell_id]["parameters"].get("DELAY_FS") == str(delay),
                             "BUNDLING_PARAMETER_MISMATCH")
-            require(marker["parameters"] == marker_parameters(timing, endpoints), "TIMING_MARKER_PARAMETER_MISMATCH")
+            require(marker["parameters"] == marker_parameters(timing, endpoints),
+                    "QDI_MARKER_PARAMETER_MISMATCH" if timing["kind"] == "qdi-digital-v1" else "TIMING_MARKER_PARAMETER_MISMATCH")
         # Required obligations cannot be silently deleted and rehashed.
         kinds = [t["kind"] for t in node["timing"]]
+        qdi_markers = [p for p in node["primitives"] if p["model"] == "ChiselAsyncQdiMarker_v1"]
+        if qdi_markers or "qdi-digital-v1" in kinds:
+            require(len(qdi_markers) == kinds.count("qdi-digital-v1") == 1, "QDI_CONSTRAINT_INVENTORY")
         primitive_ids = {p["id"] for p in node["primitives"]}
         if "request_phase" in primitive_ids or {"master_close", "phase", "returned"} <= primitive_ids:
             require(kinds.count("phase-conversion-v2") == 1, "MISSING_PHASE_CONSTRAINT")
@@ -347,21 +405,32 @@ def validate_manifest(document):
 
 
 def timing_refs(timing):
-    if timing["kind"] == "encoding-boundary-v1": return ("input_data", "input_control", "input_acknowledge", "output_data", "output_control", "output_acknowledge")
-    if timing["kind"] == "phase-conversion-v2":
-        return ("input_request", "input_acknowledge", "output_request", "output_acknowledge") + (("history_closed",) if timing["direction"] == "four-to-two" else ())
-    if timing["kind"] == "bundled-data-path-v1": return ("source", "sink")
-    if timing["kind"] == "long-hold-fork-v1": return ("aout", "state_a")
-    return (("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
-            if timing["kind"] == "long-hold-bundling-v2" else
-            ("launch", "transaction", "data_valid", "capture", "captured"))
+    """Endpoint IDs in marker packing order, least-significant first."""
+    if timing["kind"] == "qdi-digital-v1":
+        return tuple(c[ref] for c in timing["input_channels"] + timing["output_channels"]
+                     for ref in ("zero", "one", "acknowledge"))
+    if timing["kind"] == "encoding-boundary-v1":
+        fields = ("input_data", "input_control", "input_acknowledge", "output_data", "output_control", "output_acknowledge")
+    elif timing["kind"] == "phase-conversion-v2":
+        fields = ("input_request", "input_acknowledge", "output_request", "output_acknowledge") + (("history_closed",) if timing["direction"] == "four-to-two" else ())
+    elif timing["kind"] == "bundled-data-path-v1": fields = ("source", "sink")
+    elif timing["kind"] == "long-hold-fork-v1": fields = ("aout", "state_a")
+    else:
+        fields = (("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
+                  if timing["kind"] == "long-hold-bundling-v2" else
+                  ("launch", "transaction", "data_valid", "capture", "captured"))
+    return tuple(timing[ref] for ref in fields)
 
 
 def marker_parameters(timing, endpoints):
+    width = str(sum(endpoints[ref]["width"] for ref in timing_refs(timing)))
+    if timing["kind"] == "qdi-digital-v1":
+        return {"MODE": QDI_MODES[timing["indication"]], "COMPONENT": QDI_COMPONENTS[timing["component"]],
+                "WIDTH": width, **{f"CELL_{b.upper()}_FS": timing["cells"][b + "_fs"] for b in ("min", "max", "model")}}
     roles = ("A", "B", "ACKNOWLEDGE", "LONG_HOLD", "DATA", "LATCH")
     result = {name: "0" for name in ("KIND", "WIDTH", "SETUP_FS", "HOLD_FS", "MATCHED_FS", "OUTPUT_FS")}
     result.update({f"{r}_{b}_FS": "0" for r in roles for b in ("MIN", "MAX", "MODEL")})
-    result["WIDTH"] = str(sum(endpoints[timing[ref]]["width"] for ref in timing_refs(timing)))
+    result["WIDTH"] = width
     if timing["kind"] == "encoding-boundary-v1":
         result.update(KIND="7" if timing["direction"] == "dual-to-bundled" else "6",
                       OUTPUT_FS=timing["return_delay_fs"], MATCHED_FS=timing["matched_delay_fs"])
@@ -477,8 +546,8 @@ def probe_source(manifest, scopes):
                     offset = 0
                     marker = next(p for p in node["primitives"] if p["id"] == timing["marker"])
                     for ref in timing_refs(timing):
-                        width = endpoint_by_id[timing[ref]]["width"]
-                        if timing[ref] == endpoint["id"]:
+                        width = endpoint_by_id[ref]["width"]
+                        if ref == endpoint["id"]:
                             candidates.append(f'{marker["rtl_path"]}.values[{offset} +: {width}]')
                         offset += width
                 require(candidates, "UNRESOLVED_SOURCE_TARGET")
@@ -496,8 +565,9 @@ def probe_source(manifest, scopes):
                             f'$fatal(1, "INACTIVE_ENDPOINT:{path}");')
         for timing in node["timing"]:
             marker = next(p for p in node["primitives"] if p["id"] == timing["marker"])
-            expression = "{" + ", ".join(endpoint_by_id[timing[ref]]["rtl_path"] for ref in reversed(timing_refs(timing))) + "}"
-            comparisons.append(f'if ({marker["rtl_path"]}.values !== {expression}) $fatal(1, "TIMING_MARKER_BINDING_MISMATCH");')
+            expression = "{" + ", ".join(endpoint_by_id[ref]["rtl_path"] for ref in reversed(timing_refs(timing))) + "}"
+            diagnostic = "QDI_MARKER_BINDING_MISMATCH" if timing["kind"] == "qdi-digital-v1" else "TIMING_MARKER_BINDING_MISMATCH"
+            comparisons.append(f'if ({marker["rtl_path"]}.values !== {expression}) $fatal(1, "{diagnostic}");')
             if timing["kind"] == "bundled-data-path-v1":
                 owner = node
                 for child_id in timing["delay_owner"]:
@@ -628,6 +698,7 @@ def validate_port_abi(directory, manifest, scopes):
                     and any(s.startswith(source + ".") for s in ports), "INVALID_CHANNEL_ABI")
             bindings[source] = protocol
         endpoints = {e["id"]: e for e in node["endpoints"]}
+        registered_roots = []
         for channel in node["channels"]:
             protocol = channel["protocol"]
             if protocol in ("four-phase-bundled-v1", "two-phase-bundled-v1"):
@@ -643,6 +714,7 @@ def validate_port_abi(directory, manifest, scopes):
                 roots.append(source[:-(len(member) + 1)])
             require(len(set(roots)) == 1, "CHANNEL_SOURCE_ASSOCIATION")
             require(bindings.get(roots[0]) == protocol, "CHANNEL_PROTOCOL_MISMATCH")
+            registered_roots.append(roots[0])
             def check_port(source, direction, width, diagnostic="CHANNEL_PORT_MISMATCH"):
                 require(source in ports, diagnostic)
                 port = ports[source]
@@ -668,6 +740,9 @@ def validate_port_abi(directory, manifest, scopes):
                     zero = endpoints[channel["zero"]]["source"] + field["source"][len(root):]
                     other = check_port(zero, role, field["width"], "PAYLOAD_SOURCE_MISMATCH")
                     require(other["signed"] == port["signed"], "PAYLOAD_SIGNEDNESS_MISMATCH")
+        if any(t["kind"] == "qdi-digital-v1" for t in node["timing"]):
+            require(len(registered_roots) == len(set(registered_roots)) and set(registered_roots) == set(bindings),
+                    "QDI_CHANNEL_ABI_INVENTORY")
 
 
 def validate_export(directory: Path):
@@ -736,7 +811,8 @@ def validate_export(directory: Path):
     simulation = subprocess.run(["vvp", "contract_probe.vvp"], cwd=directory, text=True, capture_output=True, timeout=60)
     (directory / "contract_simulation.log").write_text(simulation.stdout + simulation.stderr, encoding="utf-8")
     for diagnostic in ("RESET_BINDING_MISMATCH", "TIMING_MARKER_BINDING_MISMATCH", "PHASE_CLOSURE_BINDING_MISMATCH",
-                       "PHASE_RETURN_BINDING_MISMATCH", "DATA_PATH_BINDING_MISMATCH", "HOLD_FORK_BINDING_MISMATCH"):
+                       "PHASE_RETURN_BINDING_MISMATCH", "DATA_PATH_BINDING_MISMATCH", "HOLD_FORK_BINDING_MISMATCH",
+                       "QDI_MARKER_BINDING_MISMATCH"):
         require(diagnostic not in simulation.stdout, diagnostic)
     require(simulation.returncode == 0 and f"CONTRACT_PROBES_PASS:{checks}" in simulation.stdout,
             "ENDPOINT_MAPPING_MISMATCH")
@@ -767,7 +843,9 @@ def main():
                 "two_buffer", "two_wide", "two_fifo", "two_initialized", "two_initial", "two_fork", "two_join",
                 "two_select", "two_merge", "two_arbiter", "two_transform", "encoding_to_dual",
                 "encoding_from_dual", "encoding_roundtrip", "phase_roundtrip", "reference_behavioral",
-                "reference_bundled", "reference_qdi", "reference_gals", "reference_core")
+                "reference_bundled", "reference_qdi", "reference_gals", "reference_core",
+                "qdi_buffer", "qdi_packet", "qdi_not", "qdi_and", "qdi_or", "qdi_xor", "qdi_select",
+                "qdi_adder", "qdi_constant", "qdi_fork", "qdi_join", "qdi_demux", "qdi_merge", "qdi_composition")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

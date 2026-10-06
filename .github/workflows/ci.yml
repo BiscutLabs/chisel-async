@@ -90,6 +90,8 @@ jobs:
             target/generated/**/resolved.json
             target/generated/**/design.hw.mlir
             target/generated/**/ref_*.sv
+            target/generated/**/*.sv
+            target/generated/**/filelist.f
             target/generated/**/ports.json
             target/generated/**/contract_*.log
             target/consumers/**/verification
@@ -97,6 +99,8 @@ jobs:
             target/consumers/**/generated/**/ports.json
             target/consumers/**/generated/**/resolved.json
             target/consumers/**/generated/**/ref_*.sv
+            target/consumers/**/generated/**/*.sv
+            target/consumers/**/generated/**/filelist.f
             target/consumers/**/generated/**/design.hw.mlir
             target/consumers/**/target/test-reports
           if-no-files-found: error

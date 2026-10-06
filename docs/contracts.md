@@ -82,6 +82,12 @@ The four-state diagnostic model retains a known output with an unknown input onl
 
 The independent Boolean oracle uses the characteristic equation `next = (a & b) | (previous & (a | b))`. Its test enumerates all four-transition input sequences from reset. Tests also check release under unanimous ones and reset recovery from uncertainty.
 
+## Bounded dual-rail family
+
+The [CA-08 family](qdi-family.md) adds strongly indicating typed half-buffers, small complete DIMS truth tables, fork/join and exclusive routing. Valid and spacer indication are separate obligations. A strong half-buffer holds its output until the source has returned to spacer and the sink has acknowledged; its input acknowledgement may arrive after downstream delivery. Accounting preserves completed outputs across reset even in that interval. Forks forward rails without adding word-level indication and wait for every branch in both acknowledgement phases. Exclusive merge requires serialized complete handshakes and supplies no arbitration.
+
+`QdiTiming` records positive independent cell-delay bounds. The `qdi-digital-v1` export binds actual rail/ack/reset endpoints to indication and atomic-cell, ideal-fork, monotonic-RTZ and coordinated-reset assumptions. These are bounded digital model contracts; physical QDI implementation and arbitrary compiler lowering remain unqualified.
+
 ## Versioning
 
 SV model identifiers end in `_v1`. Their behavior is part of the contract, not an incidental module name. Incompatible changes require a new model identifier and updated compatibility evidence. The Scala library remains `0.1.0-SNAPSHOT` and has no stable API promise yet. The separate `chisel-async-contract-v3` sidecar carries scoped instance IDs, compiler probe identities and checked endpoint mappings. Re-emit v1/v2 exports for the current resolver. [Timing and export](timing-and-export.md) specifies the latch/delay models, qualified compiler configurations, schema and limits.

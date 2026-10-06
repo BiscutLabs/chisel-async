@@ -22,7 +22,7 @@ def main():
                      "chiselasync/sv/ChiselAsyncClosingLatch_v1.sv", "chiselasync/sv/ChiselAsyncTimingMarker_v1.sv",
                      "chiselasync/sv/ChiselAsyncAnd_v1.sv", "chiselasync/sv/ChiselAsyncProtocolGuard_v1.sv",
                      "chiselasync/sv/ChiselAsyncXor_v1.sv", "chiselasync/sv/ChiselAsyncToggle_v1.sv",
-                     "chiselasync/sv/ChiselAsyncMutex_v1.sv"):
+                     "chiselasync/sv/ChiselAsyncMutex_v1.sv", "chiselasync/sv/ChiselAsyncQdiMarker_v1.sv"):
             if not library.read(name):
                 raise RuntimeError(f"Empty published resource: {name}")
     # The space in the path is intentional. Keep outputs for diagnosis/replay.
@@ -33,6 +33,8 @@ def main():
     # Recompile example assembly against only the published library dependency.
     shutil.copy(ROOT / "examples/src/main/scala/chiselasync/examples/EmitReference.scala",
                 consumer / "src/main/scala/EmitReference.scala")
+    shutil.copy(ROOT / "examples/src/main/scala/chiselasync/examples/EmitQdi.scala",
+                consumer / "src/main/scala/EmitQdi.scala")
     (consumer / "project").mkdir()
     shutil.copy(ROOT / "project/build.properties", consumer / "project/build.properties")
     environment = dict(os.environ)
@@ -84,6 +86,12 @@ def main():
                         *(["--seeds", "0", "2", "3"] if lane == "reference" else []),
                         "--generated", str(consumer / "generated"), "--output", str(consumer / "verification" / lane)],
                        cwd=ROOT, check=True, timeout=180)
+    subprocess.run([sys.executable, str(ROOT / "verification/run_qdi.py"),
+                    "--seeds", "0", "2", "3", "--generated", str(consumer / "generated"),
+                    "--output", str(consumer / "verification/qdi")], cwd=ROOT, check=True, timeout=180)
+    subprocess.run([sys.executable, str(ROOT / "verification/run_qdi_sequences.py"),
+                    "--generated", str(consumer / "generated"),
+                    "--output", str(consumer / "verification/qdi-sequences")], cwd=ROOT, check=True, timeout=180)
     print(f"Published artifact consumed and simulated successfully: {consumer}")
 
 
