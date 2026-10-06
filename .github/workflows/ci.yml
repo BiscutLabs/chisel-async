@@ -24,8 +24,9 @@ jobs:
             # setup-python has no Windows binaries for security-only 3.12 releases.
             python: '3.12.10'
     runs-on: ${{ matrix.os }}
-    # Expanded CA-06 and CA-07 per-cell campaigns plus both cold simulator builds.
-    timeout-minutes: 45
+    # The full cold Windows run took 44 minutes including evidence upload.
+    # Leave host-speed margin; test counts and per-case/step deadlines are unchanged.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
