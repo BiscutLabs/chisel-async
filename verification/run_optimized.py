@@ -74,7 +74,7 @@ def main():
             design_paths = [n["rtl_path"] for n in nodes(manifest["design"])]
             actual = {path: resolved["instances"][path] for path in design_paths}
             definitions[name] = len(set(actual.values()))
-            if len(actual) != 25 or len(resolved["endpoints"]) != 240:
+            if len(actual) != 25 or len(resolved["endpoints"]) != 256:
                 raise RuntimeError("REPLICATION_INACTIVE_INVENTORY")
             record["cases"].append(execute(name, read_sources(directory), bench(), output/name))
         if definitions != {"replicated": 6, "replicated_debug": 25}:

@@ -89,6 +89,10 @@ class FourPhaseStage[A <: Data, B <: Data](inGen: A, outGen: B, transform: A => 
   contract.endpoint("latch_closed", latchClosed)
   contract.longHoldTiming("bundling", timing, "in_request", "in_data", "latch_data", "latch_closed",
     "in_acknowledge", "out_request", "out_data")
+  contract.dataPathTiming("transform_path", "in_data", "latch_data", timing, "chisel-transform-including-decode")
+  private val stateA = WireDefault(a.q)
+  contract.endpoint("state_a", stateA)
+  contract.longHoldFork("hold_fork", "out_acknowledge", "state_a", timing)
 }
 
 class LongHoldBuffer[T <: Data](gen: T, timing: BundledTiming,

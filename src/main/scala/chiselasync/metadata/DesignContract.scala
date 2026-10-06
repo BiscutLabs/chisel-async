@@ -167,7 +167,37 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
       "latch_delay" -> bounds(policy.latchDelay),
       "output_delay_fs" -> policy.outputDelay.fs.toString,
       "provenance" -> "explicit model policy; not technology timing closure",
-      "assumptions" -> "atomic asymmetric cells including input bubbles; ideal forks; zero latch aperture; coordinated quiescent reset")
+      "assumptions" -> "atomic input bubbles; Aout+ reaches long_hold.b before A- reaches long_hold.a; ideal model wires; zero latch aperture; coordinated reset")
+  }
+
+  /** A whole-path budget, including ideal Chisel glue. The delay primitive models
+    * this budget once; its delay is not an additional allowance for physical glue.
+    * delayOwner is a relative sequence of registered child IDs (empty = this node).
+    */
+  def dataPathTiming(id: String, source: String, sink: String, policy: BundledTiming,
+                     logic: String, delayOwner: Seq[String] = Seq.empty,
+                     delayCell: String = "data_delay"): Unit = {
+    claim(id)
+    val bounds = policy.dataDelay
+    val marker = timingMarker(id, Seq(source, sink), Map("KIND" -> BigInt(3),
+      "DATA_MIN_FS" -> BigInt(bounds.min.fs), "DATA_MAX_FS" -> BigInt(bounds.max.fs),
+      "DATA_MODEL_FS" -> BigInt(bounds.model.fs)))
+    obligations += ujson.Obj("id" -> id, "kind" -> "bundled-data-path-v1", "marker" -> marker,
+      "source" -> source, "sink" -> sink, "logic" -> logic, "logic_model_fs" -> "0",
+      "budget" -> ujson.Obj("min_fs" -> bounds.min.fs.toString, "max_fs" -> bounds.max.fs.toString,
+        "model_fs" -> bounds.model.fs.toString),
+      "delay_owner" -> ujson.Arr.from(delayOwner), "delay_cell" -> delayCell,
+      "accounting" -> "included-in-delay-cell; replace-model-with-mapped-path; not-additive")
+  }
+
+  def longHoldFork(id: String, aout: String, stateA: String, policy: BundledTiming): Unit = {
+    claim(id)
+    val marker = timingMarker(id, Seq(aout, stateA), Map("KIND" -> BigInt(4),
+      "A_MIN_FS" -> BigInt(policy.controls.a.min.fs)))
+    obligations += ujson.Obj("id" -> id, "kind" -> "long-hold-fork-v1", "marker" -> marker,
+      "aout" -> aout, "state_a" -> stateA, "early_pin" -> "long_hold.b",
+      "late_pin" -> "long_hold.a", "relation" -> "Aout+ strictly before A- at OR inputs",
+      "model_wire_skew_fs" -> "0", "a_min_fs" -> policy.controls.a.min.fs.toString)
   }
 
   private def timingMarker(id: String, refs: Seq[String], values: Map[String, BigInt]): String = {

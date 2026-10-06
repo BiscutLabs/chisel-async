@@ -96,6 +96,13 @@ class FourPhaseMerge[T <: Data](gen: T, val inputs: Int, timing: BundledTiming, 
   storage.in.req := cells.or("request", in.map(_.req).toSeq)
   // Request-controlled mux is inside the stage's declared source-to-capture data path.
   storage.in.bits := Mux1H(in.map(_.req), in.map(_.bits))
+  // Include both mux selection and payload arrival in the downstream data budget.
+  contract.endpoint("mux_sources", chisel3.util.Cat(in.reverse.map(p => chisel3.util.Cat(p.req, p.bits.asUInt))))
+  private val muxResult = Wire(gen.cloneType)
+  muxResult := storage.in.bits
+  contract.endpoint("mux_result", muxResult)
+  contract.dataPathTiming("merge_mux", "mux_sources", "mux_result", timing,
+    "exclusive-merge-input-mux", Seq("storage"))
   in.zipWithIndex.foreach { case (port, i) =>
     port.ack := cells.c(s"acknowledge$i", Seq(port.req, storage.in.ack))
     contract.channel(s"in$i", port, "input")
@@ -134,6 +141,9 @@ class InitialTokens[T <: Data](gen: T, val initial: Seq[T], timing: BundledTimin
   out.req := cells.buffer("request_delay", cells.or("request", active.toSeq).asUInt, timing.matchedDelay).asBool
   done := finished.last
   contract.capacity(initial.size); contract.channel("out", out, "output"); contract.endpoint("done", done)
+  contract.endpoint("mux_state", chisel3.util.Cat(reset.asBool, finished.asUInt))
+  contract.dataPathTiming("initial_mux", "mux_state", "out_data", timing,
+    "initial-token-literal-mux", delayCell = "data")
 }
 
 /** Exact-depth pipeline. Initial values are injected before any external acceptance.

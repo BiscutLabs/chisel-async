@@ -11,6 +11,7 @@ from composition_reference import CompositionLedger, replay
 from run_composition import mutate, FIXTURES, FAULTS, port_roles
 from test_export import edit_manifest
 from check_export import validate_export
+from run_composition import cached_export, export_inputs, sha
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -92,6 +93,81 @@ def test_mutations_refuse_missing_targets():
     for name in FAULTS:
         if name not in ('merge_contention','merge_contention_return','invalid_select'):
             with pytest.raises(AssertionError,match='MUTATION_TARGET'): mutate('module absent; endmodule',name)
+
+
+@pytest.mark.parametrize('fixture,logic', [('select','chisel-transform-including-decode'),
+    ('merge','exclusive-merge-input-mux'),('initial_tokens','initial-token-literal-mux')])
+def test_glue_budget_is_explicit_and_bound_to_exported_model(fixture,logic):
+    from check_export import nodes
+    design=json.loads((ROOT/'target/generated'/fixture/'contract.json').read_text(encoding='utf-8'))['manifest']['design']
+    paths=[(n,t) for n in nodes(design) for t in n['timing'] if t.get('logic')==logic]
+    assert len(paths)==1
+    node,path=paths[0]
+    assert path['logic_model_fs']=='0' and path['budget']=={'min_fs':'1000000','max_fs':'10000000','model_fs':'8000000'}
+    assert path['accounting']=='included-in-delay-cell; replace-model-with-mapped-path; not-additive'
+    marker=next(p for p in node['primitives'] if p['id']==path['marker'])
+    assert marker['parameters']['KIND']=='3' and marker['parameters']['DATA_MAX_FS']=='10000000'
+    if fixture=='merge':
+        assert next(e for e in node['endpoints'] if e['id']==path['source'])['width']==27
+
+
+@pytest.mark.parametrize('fault,diagnostic', [('missing','MISSING_MUX_CONSTRAINT'),
+    ('budget','DATA_PATH_BUDGET_MISMATCH'),('owner','INVALID_DATA_PATH_BINDING'),
+    ('model','DATA_PATH_PARAMETER_MISMATCH')])
+def test_rehashed_glue_constraint_corruption_fails(tmp_path,fault,diagnostic):
+    directory=tmp_path/'merge'; shutil.copytree(ROOT/'target/generated/merge',directory)
+    def corrupt(m):
+        node=m['design']; path=next(t for t in node['timing'] if t['id']=='merge_mux')
+        if fault=='missing': node['timing'].remove(path)
+        elif fault=='budget': path['budget']['max_fs']='9000000'
+        elif fault=='model': path['budget']['model_fs']='7000000'
+        else: path['delay_owner']=[]
+    edit_manifest(directory,corrupt)
+    with pytest.raises(ValueError,match='^'+diagnostic+'$'): validate_export(directory)
+
+
+@pytest.mark.parametrize('fault,diagnostic', [('missing','MISSING_LONG_HOLD_PATH_CONSTRAINT'),
+    ('all_missing','MISSING_LONG_HOLD_PATH_CONSTRAINT'),('bound','HOLD_FORK_BOUND_MISMATCH'),('relation','INVALID_HOLD_FORK')])
+def test_rehashed_fork_constraint_corruption_fails(tmp_path,fault,diagnostic):
+    directory=tmp_path/'longhold'; shutil.copytree(ROOT/'target/generated/longhold',directory)
+    def corrupt(m):
+        node=m['design']; path=next(t for t in node['timing'] if t['kind']=='long-hold-fork-v1')
+        if fault=='all_missing': node['timing']=[]
+        elif fault=='missing': node['timing'].remove(path)
+        elif fault=='bound': path['a_min_fs']='2000000'
+        else: path['relation']='either arrival order'
+    edit_manifest(directory,corrupt)
+    with pytest.raises(ValueError,match='^'+diagnostic+'$'): validate_export(directory)
+
+
+def test_export_cache_rejects_changed_sources_and_checker(tmp_path):
+    directory=tmp_path/'fork'; shutil.copytree(ROOT/'target/generated/fork',directory)
+    cache=tmp_path/'export.json'
+    record=dict(checker_sha256=sha(ROOT/'tools/check_export.py'),resolution=validate_export(directory),
+                inputs={p.name:sha(p) for p in export_inputs(directory)})
+    cache.write_text(json.dumps(record),encoding='utf-8')
+    assert cached_export(directory,cache)['status']=='PASS'
+    record['checker_sha256']='0'*64; cache.write_text(json.dumps(record),encoding='utf-8')
+    with pytest.raises(AssertionError,match='STALE_EXPORT_CHECKER'): cached_export(directory,cache)
+    record['checker_sha256']=sha(ROOT/'tools/check_export.py'); cache.write_text(json.dumps(record),encoding='utf-8')
+    with (directory/'ForkExample.sv').open('a',encoding='utf-8') as f: f.write('// changed input\n')
+    with pytest.raises(AssertionError,match='STALE_COMPOSITION_EXPORT'): cached_export(directory,cache)
+
+
+@pytest.mark.parametrize('fault,diagnostic',[('parameter','PRIMITIVE_PARAMETER_MISMATCH'),
+    ('binding','ENDPOINT_MAPPING_MISMATCH')])
+def test_glue_marker_rtl_corruption_is_not_hidden_by_rehash(tmp_path,fault,diagnostic):
+    import re
+    directory=tmp_path/'initial'; shutil.copytree(ROOT/'target/generated/initial_tokens',directory)
+    source=directory/'InitialTokensExample.sv'; text=source.read_text(encoding='utf-8')
+    if fault=='parameter':
+        text,count=re.subn(r'(\.DATA_MAX_FS\s*\()10000000(\))',r'\g<1>9999999\2',text)
+    else:
+        text,count=re.subn(r'(ca_primitive_initial_mux_marker\s*\(.*?\.values\s*\()[^)]*(\))',
+                           r"\g<1>'0\2",text,flags=re.S)
+    assert count==1,'GLUE_MARKER_MUTATION_TARGET'
+    source.write_text(text,encoding='utf-8'); edit_manifest(directory,lambda _:None,refresh_rtl=True)
+    with pytest.raises(ValueError,match='^'+diagnostic+'$'): validate_export(directory)
 
 
 @pytest.mark.parametrize('delay',(1000,10000000))

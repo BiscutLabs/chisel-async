@@ -379,6 +379,12 @@
         },
         {
           "$ref": "#/$defs/longHoldTiming"
+        },
+        {
+          "$ref": "#/$defs/dataPathTiming"
+        },
+        {
+          "$ref": "#/$defs/longHoldFork"
         }
       ]
     },
@@ -619,6 +625,113 @@
           "$ref": "#/$defs/time"
         },
         "model_fs": {
+          "$ref": "#/$defs/time"
+        }
+      }
+    },
+    "dataPathTiming": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "marker",
+        "source",
+        "sink",
+        "logic",
+        "logic_model_fs",
+        "budget",
+        "delay_owner",
+        "delay_cell",
+        "accounting"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "bundled-data-path-v1"
+        },
+        "marker": {
+          "$ref": "#/$defs/id"
+        },
+        "source": {
+          "$ref": "#/$defs/id"
+        },
+        "sink": {
+          "$ref": "#/$defs/id"
+        },
+        "logic": {
+          "enum": [
+            "chisel-transform-including-decode",
+            "exclusive-merge-input-mux",
+            "initial-token-literal-mux"
+          ]
+        },
+        "logic_model_fs": {
+          "const": "0"
+        },
+        "budget": {
+          "$ref": "#/$defs/delayBounds"
+        },
+        "delay_owner": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "delay_cell": {
+          "$ref": "#/$defs/id"
+        },
+        "accounting": {
+          "const": "included-in-delay-cell; replace-model-with-mapped-path; not-additive"
+        }
+      }
+    },
+    "longHoldFork": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "marker",
+        "aout",
+        "state_a",
+        "early_pin",
+        "late_pin",
+        "relation",
+        "model_wire_skew_fs",
+        "a_min_fs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "long-hold-fork-v1"
+        },
+        "marker": {
+          "$ref": "#/$defs/id"
+        },
+        "aout": {
+          "$ref": "#/$defs/id"
+        },
+        "state_a": {
+          "$ref": "#/$defs/id"
+        },
+        "early_pin": {
+          "const": "long_hold.b"
+        },
+        "late_pin": {
+          "const": "long_hold.a"
+        },
+        "relation": {
+          "const": "Aout+ strictly before A- at OR inputs"
+        },
+        "model_wire_skew_fs": {
+          "const": "0"
+        },
+        "a_min_fs": {
           "$ref": "#/$defs/time"
         }
       }

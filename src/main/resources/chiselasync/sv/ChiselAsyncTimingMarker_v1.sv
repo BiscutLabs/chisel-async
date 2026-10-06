@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Passive timing intent, in fs. KIND 1=setup/hold, 2=long-hold bundling.
+// Passive timing intent, in fs. KIND 1=setup/hold, 2=long-hold bundling,
+// 3=whole data path (DATA bounds include Chisel glue; do not add twice),
+// 4=long-hold fork (Aout+ at OR.b strictly before A- at OR.a; A_MIN_FS).
 // `values` packs the obligation's endpoint list from least to most significant.
 // No output, state, delay or behavioral effect. Extract constraints before
 // synthesis removes this empty module; no physical implementation is implied.

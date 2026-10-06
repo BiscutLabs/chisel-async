@@ -45,7 +45,7 @@ The SV view updates data and request in the same zero-delay scheduling interval;
 
 `FourPhaseStage[A, B](inGen, outGen, transform, timing, domain)` checks the transformed payload against the distinct output type. `LongHoldBuffer[T]` is the identity specialization. Both use the Furber–Day long-hold topology with explicit primitive boundaries and require a timing policy: named `FunctionalOnly` or validated `Digital`. [Controller documentation](long-hold-controller.md) specifies the source, added timing guards, atomic input polarity, reset and ideal-wire assumptions, and independent evidence.
 
-These stages use the same accepted/delivered/reserved accounting and full-handshake hold contract above. Their latch may transparently track data while idle; output data has no validity then. Reset takes the declared propagation time and must be held until quiescent. The new policy does not claim physical setup/hold closure. The historical behavioral buffer remains a separate reference model.
+These stages use the same accepted/delivered/reserved accounting and full-handshake hold contract above. Their latch may transparently track data while idle; output data has no validity then. Reset takes the declared propagation time and must be held until quiescent. The long-hold Aout fork must deliver Aout+ to the OR before A- reaches its other input; zero modeled wire skew supplies this assumption only for the digital experiment. The export carries a required fork-arrival marker and whole-path data budgets, including ideal glue logic. The new policy does not claim physical setup/hold closure. The historical behavioral buffer remains a separate reference model.
 
 ## Four-phase composition
 

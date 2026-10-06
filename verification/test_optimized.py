@@ -19,7 +19,7 @@ def test_identical_instances_share_definitions_but_different_transforms_do_not()
     assert len(set(debug[f"{root}.ca_child_lane{i}"] for i in range(8))) == 8
     assert optimized[f"{root}.ca_child_lane0"] == optimized[f"{root}.ca_child_lane2"]
     assert optimized[f"{root}.ca_child_lane0"] != optimized[f"{root}.ca_child_lane1"]
-    assert all(len(r["endpoints"]) == 240 and r["mapping_checks"] == 415680 for r in results)
+    assert all(len(r["endpoints"]) == 256 and r["mapping_checks"] == 443392 for r in results)
 
 
 def test_cross_instance_probe_alias_is_detected_after_rehash(tmp_path):

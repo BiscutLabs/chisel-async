@@ -66,7 +66,7 @@ The withdrawn failures include data-hold, payload, protocol-order, unexpected-to
 
 [Native CI run 37400947157](https://github.com/BiscutLabs/chisel-async/actions/runs/37400947157), at implementation commit `40f3b7c`, passes on Windows Server 2025 and Ubuntu 24.04 with the same comparison counts. Both lanes also pass 17 Scala tests, all 85 Python tests, the existing functional/timing campaigns, the original directed race and the clean-consumer checks. This is executed native Linux evidence in addition to WSL.
 
-These are **our experiment's numbers**, not a reproduction of the external reviewer's 165/300 result. That harness, seed mapping, latch model and schedules have not been supplied. Finite passing samples do not prove delay independence, hazard freedom, QDI correctness or physical timing closure. This was development testing, not an independently held-out release campaign.
+These are **our experiment's numbers**, not a reproduction of the external reviewer's 165/300 result. The reviewer identifies `chisel-async-delay-harness.zip` as the source artifact. Reproducing it requires a separate record of its archive hash, seed mapping, latch model and schedules; this comparison does not claim that reproduction. Finite passing samples do not prove delay independence, hazard freedom, QDI correctness or physical timing closure. This was development testing, not an independently held-out release campaign.
 
 ## Replay and evidence
 

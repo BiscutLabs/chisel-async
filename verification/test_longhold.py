@@ -119,3 +119,55 @@ def test_sweep_cannot_escape_declared_cell_envelope(longhold_export):
     values[1]["b"] = 11
     with pytest.raises(ValueError, match="DELAY_OUTSIDE_DECLARED_BOUNDS"):
         check_case_bounds(policy, values)
+
+
+@pytest.mark.parametrize('skew_fs,expected', [(0,'PASS'),(20000000,'DATA_HOLD')])
+def test_long_hold_or_fork_arrival_constraint_on_actual_rtl(tmp_path,skew_fs,expected):
+    import subprocess
+    import hashlib
+    from run import read_sources
+    tmp_path=ROOT/'target/verification/fork-arrival'/f'{skew_fs}fs'
+    tmp_path.mkdir(parents=True,exist_ok=True)
+    report=tmp_path/'report.json'; report.write_text('{"status":"RUNNING"}',encoding='utf-8')
+    sources=read_sources(ROOT/'target/generated/longhold_comparison')
+    original=next(p for p in sources if p.name=='LongHoldComparisonExample.sv')
+    text,count=re.subn(r'(ca_primitive_long_hold\s*\(.*?\.b\s*\()out_ack(?:_0)?(\))',
+                       r'\g<1>late_hold_ack\2',original.read_text(encoding='utf-8'),flags=re.S)
+    assert count==1, 'FORK_SKEW_MUTATION_TARGET'
+    text=text.replace('  wire',f'  wire late_hold_ack;\n  assign #{skew_fs}fs late_hold_ack = out_ack;\n  wire',1)
+    mutant=tmp_path/'fork_skew.sv'; mutant.write_text('`timescale 1fs/1fs\n'+text,encoding='utf-8')
+    snapshots=[]
+    for source in sources:
+        if source==original: snapshots.append(mutant)
+        else:
+            snapshot=tmp_path/source.name; snapshot.write_bytes(source.read_bytes()); snapshots.append(snapshot)
+    bench=tmp_path/'bench.sv'
+    bench.write_text('''module ForkBench;
+      timeunit 1ns; timeprecision 1fs;
+      reg reset=1, in_req=0, out_ack=0; reg [39:0] in_bits=0;
+      wire in_ack,out_req; wire [39:0] out_bits;
+      LongHoldComparisonExample dut(.*);
+      initial begin
+        #1000; reset=0; #100; in_bits=17; #10; in_req=1;
+        wait(in_ack); #1; in_req=0; wait(!in_ack); wait(out_req);
+        // The input handshake is complete; another unaccepted value is legal.
+        in_bits=34; #100; out_ack=1;
+        #10; if(out_bits!==40'd17) $fatal(1,"DATA_HOLD");
+        #100; out_ack=0; #100; $display("FORK_BASELINE_PASS"); $finish;
+      end
+      initial begin #10000; $fatal(1,"FORK_TIMEOUT"); end
+    endmodule''',encoding='utf-8')
+    image=tmp_path/'fork.vvp'
+    command=['iverilog','-g2012','-s','ForkBench','-o',str(image),
+             *map(str,snapshots),str(bench)]
+    compiled=subprocess.run(command,capture_output=True,text=True,timeout=30)
+    (tmp_path/'compile.log').write_text(compiled.stdout+compiled.stderr,encoding='utf-8')
+    assert compiled.returncode==0,compiled.stderr
+    result=subprocess.run(['vvp',str(image)],capture_output=True,text=True,timeout=30)
+    (tmp_path/'simulation.log').write_text(result.stdout+result.stderr,encoding='utf-8')
+    if expected=='PASS': assert result.returncode==0 and 'FORK_BASELINE_PASS' in result.stdout,result.stdout
+    else: assert result.returncode!=0 and re.findall(r'^FATAL: [^\n]*?: (\w+)',result.stdout,re.M)==[expected],result.stdout
+    report.write_text(json.dumps(dict(status='PASS',expected=expected,skew_fs=skew_fs,command=command,
+        simulation_exit=result.returncode,source_sha256={p.name:hashlib.sha256(p.read_bytes()).hexdigest()
+                                                       for p in [*snapshots,bench]},
+        log_sha256=hashlib.sha256((tmp_path/'simulation.log').read_bytes()).hexdigest()),indent=2)+'\n',encoding='utf-8')

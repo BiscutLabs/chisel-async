@@ -155,6 +155,43 @@ def validate_manifest(document):
                 refs = ("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
                 times = ("matched_delay_fs", "output_delay_fs")
                 require(timing["mode"] in ("functional-only", "digital-model"), "UNSUPPORTED_TIMING")
+            elif timing.get("kind") == "bundled-data-path-v1":
+                shape(timing, "id kind marker source sink logic logic_model_fs budget delay_owner delay_cell accounting")
+                refs, times = ("source", "sink"), ("logic_model_fs",)
+                require(timing["logic_model_fs"] == "0" and timing["accounting"] ==
+                        "included-in-delay-cell; replace-model-with-mapped-path; not-additive", "INVALID_DATA_PATH_ACCOUNTING")
+                expected = {"chisel-transform-including-decode": ([], "data_delay", "in_data", "latch_data"),
+                            "exclusive-merge-input-mux": (["storage"], "data_delay", "mux_sources", "mux_result"),
+                            "initial-token-literal-mux": ([], "data", "mux_state", "out_data")}
+                require(timing["logic"] in expected and
+                        (timing["delay_owner"], timing["delay_cell"], timing["source"], timing["sink"]) == expected[timing["logic"]],
+                        "INVALID_DATA_PATH_BINDING")
+                budget_owner = node
+                for child_id in timing["delay_owner"]:
+                    matches = [c["contract"] for c in budget_owner["children"] if c["id"] == child_id]
+                    require(len(matches) == 1, "MISSING_DATA_PATH_OWNER")
+                    budget_owner = matches[0]
+                budget = timing["budget"]
+                shape(budget, "min_fs max_fs model_fs")
+                require(all(type(v) is str and re.fullmatch(r"0|[1-9][0-9]*", v) and int(v) <= 2**63-1
+                            for v in budget.values()), "INVALID_MODEL_TIME")
+                require(int(budget["min_fs"]) <= int(budget["model_fs"]) <= int(budget["max_fs"]), "INVALID_DELAY_BOUNDS")
+                cell = next((p for p in budget_owner["primitives"] if p["id"] == timing["delay_cell"]), None)
+                require(cell and cell["parameters"].get("DELAY_FS") == budget["model_fs"], "DATA_PATH_PARAMETER_MISMATCH")
+                owner_policy = next((t for t in budget_owner["timing"] if t["kind"] == "long-hold-bundling-v2"), None)
+                if owner_policy:
+                    require(budget == owner_policy["data_delay"], "DATA_PATH_BUDGET_MISMATCH")
+                else:
+                    request = next((p for p in budget_owner["primitives"] if p["id"] == "request_delay"), None)
+                    require(request and int(request["parameters"]["DELAY_FS"]) > int(budget["max_fs"]), "INVALID_BUNDLING_POLICY")
+            elif timing.get("kind") == "long-hold-fork-v1":
+                shape(timing, "id kind marker aout state_a early_pin late_pin relation model_wire_skew_fs a_min_fs")
+                refs, times = ("aout", "state_a"), ("model_wire_skew_fs", "a_min_fs")
+                require((timing["aout"], timing["state_a"], timing["early_pin"], timing["late_pin"], timing["relation"],
+                         timing["model_wire_skew_fs"]) == ("out_acknowledge", "state_a", "long_hold.b", "long_hold.a",
+                         "Aout+ strictly before A- at OR inputs", "0"), "INVALID_HOLD_FORK")
+                policy = next((t for t in node["timing"] if t["kind"] == "long-hold-bundling-v2"), None)
+                require(policy and timing["a_min_fs"] == policy["control_delays"]["a"]["min_fs"], "HOLD_FORK_BOUND_MISMATCH")
             else:
                 shape(timing, "id kind marker launch transaction data_valid capture captured setup_fs hold_fs mode provenance pulse_policy")
                 require(timing["kind"] == "bundled-setup-hold-v1" and timing["mode"] == "digital-model", "UNSUPPORTED_TIMING")
@@ -188,6 +225,18 @@ def validate_manifest(document):
                     require(cell_id in primitives and primitives[cell_id]["parameters"].get("DELAY_FS") == str(delay),
                             "BUNDLING_PARAMETER_MISMATCH")
             require(marker["parameters"] == marker_parameters(timing, endpoints), "TIMING_MARKER_PARAMETER_MISMATCH")
+        # Required obligations cannot be silently deleted and rehashed.
+        kinds = [t["kind"] for t in node["timing"]]
+        primitive_ids = {p["id"] for p in node["primitives"]}
+        if "long-hold-bundling-v2" in kinds or {"a", "b", "acknowledge", "long_hold", "payload"} <= primitive_ids:
+            require(kinds.count("long-hold-bundling-v2") == 1 and kinds.count("long-hold-fork-v1") == 1 and
+                    sum(t.get("logic") == "chisel-transform-including-decode" for t in node["timing"]) == 1,
+                    "MISSING_LONG_HOLD_PATH_CONSTRAINT")
+        for primitive in node["primitives"]:
+            if primitive["id"] == "exclusivity":
+                require(any(t.get("logic") == "exclusive-merge-input-mux" for t in node["timing"]), "MISSING_MUX_CONSTRAINT")
+            if primitive["id"] == "accepted0":
+                require(any(t.get("logic") == "initial-token-literal-mux" for t in node["timing"]), "MISSING_MUX_CONSTRAINT")
         for child in node["children"]:
             shape(child, "id contract")
     require(resources == set(manifest["resources"]), "RESOURCE_INVENTORY_MISMATCH")
@@ -195,6 +244,8 @@ def validate_manifest(document):
 
 
 def timing_refs(timing):
+    if timing["kind"] == "bundled-data-path-v1": return ("source", "sink")
+    if timing["kind"] == "long-hold-fork-v1": return ("aout", "state_a")
     return (("request", "input_data", "latch_data", "latch_closed", "acknowledge", "output_request", "output_data")
             if timing["kind"] == "long-hold-bundling-v2" else
             ("launch", "transaction", "data_valid", "capture", "captured"))
@@ -211,6 +262,12 @@ def marker_parameters(timing, endpoints):
         for role, values in bounds.items():
             for bound in ("min", "max", "model"):
                 result[f"{role}_{bound.upper()}_FS"] = values[bound+"_fs"]
+    elif timing["kind"] == "bundled-data-path-v1":
+        result.update(KIND="3")
+        for bound in ("min", "max", "model"):
+            result[f"DATA_{bound.upper()}_FS"] = timing["budget"][bound+"_fs"]
+    elif timing["kind"] == "long-hold-fork-v1":
+        result.update(KIND="4", A_MIN_FS=timing["a_min_fs"])
     else:
         result.update(KIND="1", SETUP_FS=timing["setup_fs"], HOLD_FS=timing["hold_fs"])
     return result
@@ -324,6 +381,11 @@ def probe_source(manifest, scopes):
             marker = next(p for p in node["primitives"] if p["id"] == timing["marker"])
             expression = "{" + ", ".join(endpoint_by_id[timing[ref]]["rtl_path"] for ref in reversed(timing_refs(timing))) + "}"
             comparisons.append(f'if ({marker["rtl_path"]}.values !== {expression}) $fatal(1, "TIMING_MARKER_BINDING_MISMATCH");')
+            if timing["kind"] == "long-hold-fork-v1":
+                hold = next(p for p in node["primitives"] if p["id"] == "long_hold")
+                comparisons.append(f'if ({hold["rtl_path"]}.b !== {endpoint_by_id[timing["aout"]]["rtl_path"]} || '
+                                   f'{hold["rtl_path"]}.a !== {endpoint_by_id[timing["state_a"]]["rtl_path"]}) '
+                                   '$fatal(1, "HOLD_FORK_BINDING_MISMATCH");')
         if node["rtl_path"] == top:
             drivers += [(top + "." + name, p["width"])
                         for name, p in scopes[top]["ports"].items() if p["direction"] == "input"]

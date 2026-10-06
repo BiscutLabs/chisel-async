@@ -9,11 +9,13 @@ import re
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from run import ROOT, read_sources
 from composition_reference import replay
 sys.path.insert(0,str(ROOT/'tools'))
 from check_export import validate_export, nodes
+from compare_controllers import random_words
 
 FIXTURES = dict(fifo_one='FifoOneExample',fifo='FifoExample',initialized_fifo='InitializedFifoExample',
                 initial_tokens='InitialTokensExample',fork='ForkExample',join='JoinExample',select='SelectExample',
@@ -58,10 +60,22 @@ def mutate(text, scenario):
 def sha(p): return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-def worker(fixture, seed, output, generated, scenario):
+def export_inputs(directory):
+    return [directory/'contract.json', directory/'ports.json', directory/'filelist.f',
+            *directory.glob('ref_*.sv'), *read_sources(directory)]
+
+
+def cached_export(directory, cache):
+    record=json.loads(cache.read_text(encoding='utf-8'))
+    assert record['checker_sha256']==sha(ROOT/'tools/check_export.py'), 'STALE_EXPORT_CHECKER'
+    assert record['inputs']=={p.name:sha(p) for p in export_inputs(directory)}, 'STALE_COMPOSITION_EXPORT'
+    return record['resolution']
+
+
+def worker(fixture, seed, output, generated, scenario, cache=None):
     from cocotb_tools.runner import get_runner
     output.mkdir(parents=True,exist_ok=True)
-    resolution=validate_export(generated/fixture)
+    resolution=cached_export(generated/fixture,cache) if cache else validate_export(generated/fixture)
     sources=read_sources(generated/fixture)
     build=output/'build'; build.mkdir(exist_ok=True)
     compiled=[]
@@ -75,7 +89,7 @@ def worker(fixture, seed, output, generated, scenario):
     overrides=[]
     if seed:
         manifest=json.loads((generated/fixture/'contract.json').read_text())['manifest']
-        state=seed
+        rng=random_words(seed)
         for node in nodes(manifest['design']):
             bounds={}
             for policy in node['timing']:
@@ -83,12 +97,13 @@ def worker(fixture, seed, output, generated, scenario):
                     bounds={**policy['control_delays'],'data_delay':policy['data_delay'],'payload':policy['latch_delay']}
             for p in node['primitives']:
                 if 'DELAY_FS' not in p['parameters'] or p['id'] in ('request_delay','output_delay'): continue
-                state=(1664525*state+1013904223)&0xffffffff
-                delay=1 if seed==1 else 10 if seed==2 else 1+state%10
+                delay=1 if seed==1 else 10 if seed==2 else 1+next(rng)%10
                 if p['id'] in bounds:
                     bound=bounds[p['id']]
                     assert int(bound['min_fs'])<=delay*1000000<=int(bound['max_fs']), 'COMPOSITION_DELAY_OUTSIDE_STAGE_BOUNDS'
-                # The seed source data delay stays within the same declared 1..10 ns bound.
+                for path in node['timing']:
+                    if path['kind']=='bundled-data-path-v1' and path['delay_owner']==[] and path['delay_cell']==p['id']:
+                        assert int(path['budget']['min_fs'])<=delay*1000000<=int(path['budget']['max_fs']), 'COMPOSITION_DELAY_OUTSIDE_DATA_BUDGET'
                 overrides.append(f"defparam {p['rtl_path']}.DELAY_FS={delay*1000000};")
         overlay=build/'delays.sv'
         overlay.write_text('module CompositionOverrides;\n'+'\n'.join(overrides)+'\nendmodule\n',encoding='utf-8')
@@ -141,7 +156,7 @@ def worker(fixture, seed, output, generated, scenario):
     # Root ports reconstructed from typed manifest, not guessed from the driver.
     summary=replay(fixture,port_roles(generated/fixture),events)
     assert all(evidence[k]==v for k,v in summary.items()), 'COMPOSITION_TRACE_SUMMARY'
-    record=dict(status='PASS',fixture=fixture,seed=seed,scenario=scenario,resolution=resolution,
+    record=dict(status='PASS',fixture=fixture,seed=seed,scenario=scenario,export_sha256=resolution['semantic_sha256'],
                 evidence=evidence,trace_sha256=sha(output/'trace.jsonl'),xml_sha256=sha(Path(xml)),
                 sources={p.name:sha(p) for p in compiled},overrides=overrides)
     (output/'case.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
@@ -159,7 +174,10 @@ def main():
     parser.add_argument('--generated',type=Path,default=ROOT/'target/generated')
     parser.add_argument('--output',type=Path,default=ROOT/'target/verification/composition')
     parser.add_argument('--fixtures',nargs='+',choices=FIXTURES,default=list(FIXTURES))
-    parser.add_argument('--seeds',nargs='+',type=int,default=[0,1,2,17,29,43])
+    parser.add_argument('--seeds',nargs='+',type=int,default=list(range(303)),
+                        help='0 nominal, 1/2 uniform 1/10 ns, 3..302 are 300 random configurations by default')
+    parser.add_argument('--jobs',type=int,default=4,help='independent fixture workers (1..16)')
+    parser.add_argument('--validated-export',type=Path,help=argparse.SUPPRESS)
     parser.add_argument('--worker',action='store_true')
     parser.add_argument('--scenario',choices=['normal',*FAULTS],default='normal')
     parser.add_argument('--faults-only',action='store_true')
@@ -167,10 +185,11 @@ def main():
     if args.worker:
         assert len(args.fixtures)==len(args.seeds)==1, 'WORKER_SELECTION'
         assert args.scenario=='normal' or FAULTS[args.scenario][0]==args.fixtures[0], 'FAULT_FIXTURE'
-        worker(args.fixtures[0],args.seeds[0],out,args.generated.resolve(),args.scenario); return
+        worker(args.fixtures[0],args.seeds[0],out,args.generated.resolve(),args.scenario,args.validated_export); return
     record=dict(status='RUNNING',platform=platform.platform(),python=sys.version,cases=[],
         checker_sha256={p.name:sha(p) for p in (Path(__file__),ROOT/'verification/composition_reference.py',
-                                              ROOT/'verification/cocotb/composition_sim.py')})
+                                              ROOT/'verification/cocotb/composition_sim.py',
+                                              ROOT/'verification/reference.py',ROOT/'verification/compare_controllers.py')})
     def save(): (out/'report.json').write_text(json.dumps(record,indent=2)+'\n',encoding='utf-8')
     save()
     try:
@@ -178,21 +197,44 @@ def main():
         assert 'version 13.0 ' in version, 'UNQUALIFIED_COMPOSITION_SIMULATOR'
         record['simulator']=version
         record['routing_delay_experiment']={'min_fs':1000000,'max_fs':10000000,
+            'prng':'xorshift32-v1 seeded with seed+1; registered node/primitive order',
             'scope':'recorded per-instance overrides of nominal routing/initialization cells; ideal wires, atomic cells',
             'stage_policy':'each long-hold override must also fit its exported per-role bounds'}
         assert all(0<=seed<=0xffffffff for seed in args.seeds), 'INVALID_COMPOSITION_SEED'
+        assert 1<=args.jobs<=16, 'INVALID_COMPOSITION_JOBS'
         assert len(set(args.fixtures))==len(args.fixtures) and len(set(args.seeds))==len(args.seeds), 'DUPLICATE_COMPOSITION_CASE'
         selected=[] if args.faults_only else [(f,seed,'normal') for f in args.fixtures for seed in args.seeds]
         selected += [(f,0,name) for name,(f,_) in FAULTS.items() if f in args.fixtures]
         record['selected']=[f'{f}_{seed}_{scenario}' for f,seed,scenario in selected]; save()
-        for f,seed,scenario in selected:
-            dest=out/f'{f}_{seed}_{scenario}'
-            command=[sys.executable,str(Path(__file__).resolve()),'--worker','--fixtures',f,'--seeds',str(seed),
-                     '--generated',str(args.generated.resolve()),'--output',str(dest),'--scenario',scenario]
-            subprocess.run(command,check=True,timeout=120)
-            case=json.loads((dest/'case.json').read_text()); case['command']=command
-            assert case['status']==('PASS' if scenario=='normal' else 'EXPECTED_REJECTION'), 'INCOMPLETE_COMPOSITION_CASE'
-            record['cases'].append(case); save(); print(f'{f}_{seed}_{scenario}: {case["status"]}',flush=True)
+        # Validate each immutable export once, then hash-check it in every worker.
+        # Each fixture owns its compiler outputs; per-case simulation directories are distinct.
+        record['exports']={}
+        for f in args.fixtures:
+            directory=args.generated.resolve()/f
+            entry=dict(resolution=validate_export(directory),inputs={p.name:sha(p) for p in export_inputs(directory)},
+                       checker_sha256=sha(ROOT/'tools/check_export.py'))
+            record['exports'][f]=entry
+            (out/f'{f}_export.json').write_text(json.dumps(entry,indent=2)+'\n',encoding='utf-8')
+        save()
+        def run_fixture(f):
+            completed=[]
+            for _,seed,scenario in (case for case in selected if case[0]==f):
+                dest=out/f'{f}_{seed}_{scenario}'
+                command=[sys.executable,str(Path(__file__).resolve()),'--worker','--fixtures',f,'--seeds',str(seed),
+                         '--generated',str(args.generated.resolve()),'--output',str(dest),'--scenario',scenario,
+                         '--validated-export',str(out/f'{f}_export.json')]
+                dest.mkdir(parents=True,exist_ok=True)
+                with (dest/'worker.log').open('w',encoding='utf-8') as log:
+                    subprocess.run(command,check=True,timeout=120,stdout=log,stderr=subprocess.STDOUT)
+                case=json.loads((dest/'case.json').read_text()); case['command']=command
+                assert case['status']==('PASS' if scenario=='normal' else 'EXPECTED_REJECTION'), 'INCOMPLETE_COMPOSITION_CASE'
+                completed.append(case); print(f'{f}_{seed}_{scenario}: {case["status"]}',flush=True)
+            return completed
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            for future in as_completed([pool.submit(run_fixture,f) for f in args.fixtures]):
+                record['cases'].extend(future.result()); save()
+        order={(f,seed,scenario):i for i,(f,seed,scenario) in enumerate(selected)}
+        record['cases'].sort(key=lambda c:order[(c['fixture'],c.get('seed',0),c['scenario'])])
         assert record['cases'] and len(record['cases'])==len(selected), 'EMPTY_OR_PARTIAL_COMPOSITION_CAMPAIGN'
         record['status']='PASS'
     except BaseException as error:
