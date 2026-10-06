@@ -14,7 +14,7 @@ Initial traffic requires coordinated reset, with external request and acknowledg
 
 ## Two-phase baseline (specification only)
 
-Two-phase bundled data encodes a token by a request transition and its completion by an acknowledgement transition. The following parity table follows the transition-signalling convention in Sparsø, [Introduction to Asynchronous Circuit Design](https://orbit.dtu.dk/en/publications/introduction-to-asynchronous-circuit-design/), §2.1 and chapter 11. Our baseline chooses coordinated reset to `00` and data held from before request changes until acknowledgement matches request.
+Two-phase bundled data encodes a token by a request transition and its completion by an acknowledgement transition. The following parity table follows the transition-signalling convention in Sparsø, [Introduction to Asynchronous Circuit Design](https://orbit.dtu.dk/en/publications/introduction-to-asynchronous-circuit-design/), §2.1. Our baseline chooses coordinated reset to `00` and data held from before request changes until acknowledgement matches request.
 
 | req, ack | Meaning | Next legal edge |
 | --- | --- | --- |
