@@ -1,6 +1,6 @@
 # Arbitration, two-phase channels and mixed encoding (CA-07)
 
-CA-07 adds typed two-phase bundled channels, a two-client handshake arbiter, two/four-phase conversion, and the minimal bundled/dual-rail converter pair brought forward from CA-08. These are explicit-reset digital models with declared timing assumptions. Implementation proceeds at the user's direction while **L1 independent review and held-out acceptance remain open**. The development campaign does not close that gate.
+CA-07 adds typed two-phase bundled channels, a two-client handshake arbiter, two/four-phase conversion, and the minimal bundled/dual-rail converter pair brought forward from CA-08. These are explicit-reset digital models with declared timing assumptions. This family is included in the accepted bounded digital [L1 candidate 2](l1-acceptance.md). Its original development campaign remains separate evidence from that frozen acceptance.
 
 ## Public API and capacity
 

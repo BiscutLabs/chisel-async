@@ -1,6 +1,6 @@
 # Bounded RTZ dual-rail family
 
-CA-08 extends the small WCHB/DIMS probes into reusable components. Its scope is digital behavior with atomic primitive cells, positive declared cell delays, monotonic 1-of-2 rails and ideal wire forks. Physical QDI mapping and external specialist sign-off remain separate work. The components and development campaign are implemented; native qualification results are recorded separately from the earlier L1 candidate.
+CA-08 extends the small WCHB/DIMS probes into reusable components. Its scope is digital behavior with atomic primitive cells, positive declared cell delays, monotonic 1-of-2 rails and ideal wire forks. Physical QDI mapping and external specialist sign-off remain separate work. The components pass complete native Windows/Linux qualification and scoped independent review; these results are separate from the earlier L1 candidate.
 
 ## Design contract
 
@@ -33,11 +33,11 @@ import chisel3._
 import chiselasync.metadata.{DelayBounds, ModelTime, QdiTiming}
 import chiselasync.qdi.DualRailFunction
 
-val timing = QdiTiming(DelayBounds(
-  min = ModelTime.ps(1000), max = ModelTime.ps(10000), model = ModelTime.ps(3000)))
 // Packed two-bit input to a one-bit parity result; every input is indicated.
 class Parity extends DualRailFunction(
-  UInt(2.W), Bool(), Seq(0, 1, 1, 0).map(BigInt(_)), timing)
+  UInt(2.W), Bool(), Seq(0, 1, 1, 0).map(BigInt(_)),
+  QdiTiming(DelayBounds(
+    min = ModelTime.ps(1000), max = ModelTime.ps(10000), model = ModelTime.ps(3000))))
 ```
 
 Use `asyncChild` to inherit the parent reset domain and `DualRail.connect` for checked connections. `DualRailFunction[A,B]` follows Chisel packing order and accepts a complete table of 2^inputWidth unsigned encoded results. Input width is deliberately limited to 1..4 bits because complete DIMS minterms grow exponentially. Output width must be known and positive. The named classes are `DualRailNot`, `DualRailAnd`, `DualRailOr`, `DualRailXor`, `DualRailSelect` and `DualRailFullAdder`; the last packs sum into bit 0 and carry into bit 1. `DualRailJoin`, `DualRailDemux` and `DualRailMerge` use the typed contracts in the table above.
@@ -76,3 +76,5 @@ python verification/run_qdi_sequences.py --output target/qdi-sequences-new-attem
 ```
 
 Both runners require a fresh output directory and retain simulator identity, activity, raw sources, benches, logs, traces and hashes. The wrapper and clean published-JAR consumer include both lanes. Native results and final test inventories are recorded in [qualification status](qualification.md). CA-08 evidence does not retroactively extend the frozen L1 acceptance scope.
+
+The final executable source at `28684c2cf13debc9aa85427ce9924b2505db506b` passes [native run 37521726421](https://github.com/BiscutLabs/chisel-async/actions/runs/37521726421) on Windows Server 2025 and Ubuntu 24.04: 51 Scala tests, 487 Python tests, 77 default export checks, all preceding regressions, both new QDI lanes, five ChiselSim tests and the clean consumer. Independent artifact audits pass on both hosts and agree on all 77 export semantic/probe/port identities. The consumer repeats 42 QDI cases / 23,586 deliveries with all seven controls and all 37 directed sequence cases / 818 deliveries with the reservation control. This qualifies the stated bounded digital family, not a physical implementation or the complete functional release.
