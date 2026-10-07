@@ -70,7 +70,8 @@ themes, keyboard navigation, search, code copying, and a Scala API deep link.
 requests without deploying them. Pushes to `main` deploy the checked artifact
 using the `github-pages` environment. GitHub Settings → Pages must use **GitHub
 Actions** as its source. There is no generated `gh-pages` branch and no release
-tag is needed. Maven Central publication remains a separate tagged workflow.
+tag is needed. JAR publication remains a separate tagged workflow: GitHub for RC1,
+Maven Central for future stable releases.
 
 The default `SITE_BASE` is `/chisel-async/`. For another project prefix, set that
 environment variable to a path with leading and trailing slashes before building.

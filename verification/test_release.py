@@ -110,11 +110,12 @@ def test_dry_run_cannot_publish(distribution, monkeypatch):
 
 def evidence(directory, target):
     target.mkdir(exist_ok=True)
+    manifest = release.verify(directory)
     for system in ("Windows", "Linux"):
         release.write_json(target / f"consumer-{system}.json", {
             "status": "PASS", "system": system, "commit": "a" * 40, "qualification_status": "PASS",
             "manifest_sha256": release.sha(directory / "manifest.json"),
-            "library_sha256": release.sha(release.artifact_paths(directory, "0.1.0")[0])})
+            "library_sha256": release.sha(release.artifact_paths(directory, manifest["version"])[0])})
 
 
 def test_release_requires_both_hosts_and_exact_candidate(distribution, tmp_path):
@@ -191,3 +192,102 @@ def test_release_rejects_empty_or_failed_scala_reports(tmp_path):
     report.write_text('<testsuite><testcase name="skipped"><skipped/></testcase></testsuite>')
     with pytest.raises(ValueError, match="skipped"):
         release.check_test_reports(tmp_path)
+
+
+@pytest.mark.parametrize("version", ["0.1.0-SNAPSHOT", "0.1.0-RC1", "1.0.0"])
+def test_consumers_follow_the_project_or_candidate_version(tmp_path, version):
+    (tmp_path / "build.sbt").write_text(f'ThisBuild / version := "{version}"\n')
+    assert release.project_version(tmp_path) == version
+    original = 'val other = "0.1.0-SNAPSHOT"\nlibraryDependencies += "io.github.biscutlabs" %% "chisel-async" % "old"'
+    changed = release.consumer_version(original, version)
+    assert f'% "{version}"' in changed and 'val other = "0.1.0-SNAPSHOT"' in changed
+    for invalid in ('val x = "0.1.0"', original + '\n' + original):
+        with pytest.raises(ValueError, match="exactly one"):
+            release.consumer_version(invalid, version)
+
+
+@pytest.mark.parametrize("tag,requested,expected", [
+    ("v0.1.0-RC1", "", "github"), ("v0.1.0", "", "maven-central"),
+    ("v0.1.0-RC1", "maven-central", "maven-central"), ("v0.1.0-RC1", "github", "github")])
+def test_publication_destinations(tag, requested, expected):
+    assert release.publication_destination(tag, requested) == expected
+
+
+def test_github_only_cannot_publish_stable_versions():
+    with pytest.raises(ValueError, match="RC tag"):
+        release.publication_destination("v0.1.0", "github")
+    with pytest.raises(ValueError, match="Unknown"):
+        release.publication_destination("v0.1.0-RC1", "elsewhere")
+
+
+@pytest.fixture
+def rc_distribution(distribution):
+    manifest = release.verify(distribution)
+    version = "0.1.0-RC1"
+    paths = release.artifact_paths(distribution, version)
+    for old, new in zip(release.artifact_paths(distribution, manifest["version"]), paths):
+        new.parent.mkdir(parents=True, exist_ok=True)
+        old.rename(new)
+    paths[-1].write_text(paths[-1].read_text().replace("<version>0.1.0</version>", f"<version>{version}</version>"))
+    manifest.update(tag="v" + version, version=version,
+                    sha256={p.relative_to(distribution).as_posix(): release.sha(p) for p in paths})
+    release.write_json(distribution / "manifest.json", manifest)
+    return distribution
+
+
+@pytest.mark.parametrize("fault", ["dry-run", "wrong-commit", "missing-host", "failed-host", "wrong-jar"])
+def test_github_rc_rejects_unqualified_candidates(rc_distribution, tmp_path, monkeypatch, fault):
+    reports = tmp_path / "evidence"
+    evidence(rc_distribution, reports)
+    monkeypatch.setattr(release, "check_tag", lambda tag: "b" * 40 if fault == "wrong-commit" else "a" * 40)
+    monkeypatch.setattr(release.subprocess, "run", lambda *a, **kw: pytest.fail("invalid candidate reached GitHub"))
+    if fault == "dry-run":
+        manifest = release.verify(rc_distribution)
+        manifest["publishable"] = False
+        release.write_json(rc_distribution / "manifest.json", manifest)
+    elif fault == "missing-host":
+        (reports / "consumer-Windows.json").unlink()
+    elif fault in ("failed-host", "wrong-jar"):
+        record = json.loads((reports / "consumer-Windows.json").read_text())
+        record["status" if fault == "failed-host" else "library_sha256"] = "ERROR"
+        release.write_json(reports / "consumer-Windows.json", record)
+    with pytest.raises(ValueError):
+        release.github_release(rc_distribution, reports)
+
+
+def test_github_rc_uploads_exact_qualified_bytes_before_publishing(rc_distribution, tmp_path, monkeypatch):
+    reports = tmp_path / "evidence"
+    evidence(rc_distribution, reports)
+    monkeypatch.setattr(release, "check_tag", lambda tag: "a" * 40)
+    monkeypatch.setattr(release, "portal", lambda *a: pytest.fail("GitHub RC contacted Central"))
+    calls = []
+    monkeypatch.setattr(release.subprocess, "run", lambda args, **kw: calls.append(args))
+    release.github_release(rc_distribution, reports)
+    assert len(calls) == 2 and calls[0][:4] == ["gh", "release", "create", "v0.1.0-RC1"]
+    assert "--draft" in calls[0] and "--prerelease" in calls[0] and "--verify-tag" in calls[0]
+    assert calls[1] == ["gh", "release", "edit", "v0.1.0-RC1", "--draft=false", "--prerelease", "--latest=false"]
+    manifest = release.verify(rc_distribution)
+    archive = rc_distribution / "chisel-async-0.1.0-RC1-maven.zip"
+    with zipfile.ZipFile(archive) as bundle:
+        for name, digest in manifest["sha256"].items():
+            assert release.hashlib.sha256(bundle.read(name)).hexdigest() == digest
+        assert json.loads(bundle.read("evidence/consumer-Windows.json"))["status"] == "PASS"
+        assert b"not published to Maven Central" in bundle.read("README.txt")
+    assets = {Path(arg).name: Path(arg) for arg in calls[0] if Path(arg).is_file()}
+    for line in (rc_distribution / "SHA256SUMS").read_text().splitlines():
+        digest, name = line.split("  ")
+        assert release.sha(assets[name]) == digest
+
+
+def test_github_upload_failure_does_not_publish_draft(rc_distribution, tmp_path, monkeypatch):
+    reports = tmp_path / "evidence"
+    evidence(rc_distribution, reports)
+    monkeypatch.setattr(release, "check_tag", lambda tag: "a" * 40)
+    calls = []
+    def fail_upload(args, **kwargs):
+        calls.append(args)
+        raise subprocess.CalledProcessError(1, args)
+    monkeypatch.setattr(release.subprocess, "run", fail_upload)
+    with pytest.raises(subprocess.CalledProcessError):
+        release.github_release(rc_distribution, reports)
+    assert len(calls) == 1 and "--draft" in calls[0]

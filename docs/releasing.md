@@ -1,14 +1,10 @@
 # Packaging and releasing
 
-Chisel-async's release workflow uses **GitHub Actions to build and test JARs, and
-Maven Central to distribute them**. GitHub Releases hosts release notes, signed
-bundles and verification reports.
-GitHub Packages may host authenticated previews later; it is not required to use
-chisel-async. The documentation website is built and deployed separately.
-
-No public version has been published yet. Before using the release workflow,
-verify the namespace, configure signing credentials and the GitHub environment,
-and complete the release checks described below.
+Chisel-async uses GitHub Actions to build and test release artifacts.
+**RC1 is distributed as a GitHub prerelease with JARs and a Maven-layout ZIP.**
+It is unsigned and is not published to Maven Central. Stable releases will use
+Central after namespace ownership, signing and publishing credentials are configured.
+The documentation website is built and deployed separately.
 
 ## Artifacts
 
@@ -42,12 +38,18 @@ or manual dispatch:
    workflow. Each host also compiles the standalone quickstart against the staged
    Maven repository, validates its export and runs its ScalaTest simulation.
    The resolved JAR hash must equal the candidate hash.
-3. After both hosts pass, the `maven-central` environment job checks the manifest
-   and host evidence, signs the existing files, adds required checksums and uploads
-   a Maven-layout bundle using the Central Portal API. It does not rebuild the JAR.
-4. Wait for Central to report `PUBLISHED`, then create the GitHub Release with
-   the artifacts, manifest, signed bundle, receipt and consumer reports. RC tags
-   become GitHub prereleases. Complete native logs remain in the workflow artifacts.
+3. After both hosts pass, check the manifest, source identity and matching host
+   evidence again. For an RC tag, attach the four artifacts, manifest, Maven ZIP,
+   checksums and consumer reports to a draft GitHub prerelease, then make it public
+   only after upload succeeds. The ZIP includes local-resolver instructions.
+4. For a stable tag, use the `maven-central` environment to sign the existing files
+   and upload the bundle through the Central Portal API. Wait for `PUBLISHED`
+   before creating the GitHub Release with its signed bundle and receipt.
+
+Neither path rebuilds the qualified JAR. Complete native logs remain in workflow
+artifacts. RC tag pushes default to GitHub; stable tag pushes default to Central.
+Manual dispatch can select Central for an RC. Stable tags require the
+`maven-central` destination, including on manual dispatch.
 
 The uploader uses the current
 [Central Portal API](https://central.sonatype.org/publish/publish-portal-api/), not
@@ -55,7 +57,7 @@ the retired OSSRH endpoints. `AUTOMATIC` publication means that a successful
 Central validation proceeds to public publication. Merely resolving a GitHub
 Actions job or uploading an Actions artifact does not publish to Central.
 
-## One-time setup
+## Maven Central setup (deferred for RC1)
 
 Verify the `io.github.biscutlabs` namespace in the Central Portal. Create a dedicated
 signing key and make its public key discoverable as required by Central. Configure
@@ -100,22 +102,29 @@ For a real build from a clean, already tagged checkout:
 python tools/release.py build --tag v0.1.0-RC1 --output target/release-candidate
 ```
 
-The workflow handles cross-host evidence and publication. The corresponding local
-publication command, after obtaining the two matching native reports and setting
-credentials, is:
+The workflow handles cross-host evidence and publication. With the two matching
+native reports and an authenticated GitHub CLI, the equivalent RC command is:
+
+```text
+python tools/release.py github --directory target/release-candidate --evidence target/release-consumer
+```
+
+Add release notes at `docs/releases/<version>.md` before tagging. The GitHub path
+needs no Central credentials or signing key. To publish through Central instead,
+complete the setup above and use:
 
 ```text
 python tools/release.py publish --directory target/release-candidate --evidence target/release-consumer
 ```
 
-That command **publishes publicly**. It rejects dry-run output, wrong/dirty source,
+Both commands **publish publicly**. They reject dry-run output, wrong/dirty source,
 altered artifact bytes, and missing or mismatched Windows/Linux evidence. It is not
 a replacement for reviewing the candidate's complete release scope.
 
 ## Preparing a release
 
 Update the README and quickstart dependency/version text for the actual candidate,
-state the supported tools and hosts, add migration notes, and test the component
+state the supported tools and hosts, add versioned release and migration notes, and test the component
 catalog and user workflow against that candidate. Earlier verification results
 apply to their recorded revisions. Report any physical implementation testing
 separately from digital simulation results.
@@ -126,6 +135,13 @@ turning dry-run off requires an existing release tag. No release tag or credenti
 are created by the scripts.
 
 ## Interrupted publication
+
+For the GitHub-only path, a failed asset upload leaves a draft prerelease. Inspect
+that draft and the retained candidate, finish uploading the exact verified assets,
+and compare their checksums before making it public. The script does not overwrite
+an existing release or automatically retry its creation.
+
+The remaining recovery steps apply to Central publication.
 
 The script records `central-receipt.json` as soon as Central returns a deployment
 ID. Retain it together with `central-bundle.zip` and the manifest. A retry with

@@ -12,7 +12,7 @@ import sys
 import tempfile
 import xml.etree.ElementTree as ET
 
-from release import ROOT, artifact_paths, git, sha, verify, write_json
+from release import ROOT, artifact_paths, consumer_version, git, project_version, sha, verify, write_json
 from svsim_windows import configure
 
 
@@ -49,9 +49,9 @@ def main():
     consumer = Path(tempfile.mkdtemp(prefix="quickstart ", dir=parent))
     shutil.copytree(ROOT / "examples/quickstart", consumer, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("target", "generated", "build", ".bsp", ".metals"))
-    version = manifest["version"] if manifest else "0.1.0-SNAPSHOT"
+    version = manifest["version"] if manifest else project_version()
     build = consumer / "build.sbt"
-    build.write_text(build.read_text(encoding="utf-8").replace('"0.1.0-SNAPSHOT"', f'"{version}"') + """
+    build.write_text(consumer_version(build.read_text(encoding="utf-8"), version) + """
 lazy val recordDependencies = taskKey[Unit]("Record the actual resolved consumer classpath")
 recordDependencies := IO.write(baseDirectory.value / "resolved-classpath.txt",
   (Compile / dependencyClasspath).value.files.map(_.getAbsolutePath).mkString("\\n"))

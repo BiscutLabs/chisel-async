@@ -2,8 +2,8 @@
 
 Use the versions in the [compatibility matrix](../README.md#compatibility-matrix)
 to build and test chisel-async with the supported toolchain. Pin those versions
-to make your results reproducible. The current `0.1.0-SNAPSHOT` is intended for
-local development and may change; a stable release has not been published yet.
+to make your results reproducible. The current `0.1.0-RC1` is a GitHub prerelease;
+a stable release and Maven Central publication are still deferred.
 
 ## Tested toolchain
 
@@ -79,11 +79,16 @@ elaboration/export, a representative simulation and path handling.
 
 The existing [native workflow](../.github/workflows/ci.yml) still runs complete
 Windows/Linux campaigns, each with local publication and a clean consumer. The
-new [tagged release workflow](../.github/workflows/release.yml) builds once and calls
+[tagged release workflow](../.github/workflows/release.yml) builds once and calls
 that native workflow with the candidate artifact for an additional hash-bound
 consumer check. Both hosts must pass before the release can be published.
 
 ## Evidence
+
+The [RC1 release page](https://github.com/BiscutLabs/chisel-async/releases/tag/v0.1.0-RC1)
+includes the source commit, artifact hashes and Windows/Linux consumer reports.
+Publication requires the complete native campaigns and consumption of the same
+Linux-built JAR to pass on both hosts. The records below describe earlier work.
 
 The existing implementation passed the complete native Ubuntu 24.04 and Windows
 2025 campaign in [GitHub Actions run 37541425995](https://github.com/BiscutLabs/chisel-async/actions/runs/37541425995)

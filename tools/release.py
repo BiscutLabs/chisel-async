@@ -1,8 +1,9 @@
-"""Build a tag-derived Maven distribution, then sign/publish those exact files.
+"""Build a tag-derived Maven distribution and publish those exact files.
 
 Build defaults to a clean checkout at the requested tag. --dry-run permits an
 untagged development checkout and marks its output permanently unpublishable.
-Publishing uses the Central Portal API; it never invokes a second compilation.
+Publish unsigned RCs on GitHub or signed releases through the Central Portal API.
+Neither publication path invokes a second compilation.
 """
 from __future__ import annotations
 
@@ -37,6 +38,32 @@ def version_from_tag(tag):
     if not match:
         raise ValueError("Release tag must be vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-RCn")
     return match.group(1)
+
+
+def project_version(root=ROOT):
+    versions = re.findall(r'^ThisBuild / version := "([^"]+)"\s*$',
+                          (Path(root) / "build.sbt").read_text(encoding="utf-8"), re.M)
+    if len(versions) != 1:
+        raise ValueError("Expected one literal project version in build.sbt")
+    return versions[0]
+
+
+def consumer_version(build, version):
+    updated, count = re.subn(r'("io\.github\.biscutlabs"\s*%%\s*"chisel-async"\s*%\s*)"[^"]+"',
+                             lambda m: m[1] + json.dumps(version), build)
+    if count != 1:
+        raise ValueError("Expected exactly one chisel-async consumer dependency")
+    return updated
+
+
+def publication_destination(tag, requested=""):
+    version = version_from_tag(tag)
+    destination = requested or ("github" if "-RC" in version else "maven-central")
+    if destination not in {"github", "maven-central"}:
+        raise ValueError("Unknown publication destination")
+    if destination == "github" and "-RC" not in version:
+        raise ValueError("GitHub-only publication requires an RC tag")
+    return destination
 
 
 def sha(path):
@@ -292,6 +319,48 @@ def publish(directory, evidence):
     raise RuntimeError("Central publication is still pending; rerun publish to resume this deployment")
 
 
+def github_release(directory, evidence):
+    """Publish a qualified, unsigned RC on GitHub; never invoke Central or GnuPG."""
+    directory = Path(directory).resolve()
+    evidence = Path(evidence).resolve()
+    manifest = verify(directory)
+    if manifest.get("publishable") is not True:
+        raise ValueError("Dry-run artifacts cannot be published")
+    publication_destination(manifest["tag"], "github")
+    if check_tag(manifest["tag"]) != manifest["commit"]:
+        raise ValueError("Release source commit mismatch")
+    check_evidence(directory, evidence, manifest)
+    version, tag = manifest["version"], manifest["tag"]
+    notes = ROOT / "docs/releases" / f"{version}.md"
+    if not notes.is_file():
+        raise ValueError("Missing versioned release notes")
+    archive = directory / f"chisel-async-{version}-maven.zip"
+    artifacts = artifact_paths(directory, version)
+    reports = sorted(evidence.glob("consumer-*.json"))
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as bundle:
+        for path in artifacts:
+            bundle.write(path, path.relative_to(directory).as_posix())
+        bundle.write(directory / "manifest.json", "manifest.json")
+        for path in reports:
+            bundle.write(path, "evidence/" + path.name)
+        bundle.writestr("README.txt", f"chisel-async {version}\n\n"
+            "Unsigned GitHub release candidate; not published to Maven Central.\n"
+            "Add this extracted repository to your sbt build:\n"
+            'resolvers += "chisel-async RC" at file("/absolute/path/to/extracted/maven").toURI.toString\n'
+            f'libraryDependencies += "{GROUP}" %% "chisel-async" % "{version}"\n\n'
+            f"Source: https://github.com/BiscutLabs/chisel-async/tree/{tag}\n"
+            "See docs/getting-started.md for the compiler plugin and native toolchain.\n")
+    files = [*artifacts, directory / "manifest.json", archive, *reports]
+    sums = directory / "SHA256SUMS"
+    sums.write_text("".join(f"{sha(path)}  {path.name}\n" for path in files), encoding="utf-8")
+    # A failed upload leaves a draft, never a public release with missing assets.
+    subprocess.run(["gh", "release", "create", tag, "--verify-tag", "--draft", "--prerelease", "--latest=false",
+                    "--title", f"chisel-async {version}", "--notes-file", str(notes),
+                    *map(str, files), str(sums)], cwd=ROOT, check=True)
+    subprocess.run(["gh", "release", "edit", tag, "--draft=false", "--prerelease", "--latest=false"],
+                   cwd=ROOT, check=True)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -304,12 +373,17 @@ def main():
     publisher = commands.add_parser("publish")
     publisher.add_argument("--directory", type=Path, required=True)
     publisher.add_argument("--evidence", type=Path, required=True)
+    github = commands.add_parser("github", help="Publish a qualified unsigned RC as a GitHub prerelease")
+    github.add_argument("--directory", type=Path, required=True)
+    github.add_argument("--evidence", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "build":
         build(args.tag, args.output, args.dry_run)
     elif args.command == "verify":
         result = verify(args.directory)
         print(f"Release artifacts verified: {result['tag']} at {result['commit']}")
+    elif args.command == "github":
+        github_release(args.directory, args.evidence)
     else:
         publish(args.directory, args.evidence)
 

@@ -7,13 +7,15 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from release import consumer_version, project_version
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def main():
     subprocess.run([sys.executable, str(ROOT / "tools/sbt.py"), "publishLocal"], check=True)
-    artifact = ROOT / "target/scala-2.13/chisel-async_2.13-0.1.0-SNAPSHOT.jar"
+    version = project_version()
+    artifact = ROOT / f"target/scala-2.13/chisel-async_2.13-{version}.jar"
     with zipfile.ZipFile(artifact) as library:
         for name in ("META-INF/LICENSE", "chiselasync/contract-v3.schema.json", "chiselasync/trace-v1.schema.json", "chiselasync/sv/ChiselAsyncCElement_v1.sv",
                      "chiselasync/sv/ChiselAsyncFourPhaseStorage_v1.sv",
@@ -32,6 +34,8 @@ def main():
     parent.mkdir(parents=True, exist_ok=True)
     consumer = Path(tempfile.mkdtemp(prefix="clean consumer ", dir=parent))
     shutil.copytree(ROOT / "verification/consumer", consumer, dirs_exist_ok=True)
+    build = consumer / "build.sbt"
+    build.write_text(consumer_version(build.read_text(encoding="utf-8"), version), encoding="utf-8")
     # Recompile example assembly against only the published library dependency.
     shutil.copy(ROOT / "examples/src/main/scala/chiselasync/examples/EmitReference.scala",
                 consumer / "src/main/scala/EmitReference.scala")

@@ -8,7 +8,7 @@ components, connect different protocols and check your design's timing assumptio
 
 | Guide | What you will learn |
 | --- | --- |
-| [Getting started](getting-started.md) | Install the snapshot, emit a typed pipeline, run a first Scala test |
+| [Getting started](getting-started.md) | Install RC1, emit a typed pipeline, run a first Scala test |
 | [Concepts](concepts.md) | Tokens, encodings, backpressure, acceptance, delivery, and reset |
 | [Component catalog](components.md) | What each public component does and when to use it |
 | [Terminology and chisel-click comparison](component-terminology.md) | Established names, matching operations, and differences in storage and implementation |
@@ -35,8 +35,8 @@ components, connect different protocols and check your design's timing assumptio
 ## Maintain and release
 
 [Contributing](contributing.md) covers setup and focused verification.
-[Releasing](releasing.md) defines JAR packaging and GitHub Actions/Maven Central
-distribution. [Scientific references](provenance.md) explain the circuit topologies
+[Releasing](releasing.md) defines JAR packaging, GitHub prereleases and planned
+Maven Central publication. [Scientific references](provenance.md) explain the circuit topologies
 and model assumptions. [The archive](archive/README.md) contains earlier plans,
 reviews, failing test cases and verification results.
 

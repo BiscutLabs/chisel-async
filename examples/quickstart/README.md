@@ -1,10 +1,12 @@
 # Standalone chisel-async quickstart
 
-This directory is a separate sbt project that consumes the locally published
+This directory is a separate sbt project that consumes the released
 library JAR. It does not depend on the parent source project.
 
 Follow the [getting-started guide](../../docs/getting-started.md) for prerequisites
-and local publication. From this directory, with the compatible toolchain:
+and RC1 installation from GitHub or local publication. With the downloaded Maven
+ZIP, add its `maven` directory as a resolver in this project's `build.sbt`, as
+shown in the guide. From this directory, with the compatible toolchain:
 
 ```text
 sbt "runMain EmitQuickstart"
@@ -17,8 +19,7 @@ GCD using the JAR helper and Icarus (`iverilog`/`vvp` on PATH), with no Python.
 technology binding interface. `sbt test` also runs a ChiselSim bridge test, which
 needs Verilator; on native Windows, that bridge test uses the
 [documented simulation adapter](../../docs/testing.md#native-windows-chiselsim).
-The library is not yet publicly released; the snapshot dependency must exist in
-your local Ivy cache.
+The `0.1.0-RC1` dependency is distributed on GitHub, not Maven Central.
 
 ## Native Click example
 

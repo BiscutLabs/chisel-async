@@ -1,4 +1,4 @@
-name: Tagged Maven Central release
+name: Tagged library release
 on:
   push:
     tags: ['v*']
@@ -12,6 +12,11 @@ on:
         description: Build and qualify only; never sign, publish, or create a GitHub Release
         type: boolean
         default: true
+      publication:
+        description: 'RC destination (stable releases require Maven Central)'
+        type: choice
+        options: [github, maven-central]
+        default: github
 
 permissions:
   contents: read
@@ -25,6 +30,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       commit: ${{ steps.identity.outputs.commit }}
+      destination: ${{ steps.identity.outputs.destination }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -57,13 +63,18 @@ jobs:
           PY
       - name: Record source identity
         id: identity
+        env:
+          PUBLICATION: ${{ inputs.publication }}
         run: |
           python - <<'PY'
-          import json, os
+          import json, os, sys
           from pathlib import Path
+          sys.path.insert(0, 'tools')
+          from release import publication_destination
           manifest = json.loads(Path('target/release-candidate/manifest.json').read_text())
           with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
               stream.write('commit=' + manifest['commit'] + '\n')
+              stream.write('destination=' + publication_destination(manifest['tag'], os.environ['PUBLICATION']) + '\n')
           PY
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -87,7 +98,7 @@ jobs:
       source_ref: ${{ needs.build.outputs.commit }}
 
   publish:
-    if: ${{ !inputs.dry_run }}
+    if: ${{ !inputs.dry_run && needs.build.outputs.destination == 'maven-central' }}
     needs: [build, qualification]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -175,5 +186,41 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: central-publication-${{ github.run_attempt }}
+          path: target/release-candidate
+          if-no-files-found: error
+
+  github-prerelease:
+    if: ${{ !inputs.dry_run && needs.build.outputs.destination == 'github' }}
+    needs: [build, qualification]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build.outputs.commit }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.13'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-candidate
+          path: target/release-candidate
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-consumer-*
+          merge-multiple: true
+          path: target/release-consumer
+      - name: Publish the qualified unsigned RC on GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/release.py github --directory target/release-candidate --evidence target/release-consumer
+      - name: Retain RC distribution and checksums
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: github-prerelease-${{ github.run_attempt }}
           path: target/release-candidate
           if-no-files-found: error

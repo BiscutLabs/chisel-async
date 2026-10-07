@@ -2,7 +2,7 @@
 
 | Symptom | Likely cause and action |
 | --- | --- |
-| Dependency `chisel-async_2.13` cannot be resolved | There is no public release yet. Run `sbt publishLocal` in the library checkout, then build the standalone consumer under the same user account. |
+| Dependency `chisel-async_2.13` cannot be resolved | RC1 is on GitHub, not Maven Central. Add the extracted Maven ZIP as a resolver using the [installation guide](getting-started.md#obtain-the-library), or run `sbt publishLocal` from tag `v0.1.0-RC1` under the same user account. |
 | Compiler-plugin or elaboration errors | Match Chisel 7.16.0, compiler plugin 7.16.0 and Scala 2.13.18. Use `CrossVersion.full` for the plugin; inspect dependency eviction. |
 | `unqualified runtime` / `unqualified firtool` | Your tool versions differ from the tested configuration. Normal emission warns; `qualifiedOnly = true` and strict validation reject the mismatch. Use the versions in the README compatibility matrix for validated exports. |
 | Payload shape/width error | Specify positive widths and preserve Bundle/Vec field shapes and signedness. Implement explicit conversion in a typed stage. |

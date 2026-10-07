@@ -5,7 +5,7 @@ and the included `AsyncTest` helper. The standalone sbt project also includes a
 GCD feedback loop, a [native Click adder](click-example.md) and a ChiselSim test
 for a clocked bridge.
 
-To get started, publish the JAR locally, copy the standalone example and run
+To get started, download RC1, copy the standalone example and run
 `sbt "testOnly AsyncDesignSpec"` with Icarus on PATH. These tests run without the
 repository's contributor environment. The example uses `BundledTiming.Simulation`
 and helpers that declare channels and register their contracts together. You can
@@ -27,8 +27,21 @@ validation still uses the repository's Python tools. Follow
 
 ## Obtain the library
 
-No public release is available yet. From a checkout of this repository, publish the
-development snapshot to your machine's local Ivy cache:
+Download `chisel-async-0.1.0-RC1-maven.zip` from the
+[RC1 GitHub prerelease](https://github.com/BiscutLabs/chisel-async/releases/tag/v0.1.0-RC1)
+and extract it. The ZIP includes the JARs, POM, manifest and Windows/Linux consumer
+reports. Add this resolver to your project's `build.sbt`, replacing the path with
+the extracted `maven` directory (on Windows, use a path such as `C:/libraries/chisel-async/maven`):
+
+```scala
+resolvers += "chisel-async RC" at file("/absolute/path/to/extracted/maven").toURI.toString
+```
+
+RC1 is unsigned and is not on Maven Central. No GitHub credentials are needed to
+download it. `SHA256SUMS` on the release page records the hashes of the downloads.
+
+Alternatively, from a checkout of tag `v0.1.0-RC1`, publish the library to your
+machine's local Ivy cache; this route does not need the custom resolver:
 
 ```text
 sbt publishLocal
@@ -48,7 +61,7 @@ ThisBuild / scalaVersion := "2.13.18"
 val chiselVersion = "7.16.0"
 
 libraryDependencies ++= Seq(
-  "io.github.biscutlabs" %% "chisel-async" % "0.1.0-SNAPSHOT",
+  "io.github.biscutlabs" %% "chisel-async" % "0.1.0-RC1",
   "org.scalatest" %% "scalatest" % "3.2.20" % Test
 )
 addCompilerPlugin("org.chipsalliance" % "chisel-plugin" % chiselVersion cross CrossVersion.full)
@@ -67,10 +80,9 @@ declared in the consumer build and must match both Chisel and the full Scala
 version. `%%` selects the library's Scala binary suffix (`_2.13`); the plugin uses
 `CrossVersion.full` instead.
 
-After publication, replace `0.1.0-SNAPSHOT` with the release named in its
-compatibility matrix. Maven Central will require no custom resolver or GitHub
-token. Until then, a fresh machine cannot resolve this snapshot without local
-publication.
+Keep the resolver above alongside this build when using the downloaded ZIP.
+Future Maven Central releases will not need that resolver. Pin the version and
+use its compatibility matrix when upgrading.
 
 ## Emit a typed pipeline
 

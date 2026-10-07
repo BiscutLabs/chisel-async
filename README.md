@@ -8,8 +8,9 @@ extend `RawModule` with explicit reset; clocked boundaries expose their clocks.
 Select an electrical encoding with `Channel[T]`, then compose components using its
 checked connection helpers.
 
-**Pre-release:** the current version is `0.1.0-SNAPSHOT`, available through local
-publication. There is no public Maven Central release yet. The library includes
+**Release candidate:** [0.1.0-RC1](https://github.com/BiscutLabs/chisel-async/releases/tag/v0.1.0-RC1)
+is distributed through GitHub with binary, sources and Scaladoc JARs and a local
+Maven repository ZIP. Maven Central publication is deferred. The library includes
 digital simulation models and tested compiler exports; it does not supply mapped
 physical cells or establish physical timing, QDI, or metastability closure.
 
@@ -27,11 +28,11 @@ The same guides remain available in the repository's [documentation index](docs/
 For native two-phase hardware, the [Click adder walkthrough](docs/click-example.md)
 includes a complete tagged pipeline and ScalaTest test using both Click variants.
 
-Once a release is published, consumption will use a normal Maven Central dependency
-without GitHub credentials or a custom resolver. For the locally published snapshot:
+Download and extract the RC's Maven ZIP, then add its directory as a resolver:
 
 ```scala
-libraryDependencies += "io.github.biscutlabs" %% "chisel-async" % "0.1.0-SNAPSHOT"
+resolvers += "chisel-async RC" at file("/absolute/path/to/extracted/maven").toURI.toString
+libraryDependencies += "io.github.biscutlabs" %% "chisel-async" % "0.1.0-RC1"
 ```
 
 Keep the matching Chisel compiler plugin in your project. The
@@ -48,7 +49,7 @@ emission warns on drift and records the actual versions.
 
 | Library | Scala | Chisel | Chisel compiler plugin | firtool | Java |
 | --- | --- | --- | --- | --- | --- |
-| `0.1.0-SNAPSHOT` | `2.13.18` | `7.16.0` | `7.16.0`, full Scala cross-version | `1.160.0` | JDK `21.0.12.1+1` tested |
+| `0.1.0-RC1` | `2.13.18` | `7.16.0` | `7.16.0`, full Scala cross-version | `1.160.0` | JDK `21.0.12.1+1` tested |
 
 | Tool or host | Tested configuration | Scope |
 | --- | --- | --- |
@@ -100,8 +101,8 @@ cover focused tests, failure diagnostics, and retained evidence. Historical plan
 reviews, and acceptance records are preserved in the [development archive](docs/archive/README.md)
 and are no longer the user manual or an active roadmap.
 
-Public releases will use **GitHub Actions → Maven Central**. GitHub Releases will
-carry release notes and qualification bundles; GitHub Packages is optional for
-authenticated previews. See [release and packaging policy](docs/releasing.md).
+RC1 uses **GitHub Actions → GitHub prerelease** with qualification reports and
+checksums. Stable releases are planned for Maven Central. See the
+[RC1 release notes](docs/releases/0.1.0-RC1.md) and [release policy](docs/releasing.md).
 
 [License](LICENSE) · [Scientific references](docs/provenance.md)
