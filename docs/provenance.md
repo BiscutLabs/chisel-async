@@ -1,25 +1,37 @@
-# Provenance
+# Scientific and implementation provenance
 
-The chisel-async implementation is independently written under Apache 2.0. It does not copy or rename ASYNC-Chisel source and does not promise API compatibility with it.
+chisel-async is independently developed under Apache-2.0. It does not copy or
+rename ASYNC-Chisel implementation code. Prior libraries, tutorials and published
+controllers inform its interfaces and experiments; conceptual provenance is
+separate from a claim of implementation equivalence or physical qualification.
 
-Design research inspected [ASYNC-Chisel revision 1af2cf4](https://github.com/Jilin-Zhang/ASYNC-Chisel/tree/1af2cf4f621aa77657cab25858cc4a038a7291d6), which is MIT licensed. Its handshake organization and configurable controller approach are prior art; the source audit and planned improvements are in the [initial implementation plan](https://github.com/crockpotveggies/chiselator/blob/3edf79529ab9909d3039dc33c1274d2fbdc173dd/docs/chisel-async-implementation-plan.md).
+| Area | Source and relationship |
+| --- | --- |
+| Long-hold controller | Furber–Day, section 7, figures 14–15: explicit asymmetric-cell topology, with separately declared digital guards |
+| Muller storage and completion | Sparsø tutorial figures 2.12–2.13: per-rail storage and stateful completion, with atomic inversion and ideal-fork assumptions |
+| Rendezvous and arbitration | Sparsø–Furber fork/join/exclusive-merge discussion and figure 5.21 MUTEX/return-interlock topology |
+| Dual-rail functions | Strong/weak indication and DIMS construction, including all-input minterms for both data and spacer |
+| Sequential phase conversion | ASYNC 2000 tutorial protocol discussion, with our own buffered implementation and explicit closure guards |
+| Chisel integration | Upstream RawModule, ExtModule resources, CIRCT stage, read probes and ChiselSim APIs |
 
-Current API usage follows upstream [Chisel external modules](https://www.chisel-lang.org/docs/explanations/blackboxes), [connection operators](https://www.chisel-lang.org/docs/explanations/connectable), and the [7.16.0 compiler stage](https://github.com/chipsalliance/chisel/blob/v7.16.0/src/main/scala/circt/stage/ChiselStage.scala). Native compiler archives come from [CIRCT firtool 1.160.0](https://github.com/llvm/circt/releases/tag/firtool-1.160.0). Event tests use [cocotb](https://docs.cocotb.org/en/stable/) and [Icarus Verilog](https://github.com/steveicarus/iverilog/tree/v13_0).
+The [original provenance record](archive/development/provenance.md) preserves
+primary-source links and the exact revisions inspected for ASYNC-Chisel,
+chisel-click and ACT/actsim. The
+[long-hold source record](archive/development/long-hold-controller.md#inspected-source-and-preserved-topology)
+contains the inspected paper, figure references, hash and topology details.
+[Verification comparisons](archive/development/verification.md#comparison-with-inspected-upstream-tests)
+explain the independent oracles and deliberately broken controls.
 
-External dependencies and downloaded tools retain their own licenses. Their binaries are not committed to this repository. Any future source reuse must record its exact source, license and retained notices here.
+The original custom structural stage failed under internal delay variation and
+was withdrawn. Its counterexample remains in regression; the
+[review response](archive/development/review-response.md) records why. Keeping that
+failure is part of the scientific record, not an endorsement of the withdrawn API.
 
-The withdrawn structural stage was our functional decomposition of the channel contract, using explicit resettable latches. It did not reproduce a published controller and failed under internal delays. The independent Muller comparison now explicitly follows a published topology; its [provenance, inspected figures, PDF hash and added timing assumptions](controller-comparison.md#source-and-contract) are recorded separately. No external implementation source, text or diagram was copied.
+Digital models use bounded delays, atomic cells and declared wire/reset assumptions.
+They do not establish physical QDI behavior, analog metastability resolution or
+technology-specific timing closure. Model values in examples are experimental
+parameters, not measured silicon performance.
 
-The replacement `FourPhaseStage[A, B]` follows Furber–Day section 7, Figs. 14–15, with a separately implemented event graph and atomic asymmetric cells. The [long-hold provenance record](long-hold-controller.md#inspected-source-and-preserved-topology) identifies the inspected eight-page source, its SHA-256, precise topology and our added timing guards. N-input/asymmetric models and tests were independently written; no ASYNC-Chisel or other library implementation was incorporated.
-
-The October 5 verification review also inspected chisel-click revision `ae87f671bce101a22ea3ec40ad0e9e18a8cc3a28` and ACT/actsim simlib revision `d92b0d99a0eb214acf3ff03fb484039fb40bf4cb`. [The comparison](verification.md#comparison-with-inspected-upstream-tests) records links and lessons: component-specific schedules, independent algorithm oracles, and deliberate scoreboard mismatches. Our reference models, observers and regressions were independently written; no upstream test or implementation source was incorporated.
-
-The first dual-rail storage/completion probe follows the visually inspected Sparsø tutorial figures 2.12–2.13 (printed page 21), with atomic inversion and ideal-fork assumptions recorded in [logical-channels.md](logical-channels.md). The explicit-clock bridges were independently written from the documented held-bus/control-synchronizer method; no reference RTL or test source was copied.
-
-The CA-06 rendezvous patterns are informed by chapter 5's fork/join/exclusive-merge discussion in Sparsø's [2020 book](https://orbit.dtu.dk/en/publications/introduction-to-asynchronous-circuit-design/). The primary-source indexed text was checked; its PDF download endpoint returned 404 during this work, so no new visual inspection or PDF hash is claimed. Our buffered adaptations, captured select, monotonic initialization sequencer, examples, external ledger and corruption tests are independently written. [Composition contracts](four-phase-composition.md) distinguish the published rendezvous concepts from our additions and record exact modeled assumptions.
-
-Optimized export uses the upstream [read-probe ABI](https://www.chisel-lang.org/docs/explanations/probes). The Scala lane uses [ChiselSim](https://www.chisel-lang.org/docs/explanations/testing); Chisel 7.16.0 source artifacts were inspected for its workspace, backend and simulation interfaces. The narrow Windows build adapter and POSIX compatibility functions are independently written and do not patch the upstream JAR or simulator source. The Linux backend is built from the official [Verilator v5.046 archive](https://github.com/verilator/verilator/releases/tag/v5.046), with its checksum pinned in `tools/build_verilator.py`. [The implementation record](optimized-export-and-simulation.md) describes the adapter and evidence limits.
-
-CA-07 arbitration follows the MUTEX/return-interlock topology in the cached Sparsø–Furber tutorial, §5.8.1–5.8.2, Figure 5.21. The phase adapters implement the sequential protocol discussed in the primary ASYNC 2000 tutorial, Task 2; they do not reproduce its synthesized netlist or a quick-return design. [CA-07 contracts](arbitration-and-two-phase.md) distinguish these sources from our buffered adapters, finite digital MUTEX policies and added timing guards. No upstream RTL or test source was copied.
-
-The CA-08 [bounded dual-rail family](qdi-family.md) uses the same tutorial's strong/weak indication distinction and DIMS construction (§5.3.2 and §5.5.1, Figure 5.10). Complete C-element minterms retain logically redundant inputs because indication concerns both data and spacer phases. The typed strong storage, table generator, routing, timing markers, independent Boolean/rail accounting and actual-RTL mutation tests are our own implementations. This records conceptual provenance, not a claim of physical QDI certification or reproduction of a published cell layout.
+Downloaded tools and dependencies retain their own licenses and are not bundled
+as native executables. Future source reuse must record the source revision,
+license and required notices. See the repository [LICENSE](../LICENSE).

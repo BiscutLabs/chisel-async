@@ -122,7 +122,8 @@ def main():
                  "examples/runMain chiselasync.examples.EmitReference target/generated",
                  "examples/runMain chiselasync.examples.EmitQdi target/generated",
                  "examples/runMain chiselasync.examples.EmitBoundaries target/generated"]
-        steps = setup + [("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
+        steps = setup + [("docs", [python, str(ROOT / "tools/check_docs.py")]),
+            ("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
             ("python", [python, "-m", "pytest", *[str(p) for p in sorted((ROOT / "verification").glob("test_*.py"))], "-q"])]
         steps += [(name, [python, str(ROOT / path)]) for name, path in (
             ("functional", "verification/run.py"), ("counterexample", "verification/controller_race.py"),
@@ -145,7 +146,8 @@ def main():
         boundary_attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=boundary_parent)) / "campaign"
         steps += [("boundaries", [python, str(ROOT / "verification/run_boundaries.py"), "--output", str(boundary_attempt)])]
         steps += [("chiselsim", [python, str(ROOT / "verification/run_chiselsim.py")]),
-                  ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")])]
+                  ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")]),
+                  ("quickstart", [python, str(ROOT / "tools/check_quickstart.py")])]
         run_steps(steps, environment, output)
     except BaseException as error:
         # run_steps already preserves per-step evidence; preflight failures need status too.

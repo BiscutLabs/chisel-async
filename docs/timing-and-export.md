@@ -1,59 +1,116 @@
-# Digital timing and compiler export
+# Timing intent and compiler export
 
-This slice qualifies explicit digital model delays and a pinned compiler route. It does not establish characterized cell delays, hazard freedom, physical setup/hold, QDI, analog metastability or synthesis correctness. `TimedCapture[T]` is a transform/delay/latch fixture with one outstanding launch; the functional four-phase buffer remains a separate behavioral integration target.
+The library records digital timing assumptions alongside emitted hardware. A
+checked export establishes that the supported compiler route preserved declared
+types, resources, endpoint bindings and constraints. It does not perform static
+timing analysis or prove a mapped circuit safe.
 
-## Exact time and primitive contracts
+## Time and propagation models
 
-`ModelTime` stores nonnegative signed 64-bit femtoseconds, from 0 through 9223372036854775807. Addition and picosecond conversion check overflow. `ticks(precision)` rejects inexact conversion; there is no rounding. Serialized times are decimal strings so JSON consumers cannot silently lose integer precision. `DelayLine` requires strictly positive delay; the newer control primitives also permit the explicitly named functional-only zero-delay policy. The qualified event lane uses `timeunit 1fs`, `timeprecision 1fs` and Icarus 13.0; no coarser simulator lane is claimed.
+`ModelTime(fs)` uses exact nonnegative signed 64-bit femtoseconds.
+`ModelTime.ps(n)` converts picoseconds with overflow checking; `ticks(precision)`
+rejects inexact conversion instead of rounding. Exported times use decimal strings
+to avoid JSON floating-point precision loss. The event lane uses 1 fs precision.
 
-`Latch(width, resetValue)` is transparent when enable is one, holds when enable is zero, and asynchronously resets to its explicit value. Unknown reset produces unknown output. Unknown enable retains a known value only when both hold and transparent outcomes agree; otherwise it produces uncertainty. Explicit reset is required before relying on initialized state. This is a functional latch view, with setup/hold observed separately.
+`DelayBounds(min, max, model)` separates the tested envelope from the nominal
+emitted delay. All three use `ModelTime`; the model must fall within the bounds.
+`DelayLine` requires positive delay. Its transport policy delivers each captured
+input vector; inertial policy suppresses a candidate if another input arrives
+before its deadline. A candidate due exactly when a new input arrives is delivered.
+Reset clears output and cancels queued old-epoch deliveries; release schedules
+the current input even if it has not changed.
 
-`DelayLine(width, delay, policy)` captures the entire input value at scheduling time. Transport delivers every captured input vector after the declared interval. Inertial suppresses a candidate when a later input change precedes its deadline. A candidate due at the same timestamp as the next input change is delivered: pulses shorter than the interval are suppressed; equal and longer pulses propagate. The implementation uses captured packets with reset epochs and sequence numbers; the independent Python oracle uses a priority queue.
+`ClosingLatch` has zero internal model aperture and delayed output propagation.
+That propagation value is not a closing-aperture estimate. `TimedCapture` is a
+separate timing experiment: independently delayed data/control, a transaction ID,
+and observed setup/hold inequalities. It cannot qualify a controller by itself.
 
-Reset clears output and invalidates queued deliveries. Release schedules the current input even if that input did not change during reset. Reset presented before a due delivery takes precedence. The coincident-reset experiment drives the settled input vector at the beginning of the time step, before NBA delivery, using cocotb `Immediate`. A reset introduced later in the same time step cannot retroactively erase an already-observed delivery. The qualified stimulus has one settled input vector per timestamp; arbitrary intra-timestamp glitches are outside this model contract. Unknown reset invalidates initialization; another known reset is required before normal operation.
+## Required bounds and assumptions
 
-## Timing experiment and independent checker
+| Policy or boundary | Requirement |
+| --- | --- |
+| Bundled admission | `matchedDelay > dataDelay.max` |
+| Bundled output offer | `outputDelay > 2 * controls.worst + latchDelay.max` |
+| Phase return | `returnDelay > cells.max` |
+| Four-to-two history closure | `requestDelay > historyClosure.max`, including distribution/skew/aperture allowance |
+| Dual-rail decode admission | `matchedDelay > phase.cells.max + dataDelay.max` |
+| QDI model envelope | Independent positive cell bounds, atomic cells, ideal forks, monotonic RTZ, coordinated reset |
 
-`TimedCapture` packs a 32-bit transaction identity with the transformed payload, delays that data independently of the launch signal, and feeds a latch. The delayed launch closes the latch. The driver does not wait for data validity before allowing capture. The observer records the actual capture edge and reads the captured value after NBA settling; waiting for the value does not change the recorded capture time.
+The long-hold output-acknowledgement fork additionally requires acknowledgement to
+reach the hold OR before state A falls there. Whole-path records include transform
+logic, select decoding, merge selection/payload muxes, and initial-token muxing.
+These obligations matter even where RTL glue evaluates with zero simulation delay.
 
-For data-valid time `tD`, capture time `tC`, setup `s` and hold `h`, the checker requires `tC >= tD + s` and no subsequent protected-data change before `tC + h`. Equality passes. Identity must match the pending launch; equal payload bits alone never establish fresh validity. A fresh identity may be valid before launch. IDs cannot be reused within a reset epoch. Reset aborts pending launches and clears validity. Each completed case checks `launches = captures + aborted`.
+Constructors reject invalid policies. The validator checks consistency between
+policies, declared constraints, marker instances and actual primitive parameters.
+The user must supply credible physical bounds when mapping the design; increasing
+guards cannot compensate for every control hazard or incorrect cell decomposition.
 
-The data delay is 8000 fs and setup/hold are each 2000 fs. Independent fixtures capture at 9999, 10000 and 10001 fs: early fails, equal and late pass. Separate hold experiments change the protected identity, with unchanged payload, at capture +1999/+2000/+2001 fs. The first fails and the other two pass. Successful setup fixtures exercise both polarities of every payload and identity bit, repeated equal payloads, one pending reset and a completed restart.
+## Export workflow
 
-The latch test makes 65 value/hold/reset/uncertainty observations. Each delay test drives 22 input/reset events, including pulse widths 9999/10000/10001 fs, overlapping distinct captured values, reset while pending, reset coincident with delivery, and release with unchanged data. The entire observed output transition sequence must equal the independent queue oracle.
+Use ordinary Chisel elaboration for normal hardware workflows. For a registered
+`AsyncModule` root and a checked contract, call:
 
-Five additional model mutations must fail with exact assertions: disable reset cancellation (`DELAY_TRACE_MISMATCH`), change transport to inertial (`DELAY_TRACE_MISMATCH`), erase transaction identity (`TIMING_DATA_NOT_VALID`), suppress delivery/capture (`TIMING_MISSING_CAPTURE`), and invert latch data (`TIMING_CAPTURED_VALUE`). Setup and hold violations require `TIMING_SETUP` and `TIMING_HOLD`. A crash, timeout, inactive observer or different assertion fails the campaign.
+```scala
+ExportDesign.emit(new MyDesign, java.nio.file.Paths.get("generated"))
+```
 
-## Scoped contract and compiler route
+`MyDesign` stands for your root class; the runnable
+[quickstart](../examples/quickstart/src/main/scala/Quickstart.scala) is a complete
+example. The default mode is `ExportDesign.Optimized` (release optimization and
+deduplication). `ExportDesign.Debug` is an explicit comparison mode using
+debug/no-dedup options. Neither route authorizes arbitrary later transformations.
 
-The [long-hold stage](long-hold-controller.md) adds `long-hold-bundling-v2` obligations: seven endpoint references, individual min/max/model bounds for all four control cells, data and latch, plus exact admission/output guards, mode, provenance and model assumptions. Delays also reside in actual primitive parameters. The checker rejects invalid strict margins and any sidecar/primitive disagreement; parameter resolution then checks the elaborated RTL. These are declared atomic digital-model bounds, separate from `TimedCapture`'s observed setup/hold experiment. They do not qualify downstream synthesis or physical timing.
+Register public channels with `contract.channel`, `twoPhaseChannel`,
+`dualRailChannel` or `clockedChannel`, as appropriate. Use `asyncChild` for nested
+async modules. Custom low-level primitives and timing paths require explicit
+registry entries too; unregistered instances are rejected by strict validation.
+For exact registration signatures see
+[`DesignContract`](../src/main/scala/chiselasync/metadata/DesignContract.scala).
 
-Each `AsyncModule` owns a `DesignContract` and a `ResetDomain`. Share the same domain object when composing child buffers; identical labels on different objects do not authorize a connection. Register child contracts explicitly with `contract.child`. Channels have typed payload layouts, ordered protocol phases and owner-domain references. Nodes may declare token capacity. Primitive descriptors identify a semantic instance, model/version, selected behavioral view, exact parameters, ports, reset and effects. Timing obligations refer to registered endpoints and carry units, bounds, mode and provenance.
+| Output | Purpose |
+| --- | --- |
+| SystemVerilog and `filelist.f` | Emitted design and packaged model sources |
+| `ref_<top>.sv` | Compiler read-probe ABI for observation, without extra `ca_*` hardware ports |
+| `ports.json` | Port ABI v2: independently reflected payload types, directions and protocol identity |
+| `contract.json` | Contract v3: hierarchy, reset domains, capacities, primitives, timing intent and hashes |
+| `design.hw.mlir` | Retained compiler IR for the supported lowering and inspection |
+| `resolved.json` | Produced by successful validation, not by emission alone |
 
-Prefer `asyncChild("id")(domain => new FourPhaseBuffer(gen, domain))` in an `AsyncModule`: it supplies the parent domain, registers the child and wires reset together. A factory that ignores the supplied domain fails. Explicit `Module`/`contract.child` wiring remains available for advanced composition.
+With repository Python dependencies and Icarus available, run from the repository:
 
-Legacy unexported channels may both omit the optional domain. Mixing a bound and an unbound endpoint is rejected; export registration always requires the owner's explicit domain. When migrating a composed design, pass `Some(resetDomain)` to its boundary channels and `resetDomain` to child buffers.
+```text
+python tools/check_export.py /absolute/path/to/generated
+```
 
-`contract.endpoint` creates a read-only Chisel probe. Child references propagate to the top without adding hardware data ports. The compiler's `ref_<top>.sv` ABI resolves probes to actual optimized references. Primitive and child instance names receive reserved prefixes, avoiding Verilog keywords such as `cell`. Names are candidates until checked against actual compiled RTL. Semantic IDs are local to each registry and qualified by explicit child IDs; no mutable global registry is used. Duplicate local IDs are rejected.
+The checker validates schemas and cross-references, then elaborates emitted RTL
+to check actual instances, parameters, ports and resource hashes. Active bit probes
+compare endpoint bindings and reset wiring, requiring both polarities on each
+observed bit. These forced probes test compiler mapping only; functional campaigns
+run the original design without mapping forces.
 
-`ExportDesign.emit` writes SystemVerilog, its probe ABI, a separately reflected typed hardware-port inventory in `ports.json`, the post-lowering HW MLIR snapshot and `contract.json`. The v3 resolver requires port ABI v2: each payload leaf and channel association is checked against the inventory and actual RTL port widths/directions. Protocol identity is reflected from actual FourPhase/TwoPhase/DualRail/Decoupled bundle types, including Vec members, independently of the channel registry. Signedness and protocol types are elaborated Chisel facts that are not recoverable from untyped SV leaves. Older port ABIs must be regenerated. Every preserved constraint marker must correspond to exactly one timing obligation, even if logical primitive IDs change; deleting both a marker declaration and its record fails the actual RTL instance inventory. The packaged [JSON schema](../src/main/resources/chiselasync/contract-v3.schema.json) describes the contract shape; `tools/check_export.py` also enforces cross-references, widths, layouts, bounds, domain consistency and exact tool/options support. Default options are `-O=release`, `--strip-fir-debug-info`, and `--lowering-options=disallowPortDeclSharing,disallowLocalVariables`, using Chisel 7.16.0/firtool 1.160.0. Explicit `ExportDesign.Debug` replaces release optimization with `-O=debug --no-dedup --preserve-values=named` for experiments requiring the original Boolean decomposition. Both routes have executed mapping and corruption checks; see [optimized export](optimized-export-and-simulation.md).
+The semantic identity normalizes supported source formatting and excludes absolute
+checkout paths. Exact file/checker hashes are separately recorded in evidence.
+Do not edit generated files and keep an old success report. Re-emit and revalidate
+after a design, model, compiler or schema change.
 
-The exporter checks the loaded Chisel and Scala runtime identities (7.16.0 and 2.13.18), and checks the actual firtool header before writing the manifest. Dependency eviction or a different native compiler cannot silently inherit the qualified tuple merely from build declarations.
+## Compiler scope
 
-The sidecar is intentional: Chisel [annotations](https://www.chisel-lang.org/docs/explanations/annotations) are compiler implementation details, and name hints or retention annotations alone are not evidence of a preserved mapping. Primitive views are packaged through the supported [external-module resource API](https://www.chisel-lang.org/docs/explanations/blackboxes).
+Strict export requires Chisel 7.16.0, Scala 2.13.18 and firtool 1.160.0. A dependency
+eviction or compiler change fails closed, even if ordinary Scala linking succeeds.
+The exact options are defined in
+[`ExportDesign`](../src/main/scala/chiselasync/metadata/ExportDesign.scala).
+Legacy contract/port ABI inventories must be regenerated for the current checker.
 
-Validation compiles the emitted sources with Icarus and reads its elaborated module, port and parameter inventory. Every declared primitive and node must resolve exactly once; extra/unregistered instances fail. Resource content hashes and normalized RTL hashes must match. A generated SV miter then drives every top input and primitive output with walking bits and complements. It compares each anchor to its independently reconstructed source expression, including nested payload packing, and requires both polarities on every anchor bit. Reset comparisons check child/primitive bindings against the root reset. Clocked-channel nodes additionally expose their elaborated packed registers to these mapping-only forces so registered output anchors reach both polarities. Clock anchors and dual-rail packing have separate corruption controls. These probe forces are for compiler mapping only; behavioral campaigns run the original design without them.
+Timing markers are passive instances wired to constrained signals with declared
+parameters. They preserve intent through the tested optimization/deduplication
+route. A downstream synthesis flow must consume or preserve these constraints
+before removing marker cells. Sidecar names alone are not a physical constraint flow.
 
-`resolved.json` records success, actual instance-to-definition and probe mappings, mapping-check count, semantic identity, exact emitted-source hashes, probe-ABI hash, HW-IR hash and resolver hash. Functional and timing runners revalidate exports before execution. The two pinned compiler routes and supported reference forms have bounded evidence; unsupported forms fail. Each timing obligation also instantiates a passive, parameterized marker wired to its endpoints. Marker parameters and bindings are independently checked; downstream synthesis must consume or preserve these constraints before removing empty markers. This finite mapping corpus is not a formal equivalence proof for arbitrary transformations. The HW snapshot is retained for inspection/provenance; no general MLIR importer is claimed.
+`contract.synchronousMemory` supports the pinned compiler's tested single masked
+`SyncReadMem` read/write-port lowering. It checks identity, array/port shape and
+metadata, not arbitrary memory equivalence. Other memory lowerings are not covered.
 
-## Identity, evidence and replay
-
-The semantic hash covers compact, insertion-ordered UTF-8 JSON for the manifest. It includes resource hashes, the normalized probe ABI and normalized emitted RTL, so changing datapath logic changes identity even when ports do not. Resource normalization converts CRLF to LF and canonicalizes trailing whitespace/newline. RTL normalization additionally removes firtool's tab-prefixed source-location comments. Absolute checkout paths, wall-clock timestamps and simulator temporary paths do not enter semantic identity. Exact source bytes are separately hashed in resolution/run evidence. Repeated elaboration, different widths, paths containing spaces and copied exports test stability and isolation.
-
-Compiler fault tests rehash deliberately corrupted descriptors/RTL where necessary to exercise resolution rather than merely checksum rejection. They cover duplicate/ambiguous IDs, missing ports, incorrect widths/parameters, missing/altered resources, unregistered primitives, reset miswiring and permuted anchor bits. A stale manifest or duplicate JSON key also fails.
-
-Run the commands in the README. Timing cases are individually selectable with `python verification/run_timing.py --job <name>`. Reports under `target/verification/timing` retain the full selected inventory, all completed results and unrun cases after failure; XML/logs, exact-fs traces, capture values, coverage and source/checker hashes accompany each case. The unrelated consumer publishes/loads the JAR locally and repeats the complete timing campaign. CI performs the same work on native Windows and Linux; macOS is deferred. Only executed host results count as evidence.
-
-This is a development regression corpus informed by the prior ASYNC-Chisel, chisel-click, ACT and Workcraft comparison in [verification.md](verification.md). It adds falsifiable timing and compiler experiments rather than treating printed examples or matching two copies of the implementation as an oracle. The separate [frozen L0 campaign and fresh-context agent review](l0-acceptance.md) now close the Windows/Linux foundation gate; later catalog and release work need their own qualification.
-
-CA-07 adds two-phase channel metadata and phase/encoding-boundary timing obligations to the current v3 schema. Marker kinds 5/6/7 retain adapter cell bounds, return guards and decoder admission/storage budgets on checked endpoints. Regenerate earlier exports before using the extended resolver. See [CA-07 timing assumptions](arbitration-and-two-phase.md#sequential-phase-conversion-and-timing).
+Remaining compiler annotation warnings are visible in test logs. Unsupported
+reference forms fail instead of being guessed. No arbitrary CIRCT importer,
+downstream synthesis equivalence, physical timing closure or PDK mapping is supplied.

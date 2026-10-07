@@ -1,97 +1,101 @@
-# Initial behavioral contracts
+# Protocol contracts
 
-These contracts describe the first functional slice. They do not specify a mapped circuit, physical delay or analog behavior.
+These are obligations for drivers, consumers and tests. For constructors and
+composition patterns see the [catalog](components.md); for propagation assumptions
+see [timing and export](timing-and-export.md).
 
-## Logical token stream
+## Four-phase bundled data
 
-`Channel[T]` separates payload/reset intent from its electrical binding. Four-phase bundled, two-phase bundled, dual-rail RTZ and Decoupled have distinct transfer, hold and commit semantics; see [logical-channel contracts](logical-channels.md). Clocked conversion uses explicit storage and synchronized control; it does not turn a clock into an implicit library assumption.
+The producer drives `req` and `bits`; the consumer drives `ack`.
 
-## Four-phase channel
-
-The producer drives `req` and `bits`; the consumer drives `ack`. Idle is `(req, ack) = (0, 0)`. The legal transition order is `00 → 10 → 11 → 01 → 00`. One round trip represents one transaction even if its data equals the preceding transaction. The producer establishes data before raising request and holds it through return to idle. The consumer raises acknowledgement only for an offered transaction and lowers it after request falls.
-
-Initial traffic requires coordinated reset, with external request and acknowledgement held low before reset release. On an in-flight reset, assert reset before withdrawing held requests or changing their data, then return the attached domain to idle while reset is asserted. Inputs are binary during normal operation; unknown or malformed handshake behavior is outside the current buffer contract. There is no implicit periodic clock. `FourPhase.connect` requires matching domain objects; exporting a channel requires the owner's explicit domain. Direct Chisel wiring can bypass the helper, so export probes also compare actual primitive/child reset signals with the root reset. A general public protocol-monitor API remains planned.
-
-## Two-phase channel
-
-Two-phase bundled data encodes a token by a request transition and its completion by an acknowledgement transition. The following parity table follows the transition-signalling convention in Sparsø, [Introduction to Asynchronous Circuit Design](https://orbit.dtu.dk/en/publications/introduction-to-asynchronous-circuit-design/), §2.1. Our baseline chooses coordinated reset to `00` and data held from before request changes until acknowledgement matches request.
-
-| req, ack | Meaning | Next legal edge |
+| State `(req, ack)` | Meaning | Next normal transition |
 | --- | --- | --- |
-| 00 | Idle | req rises |
-| 10 | Pending token | ack rises; token delivered |
-| 11 | Idle | req falls |
-| 01 | Pending token | ack falls; token delivered |
+| `00` | Idle | Producer establishes data, raises `req` |
+| `10` | Offered | Consumer raises `ack`: delivery at this boundary |
+| `11` | Acknowledged | Producer lowers `req` |
+| `01` | Returning | Consumer lowers `ack` |
 
-Both acknowledgement polarities deliver tokens, even for repeated payloads. Reset restores `00`, aborts pending work and preserves prior delivery accounting. `TwoPhaseContract` tests all four states, illegal edges, both completion polarities and reset. CA-07 implements typed `TwoPhase[T]` channels, sequential phase adapters, storage/routing counterparts and converters under this convention. See [arbitration and conversion contracts](arbitration-and-two-phase.md) for capacities, timing assumptions and the finite digital MUTEX policy.
+Keep data stable from before request rises through the complete return to `00`.
+Each complete handshake carries one token even when payload bits repeat. A
+consumer must not acknowledge without an offer; a producer must not issue a new
+request during return. In digital tests, initial same-timestamp settling is
+allowed by the relevant observer; that is not a physical setup-time guarantee.
 
-Four-to-two adapters now require a post-toggle request guard exceeding a separately declared history-closure bound, which includes request distribution/skew and aperture allowance. This replaces the former instantaneous-close assumption; see the [closure contract](adapter-closure-and-reference.md).
+`LongHoldBuffer` and `FourPhaseStage` reserve one slot through output `ack` falling.
+They may acknowledge input return while the output remains stalled. A still-high
+old request cannot be accepted twice. Idle latch data can track inputs and has no
+validity until offered. `FourPhaseBuffer` implements a separate zero-delay
+behavioral storage contract.
 
-The settled digital observer permits idle data to change causally after acknowledgement in the same femtosecond sample. Completion reports the payload retained at the request transition, not the new idle value. Data changes in an observed pending state still fail. This sampling convention does not establish physical hold time or distinguish delta-cycle glitches within one settled sample.
+## Two-phase bundled data
 
-## Observation traces
+Either request edge offers a token. The consumer acknowledges by matching request
+parity; both acknowledgement polarities count as deliveries.
 
-The packaged [v1 observation schema](../src/main/resources/chiselasync/trace-v1.schema.json) and [trace format](trace-format.md) define the existing functional/timing JSONL envelope. Readers validate femtosecond ordering, units and activity independently of test completion status. Broader component-specific trace vocabularies accompany later catalog additions.
+| `(req, ack)` | Meaning | Next edge |
+| --- | --- | --- |
+| `00` | Idle | `req` rises |
+| `10` | Pending | `ack` rises |
+| `11` | Idle | `req` falls |
+| `01` | Pending | `ack` falls |
 
-## One-entry buffer
+Data is established before the request edge and held until completion. Coordinated
+reset restores `00`. The settled trace observer completes using the payload saved
+at request time; a causal idle data update in the completion sample does not
+change the delivered token. Changes while pending fail. This convention cannot
+detect arbitrary delta-cycle glitches.
 
-The functional buffer captures data once when storage is empty and a new request is present. It raises input acknowledgement and presents that captured data with output request. Input acknowledgement falls after the source lowers request, independently of how long the output stalls.
+## Return-to-zero dual rail
 
-Storage remains occupied through the complete output handshake. After output acknowledgement rises, output request falls; stored data remains unchanged until output acknowledgement falls. A new input request may wait while occupied; it is not acknowledged until storage becomes available. The same still-asserted request cannot be captured twice. This makes buffers composable under backpressure.
+For each bit, the pair **`(zero, one)`** is `00` for spacer, `10` for logical zero,
+and `01` for logical one. `11` is illegal. Typed rails preserve the payload's
+structure; arithmetic on the rails themselves is not ordinary binary arithmetic.
 
-Reset dominates: clear handshake outputs and stored data, discard the outstanding token, and require the entire attached channel domain to restart at idle. Accepted but undelivered tokens are explicitly aborted. The buffer has no committed memory or I/O effects. Independent endpoint resets are unsupported and require a future restart bridge.
+Rails rise monotonically from spacer to a valid word. The consumer acknowledges
+completion; the producer returns monotonically to spacer; the consumer lowers
+acknowledgement only after complete spacer return. Word completion is stateful:
+an AND over instantaneous bit-presence signals is not a substitute for a
+C-element completion tree during partial return.
 
-For verification accounting, input acknowledgement rising accepts a token and output acknowledgement rising delivers it. A delivered token still reserves storage until output acknowledgement falls. Reset aborts only tokens not yet delivered; an interrupted return-to-idle phase does not retrospectively undo delivery. Every settled checkpoint satisfies `accepted = delivered + outstanding + aborted`. An offered input waiting for acceptance is not an accepted token.
+Strongly indicating components wait for all input data before any output data,
+and all input spacer before output spacer. A strong half-buffer also waits for
+downstream acknowledgement before withdrawing output data. It can deliver before
+upstream acceptance is observed; reset accounting must preserve that delivery.
 
-The SV view updates data and request in the same zero-delay scheduling interval; sample offered payloads after settling. Passive control listeners remain armed on value changes. The data-hold observer allows initial settling at the request timestamp, then checks subsequent changes throughout the handshake. It is not a gate-level delta-glitch or setup/hold checker. No setup/hold guarantee follows. This is a functional storage primitive used to establish interfaces and a reference corpus before structural controller implementation.
+`DualRailBuffer` is the earlier, weaker Muller half-buffer probe. Its rails can
+appear before the whole input word is valid. Use `DualRailStrongBuffer` when the
+surrounding design requires word-level strong indication.
 
-## Published long-hold stage
+## Decoupled and clocked bridges
 
-`FourPhaseStage[A, B](inGen, outGen, transform, timing, domain)` checks the transformed payload against the distinct output type. `LongHoldBuffer[T]` is the identity specialization. Both use the Furber–Day long-hold topology with explicit primitive boundaries and require a timing policy: named `FunctionalOnly` or validated `Digital`. [Controller documentation](long-hold-controller.md) specifies the source, added timing guards, atomic input polarity, reset and ideal-wire assumptions, and independent evidence.
+Standard Chisel `Decoupled` commits on rising-edge `valid && ready`.
+`DecoupledToFourPhase` captures only on that event, then holds its async offer
+through both acknowledgement phases. `FourPhaseToDecoupled` synchronizes request,
+captures the held bus, and acknowledges the async producer only after the clocked
+consumer commits. Synchronizer depth is at least two.
 
-These stages use the same accepted/delivered/reserved accounting and full-handshake hold contract above. Their latch may transparently track data while idle; output data has no validity then. Reset takes the declared propagation time and must be held until quiescent. The long-hold Aout fork must deliver Aout+ to the OR before A- reaches its other input; zero modeled wire skew supplies this assumption only for the digital experiment. The export carries a required fork-arrival marker and whole-path data budgets, including ideal glue logic. The new policy does not claim physical setup/hold closure. The historical behavioral buffer remains a separate reference model.
+The memory backend must hold response valid/data until fire and produce one
+response per accepted request unless coordinated reset intervenes. See
+[memory integration](clocked-integration.md#memory-transactions) for commit and
+reset responsibilities.
 
-## Four-phase composition
+## Reset and composition
 
-The [CA-06 composition contracts](four-phase-composition.md) extend the long-hold foundation with exact-depth FIFO and initial tokens, unbuffered all-consumer fork, independently buffered typed join, captured select and monitored exclusive merge. Their transfer accounting differs where necessary: fork branch delivery can precede producer acknowledgement, and reset never retracts a delivered branch. Initial tokens occupy declared FIFO capacity and are reinstalled once per reset epoch. Exclusive merge serializes complete input handshakes, including return; it supplies no arbitration.
+Reset aborts pending transport state and restores idle; it does not reverse
+delivered fork branches or committed backend effects. Drivers must assert reset
+before releasing held signals and restart the entire connected domain together.
+Clocked local release requires running clocks. Initial-token sources reinstall
+their declared literal sequence once per reset epoch.
 
-## Withdrawn structural stage (regression only)
+Fork acknowledgement waits for every branch in both phases. Join pairs the nth
+left token with the nth right token. Select captures routing choice with data.
+Exclusive merges require complete input handshakes to be serialized, including
+return. Use an arbiter for independent competitors; a merge is not an arbiter.
 
-The former single-type custom `FourPhaseStage[T]` and `StructuralFourPhaseBuffer[T]` are withdrawn. They survive as `experimental.UnsafeFourPhaseStage` and `UnsafeFourPhaseBuffer` to retain the historical zero-delay corpus and a reproducible internal delay race. The new two-type `bundled.FourPhaseStage[A, B]` is a different published controller, with a required timing argument. Do not compose new library components from the withdrawn classes. [Review response](review-response.md) records the counterexample and replacement criteria.
+## Model and schema versions
 
-The control specification is independent of the implementation equations:
-
-| Condition | Required action |
-| --- | --- |
-| Empty, input acknowledgement low, request high, output acknowledgement low | Capture the transformed payload, acknowledge input, reserve storage and offer output. |
-| Input request falls | Lower input acknowledgement, even while output is stalled. |
-| Offered output is acknowledged | Withdraw output request; retain payload and reservation. |
-| Output acknowledgement falls after delivery | Release reservation; a pending new input may then be accepted. |
-| Original input request remains high after output completes | Retain input acknowledgement; do not accept that request again. |
-| Coordinated reset | Clear every latch and handshake output; abort undelivered tokens. |
-
-The intended control specification above remains useful, but the custom latch equations do not implement it robustly under internal delays. In the directed counterexample, returning clears before occupied's enable closes, causing a duplicate output offer. Capture enables closing through zero-delay feedback were a design defect, not merely a future pulse-width qualification task. A replacement must establish its controller assumptions and topology before catalog expansion. The independent `TimedCapture` tests do not establish these properties for any handshake controller.
-
-This is our functional decomposition, not a reproduction of a published controller. For the distinction between handshake correctness and physical bundled-data delay matching, see Sparsø, [Introduction to Asynchronous Circuit Design](https://backend.orbit.dtu.dk/ws/portalfiles/portal/215895041/JSPA_async_book_2020_PDF.pdf), §2.4.1 and chapter 10. The existing transaction ledger, bounded event orders and reset prefixes remain the external oracle; they do not duplicate latch equations.
-
-## C-element
-
-The two-input element starts only after explicit reset. Reset forces output zero regardless of inputs. After release, `(0,0)` forces zero, `(1,1)` forces one, and disagreement retains the previous output. No implicit initialization is assumed.
-
-The four-state diagnostic model retains a known output with an unknown input only when both possible binary resolutions yield that same output. Otherwise output becomes unknown until a determinate transition or reset. This is digital uncertainty, not analog metastability modeling.
-
-The independent Boolean oracle uses the characteristic equation `next = (a & b) | (previous & (a | b))`. Its test enumerates all four-transition input sequences from reset. Tests also check release under unanimous ones and reset recovery from uncertainty.
-
-## Bounded dual-rail family
-
-The [CA-08 family](qdi-family.md) adds strongly indicating typed half-buffers, small complete DIMS truth tables, fork/join and exclusive routing. Valid and spacer indication are separate obligations. A strong half-buffer holds its output until the source has returned to spacer and the sink has acknowledged; its input acknowledgement may arrive after downstream delivery. Accounting preserves completed outputs across reset even in that interval. Forks forward rails without adding word-level indication and wait for every branch in both acknowledgement phases. Exclusive merge requires serialized complete handshakes and supplies no arbitration.
-
-`QdiTiming` records positive independent cell-delay bounds. The `qdi-digital-v1` export binds actual rail/ack/reset endpoints to indication and atomic-cell, ideal-fork, monotonic-RTZ and coordinated-reset assumptions. These are bounded digital model contracts; physical QDI implementation and arbitrary compiler lowering remain unqualified.
-
-## Clocked application boundaries
-
-The [CA-09 contracts](application-boundaries.md) distinguish backend acceptance, response delivery and external effects. The single-outstanding memory adapter reuses Decoupled bridges; it does not supply storage or roll back committed writes on reset. The event bridge sends coalesced pending bit sets with set priority over snapshot clearing. Both use explicit clocks and coordinated reset; neither claims independent endpoint restart, physical CDC closure or arbitrary narrow-pulse capture.
-
-## Versioning
-
-SV model identifiers end in `_v1`. Their behavior is part of the contract, not an incidental module name. Incompatible changes require a new model identifier and updated compatibility evidence. The Scala library remains `0.1.0-SNAPSHOT` and has no stable API promise yet. The separate `chisel-async-contract-v3` sidecar carries scoped instance IDs, compiler probe identities and checked endpoint mappings. Re-emit v1/v2 exports for the current resolver. [Timing and export](timing-and-export.md) specifies the latch/delay models, qualified compiler configurations, schema and limits.
+Packaged behavioral cells have versioned identifiers such as `_v1`. Incompatible
+cell behavior requires a new model identifier and new evidence. The strict export
+uses contract v3 and port ABI v2. Re-emit older exports when the validator requires
+new obligations; editing a version string cannot migrate evidence. The
+[compatibility policy](compatibility.md#versioning) governs library releases.

@@ -9,7 +9,7 @@ import chiselasync.protocol.{FourPhase, Payload}
 /** WITHDRAWN controller, retained only to reproduce its zero-delay and delay-race regressions.
   * Relative internal delays can cause duplicate offers, loss and non-progress.
   * Do not use this as a hardware controller or as the foundation for library composition.
-  * See verification/controller_race.py and docs/review-response.md.
+  * See verification/controller_race.py and docs/archive/development/review-response.md.
   */
 class UnsafeFourPhaseStage[T <: Data](gen: T, transform: T => T,
                                domain: ResetDomain = new ResetDomain("root")) extends AsyncModule(domain) {

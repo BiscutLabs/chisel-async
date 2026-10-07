@@ -1,6 +1,15 @@
 name: Library qualification
 on:
+  workflow_call:
+    inputs:
+      release_artifact:
+        type: string
+        default: ''
+      source_ref:
+        type: string
+        default: ''
   push:
+    branches: ['**']
   pull_request:
   workflow_dispatch:
     inputs:
@@ -33,6 +42,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.source_ref || github.sha }}
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: ${{ matrix.python }}
@@ -61,6 +72,29 @@ jobs:
       - name: Set up and run complete qualification
         if: inputs.l0 != true
         run: python tools/qualify.py
+      - name: Check active documentation
+        run: python tools/check_docs.py
+      - name: Download the single Linux-built release distribution
+        if: inputs.release_artifact != '' && inputs.release_artifact != null
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: ${{ inputs.release_artifact }}
+          path: target/release-candidate
+      - name: Consume and simulate the exact release JAR
+        if: inputs.release_artifact != '' && inputs.release_artifact != null
+        run: >-
+          python -c "import os, subprocess;
+          subprocess.run(['.venv/Scripts/python.exe' if os.name == 'nt' else '.venv/bin/python',
+          'tools/check_quickstart.py', '--distribution', 'target/release-candidate',
+          '--qualification-report', 'target/verification/qualification/report.json',
+          '--evidence', 'target/release-consumer'], check=True)"
+      - name: Retain release consumer binding
+        if: inputs.release_artifact != '' && inputs.release_artifact != null
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-consumer-${{ runner.os }}
+          path: target/release-consumer
+          if-no-files-found: error
       - name: Run frozen L0 acceptance
         if: inputs.l0 == true
         run: python verification/run_l0.py
@@ -86,6 +120,9 @@ jobs:
             build/consumer/**/simulation-log.txt
             build/consumer/**/execution-script.txt
             build/consumer/**/compilation-log.txt
+            build/quickstart/**/simulation-log.txt
+            build/quickstart/**/execution-script.txt
+            build/quickstart/**/compilation-log.txt
             target/verification
             target/generated/**/contract.json
             target/generated/**/resolved.json

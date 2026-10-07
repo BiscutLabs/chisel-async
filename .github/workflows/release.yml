@@ -1,0 +1,179 @@
+name: Tagged Maven Central release
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version tag, e.g. v0.1.0-RC1 (an existing tag unless dry-run)'
+        required: true
+        type: string
+      dry_run:
+        description: Build and qualify only; never sign, publish, or create a GitHub Release
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      commit: ${{ steps.identity.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.dry_run && github.sha || inputs.tag || github.ref }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.13'
+      - name: Bootstrap pinned toolchain
+        run: |
+          python tools/bootstrap_jdk.py
+          python tools/bootstrap.py
+      - name: Check documentation and release controls
+        run: |
+          python tools/check_docs.py
+          python -m pip install --require-hashes -r verification/requirements.txt
+          python -m pytest verification/test_release.py -q
+      - name: Build the distributable once
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+        run: |
+          python - <<'PY'
+          import os, subprocess, sys
+          command = [sys.executable, 'tools/release.py', 'build', '--tag', os.environ['RELEASE_TAG'],
+                     '--output', 'target/release-candidate']
+          if os.environ['RELEASE_DRY_RUN'] == 'true':
+              command.append('--dry-run')
+          subprocess.run(command, check=True)
+          PY
+      - name: Record source identity
+        id: identity
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          manifest = json.loads(Path('target/release-candidate/manifest.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as stream:
+              stream.write('commit=' + manifest['commit'] + '\n')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-candidate
+          path: target/release-candidate
+          if-no-files-found: error
+      - name: Retain failed build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-build-failure
+          path: |
+            target/release-candidate
+            target/test-reports
+
+  qualification:
+    needs: build
+    uses: ./.github/workflows/ci.yml
+    with:
+      release_artifact: release-candidate
+      source_ref: ${{ needs.build.outputs.commit }}
+
+  publish:
+    if: ${{ !inputs.dry_run }}
+    needs: [build, qualification]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: maven-central
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.build.outputs.commit }}
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12.13'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-candidate
+          path: target/release-candidate
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: release-consumer-*
+          merge-multiple: true
+          path: target/release-consumer
+      - name: Restore a prior publication receipt on retry
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, shutil, subprocess
+          from pathlib import Path
+          endpoint = f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}/artifacts"
+          query = '.artifacts[] | select((.name | startswith("central-publication-")) and .expired == false) | .id'
+          ids = subprocess.check_output(['gh', 'api', endpoint, '--paginate', '--jq', query], text=True).splitlines()
+          if ids:
+              artifact = str(max(int(item) for item in ids))
+              archive = subprocess.check_output(['gh', 'api', f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/artifacts/{artifact}/zip"])
+              import io, zipfile
+              directory = Path('target/release-candidate')
+              with zipfile.ZipFile(io.BytesIO(archive)) as bundle:
+                  if bundle.read('manifest.json') != (directory / 'manifest.json').read_bytes():
+                      raise RuntimeError('Prior publication belongs to a different candidate')
+                  for name in ('central-receipt.json', 'central-bundle.zip', 'upload-started.json'):
+                      if name in bundle.namelist():
+                          (directory / name).write_bytes(bundle.read(name))
+          PY
+      - name: Sign and publish the tested files to Maven Central
+        env:
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+          PGP_FINGERPRINT: ${{ secrets.PGP_FINGERPRINT }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+        run: python tools/release.py publish --directory target/release-candidate --evidence target/release-consumer
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          directory = Path('target/release-candidate')
+          manifest = json.loads((directory / 'manifest.json').read_text())
+          tag, version = manifest['tag'], manifest['version']
+          notes = Path('target/release-notes.md')
+          notes.write_text(
+              f'Library dependency: `io.github.biscutlabs:chisel-async_2.13:{version}`.\n\n'
+              'Tested with Scala 2.13.18, Chisel/compiler plugin 7.16.0, firtool 1.160.0, '
+              'JDK 21, Icarus 13 and Verilator 5.046 on native Windows/Linux.\n\n'
+              f'[User guide](https://github.com/BiscutLabs/chisel-async/blob/{tag}/docs/index.md) · '
+              f'[Compatibility](https://github.com/BiscutLabs/chisel-async/blob/{tag}/docs/compatibility.md)\n\n'
+              'Digital models and bounded verification; physical implementation remains separate.\n',
+              encoding='utf-8')
+          files = [str(directory / name) for name in manifest['sha256']]
+          files += [str(directory / name) for name in ('manifest.json', 'central-bundle.zip', 'central-receipt.json')]
+          files += [str(p) for p in Path('target/release-consumer').glob('*.json')]
+          command = ['gh', 'release', 'create', tag, '--verify-tag', '--title', f'chisel-async {version}',
+                     '--notes-file', str(notes), *files]
+          if '-RC' in version:
+              command.append('--prerelease')
+          subprocess.run(command, check=True)
+          PY
+      - name: Retain deployment identity and signed artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: central-publication-${{ github.run_attempt }}
+          path: target/release-candidate
+          if-no-files-found: error
