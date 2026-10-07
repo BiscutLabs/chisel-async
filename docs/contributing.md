@@ -54,6 +54,7 @@ requiring the repository Python dependencies. The `python` below means that inte
 | Python oracles/checkers | `python -m pytest verification --ignore=verification/cocotb -q` |
 | Packaged artifacts | `python tools/sbt.py package packageSrc packageDoc makePom` |
 | Complete clean-JAR replay | `python tools/consumer_smoke.py` |
+| Optional mapped-timing checker | `python verification/check_sta.py --sta /path/to/sta --output build/sta-check` (OpenSTA 2.7.0; no PDK required) |
 
 Event runners expect fresh, already emitted fixtures. The
 [examples index](examples.md) maps emitter names to runners. Supply a new `--output`
@@ -63,6 +64,12 @@ look successful. Use each runner's `--help` for its supported fixture/seed optio
 For semantic changes, update the relevant contracts and meaningful negative
 controls, then run affected campaigns and the complete qualifier as required by
 the scope. Do not rerun every historical campaign merely to validate prose.
+
+The optional OpenSTA campaign exercises 19 known-path and negative-control cases,
+including bus coverage, cell arcs, exact pin lookup, bounds and strict ordering.
+It requires the named tool; a missing executable is an error. The GF180 companion
+has separate [functional and Liberty checks](gf180-reference.md#check-the-trial-adapters)
+using caller-supplied PDK files. Neither adds a PDK requirement to normal JAR tests.
 
 ## Evidence and failures
 

@@ -81,6 +81,10 @@ The preset timings are digital experiments, not characterized GCD silicon timing
 
 ## Adapting an example
 
+`PrepareAsicReference` inventories these same public pipeline and GCD classes for
+ASIC work. See the [GF180 reference flow](gf180-reference.md) for optional trial
+adapters, their tests and the remaining custom-cell requirements.
+
 Keep your expected function independent of the implementation, preserve token
 identity when payloads repeat, and register the new hierarchy/ports for export.
 Check widths and delay bounds for your own datapath when adapting an example.

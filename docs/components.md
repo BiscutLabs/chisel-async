@@ -112,7 +112,9 @@ blocks with explicit atomic-cell assumptions, not a technology cell library.
 | [`TimedCapture[T]`](../src/main/scala/chiselasync/bundled/TimedCapture.scala) | Independent data/control-delay experiment with transaction identity and setup/hold observation; not a handshake stage |
 | [`ExportDesign`](../src/main/scala/chiselasync/metadata/ExportDesign.scala) | Optimized or debug RTL plus typed metadata/probes; validate before consuming as a checked export |
 | [`AsicMapping`](../src/main/scala/chiselasync/metadata/AsicMapping.scala) | Exhaustive technology-cell binding and a separate synthesis file list; no supplied PDK or physical closure |
-| [`AsyncTest`](../src/main/scala/chiselasync/testing/AsyncTest.scala) | JAR-contained Scala helper for event-driven four-phase tests and seeded cell-delay variation |
+| [`TimingConstraints`](../src/main/scala/chiselasync/metadata/TimingConstraints.scala), [`OpenSta`](../src/main/scala/chiselasync/metadata/OpenSta.scala) | Bind supported obligations to mapped pins; generate SDC and check declared paths/arcs and strict relative timing |
+| [`AsyncTest`](../src/main/scala/chiselasync/testing/AsyncTest.scala) | Typed four-phase, two-phase and dual-rail event tests, seeded cell variation and optional pin skew |
+| [`Simulator`](../src/main/scala/chiselasync/testing/Simulator.scala) | Explicit simulator paths, installation probe and retained tool versions |
 
 N-input symmetric C behavior uses `AsymmetricCElement` with only common inputs.
 It is a direct N-input primitive, not an implicitly equivalent tree of two-input

@@ -53,6 +53,7 @@ emission warns on drift and records the actual versions.
 | sbt | `1.12.4` | Build, local publication, consumer |
 | Icarus Verilog | `13.0` | Event simulation, delays, four-state checks, export validation |
 | Verilator | `5.046` | Clocked ChiselSim tests |
+| OpenSTA (optional) | `2.7.0` | Mapped path/arc checker tested on Linux; separate from native JAR qualification |
 | Native Linux | Ubuntu `24.04`, Python `3.12.13` | Complete existing library campaign and clean-JAR consumer passed |
 | Native Windows | Windows `2025`, Python `3.12.10`, MSYS2 UCRT64 | Same campaign; ChiselSim requires the documented build adapter |
 | macOS | Deferred | No qualification claim |
@@ -73,9 +74,9 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Return-to-zero dual-rail logic | Strong storage, bounded DIMS functions, fork/join, demux, exclusive merge |
 | Clocked Chisel integration | `DecoupledToFourPhase`, `FourPhaseToDecoupled` |
 | Memory transactions and events | `AsyncMemoryPort`, `PendingEventBridge` |
-| Consumer async tests | `AsyncTest` in the JAR; ScalaTest plus Icarus, no Python |
+| Consumer async tests | `AsyncTest`: typed four-phase, two-phase and dual-rail tests, optional pin skew; ScalaTest plus Icarus, no Python |
 | Digital timing and compiler inspection | `BundledTiming.Simulation`, primitive models, `ExportDesign` |
-| ASIC integration | `AsicMapping`: explicit technology bindings; no supplied PDK or physical qualification |
+| ASIC integration | `AsicMapping`, `TimingConstraints`, `OpenSta`; optional partial GF180 reference, no physical qualification |
 
 `FourPhaseBuffer` is a behavioral reference model. New structural designs use the
 long-hold family. See the [terminology and chisel-click comparison](docs/component-terminology.md)

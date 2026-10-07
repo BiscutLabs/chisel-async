@@ -2,7 +2,9 @@
 
 Use `AsicMapping` to connect chisel-async primitives to your technology's cells and
 generate a separate set of synthesis inputs. You supply the cell implementations
-and verify their physical timing; chisel-async does not include a PDK binding.
+and verify their physical timing. The optional [GF180 reference](gf180-reference.md)
+supplies trial delay/latch/gate adapters and identifies the cells still needed;
+it is not a complete PDK backend.
 Ordinary `ExportDesign` output uses simulation models whose `#delay` statements
 cannot implement the required hardware delays.
 
@@ -69,3 +71,63 @@ uses deliberately labeled black-box test cells to check binding completeness,
 model exclusion and elaboration under `SYNTHESIS`. Those cells are not usable
 technology implementations. The digital test helper remains useful before and
 alongside this separate physical flow.
+
+## Check the mapped timing paths
+
+`TimingConstraints` translates supported obligations into SDC path bounds,
+preservation rules and executable OpenSTA checks. Prepare it from the ASIC export:
+
+```scala
+import chiselasync.metadata.{TimingConstraints, OpenSta}
+import java.nio.file.Paths
+
+val timing = TimingConstraints.prepare(Paths.get("build/mapping/asic/timing-intent.json"))
+// Review timing.required, timing.rules and timing.orderings.
+// Bind every endpoint bit to its exact mapped pin or top-level port.
+val constraints = timing.emit(myMappedEndpoints, Paths.get("build/constraints"))
+val corner = OpenSta.Corner("ss",
+  Seq(Paths.get("technology/ss.lib")), Paths.get("mapped.v"), Paths.get("corner.tcl"),
+  spef = Some(Paths.get("routed.spef")))
+OpenSta.check(constraints, corner, Paths.get("build/sta-ss"))
+```
+
+`myMappedEndpoints` is a `Map[String, Seq[TimingConstraints.ObjectRef]]` keyed by
+`timing.required` IDs. For example, a scalar binding can contain
+`ObjectRef("pin", "add/request_chain/I")`; a bus has one exact reference per bit.
+Bind state-cell arc endpoints to the characterized macro's actual pins, rather
+than wrapper ports. Names are checked against the linked netlist. Missing or extra
+bindings, absent bus bits, unresolved paths/arcs, unsupported obligation kinds,
+changed generated files and incomplete tool results fail.
+
+| Generated file | Use |
+| --- | --- |
+| `preserve.tcl` | Preserve registered cell boundaries before synthesis optimization; adapt `set_dont_touch` to your implementation tool if needed |
+| `constraints.sdc` | Apply minimum/maximum combinational path requirements |
+| `check-timing.tcl` | Check measured path/characterized-cell bounds and strict relative ordering |
+| `constraints.json` | Retain semantic IDs, exact bindings, obligation inventory and file hashes |
+
+The current lowering covers long-hold control/latch bounds, complete transform and
+glue-path budgets, the acknowledgement fork, and phase-conversion guards. QDI
+fork obligations and encoding-converter obligations do not yet have a lowering;
+they fail with `UNSUPPORTED_TIMING_OBLIGATION`. Functional-only zero-delay policies
+are rejected. Four-to-two checks require an explicit `closureMargins` entry for
+each adapter ordering, accounting for characterized closure/setup time not already
+included in the bound. A zero entry is still an explicit engineering decision.
+
+`corner.tcl` establishes operating assumptions, input slew, loads, case analysis
+and any reviewed arc cuts. Run each required PVT corner in a fresh process. The
+runner records all supplied input hashes, logs and checked IDs; a successful exit
+without the complete evidence inventory fails. Configure another executable with
+`command = Seq("/path/to/sta")`. OpenSTA remains optional and external to the JAR.
+
+A result marked `CHECKED_DECLARED_PATHS` covers those supplied paths and that
+corner. Without SPEF it is cell-only analysis. It does not establish reset
+recovery, pulse widths, latch setup/hold, analog state-cell behavior, hazard
+freedom, or arbitrary unrecorded wire constraints. The technology flow must verify
+those separately. In particular, a Liberty propagation arc alone does not qualify
+a C-element or MUTEX. The checker is tested with OpenSTA 2.7.0 using known-delay
+paths and deliberate missing-bit, bound and ordering failures.
+
+Review the parasitic-annotation report when supplying SPEF; the runner does not
+certify extraction coverage. Tied-off/disconnected endpoint bits and state paths
+without usable characterized arcs are rejected rather than counted as zero delay.

@@ -1,0 +1,49 @@
+/* SPDX-License-Identifier: Apache-2.0
+ * Artificial 1 ns cells to test the checker; not a technology library. */
+library(checker_fixture) {
+  delay_model : table_lookup;
+  time_unit : "1ns";
+  voltage_unit : "1V";
+  current_unit : "1mA";
+  pulling_resistance_unit : "1kohm";
+  capacitive_load_unit(1,pf);
+  nom_process : 1;
+  nom_voltage : 1;
+  nom_temperature : 25;
+  input_threshold_pct_rise : 50;
+  input_threshold_pct_fall : 50;
+  output_threshold_pct_rise : 50;
+  output_threshold_pct_fall : 50;
+  slew_lower_threshold_pct_rise : 20;
+  slew_lower_threshold_pct_fall : 20;
+  slew_upper_threshold_pct_rise : 80;
+  slew_upper_threshold_pct_fall : 80;
+  cell(CA_TEST_BUF) {
+    area : 1;
+    pin(A) { direction : input; capacitance : 0.001; }
+    pin(Z) {
+      direction : output; function : "A";
+      timing() {
+        related_pin : "A"; timing_sense : positive_unate;
+        cell_rise(scalar) { values("1"); }
+        cell_fall(scalar) { values("1"); }
+        rise_transition(scalar) { values("0.1"); }
+        fall_transition(scalar) { values("0.1"); }
+      }
+    }
+  }
+  cell(CA_TEST_INV) {
+    area : 1;
+    pin(A) { direction : input; capacitance : 0.001; }
+    pin(Z) {
+      direction : output; function : "!A";
+      timing() {
+        related_pin : "A"; timing_sense : negative_unate;
+        cell_rise(scalar) { values("1"); }
+        cell_fall(scalar) { values("1"); }
+        rise_transition(scalar) { values("0.1"); }
+        fall_transition(scalar) { values("0.1"); }
+      }
+    }
+  }
+}

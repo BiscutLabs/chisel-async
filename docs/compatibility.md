@@ -36,6 +36,13 @@ native simulators and compilers separately. Host tests cover installation,
 compiler execution, resource extraction, paths and simulation. macOS testing
 is deferred.
 
+The optional OpenSTA checker was exercised with version 2.7.0 on Linux, including
+19 known-path and required-failure cases. This is separate from Windows/Linux
+library qualification; no native Windows OpenSTA support is claimed. GF180 trial
+adapters have [limited functional/Liberty evidence](gf180-reference.md#what-the-current-experiments-establish),
+not complete hardware qualification. An Icarus 12.0 consumer replay encountered
+runtime failures in history-closure cases, so Icarus 13 remains the tested choice.
+
 ## Versioning
 
 Use independent library versions under `io.github.biscutlabs:chisel-async_2.13`.

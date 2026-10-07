@@ -91,7 +91,7 @@ recordDependencies := IO.write(baseDirectory.value / "resolved-classpath.txt",
                 or cases[0].get("name") != "holds tokens through return"
                 or any(node.tag in {"failure", "error", "skipped"} for node in suite.iter())):
             raise RuntimeError("Quickstart simulation inventory or result mismatch")
-        for name, count in (("AsyncDesignSpec", 2), ("RoutingSpec", 5), ("AsicMappingSpec", 2)):
+        for name, count in (("AsyncDesignSpec", 2), ("RoutingSpec", 5), ("AsicMappingSpec", 2), ("ProtocolTestSpec", 12)):
             async_suite = ET.parse(consumer / f"target/test-reports/TEST-{name}.xml").getroot()
             if (len(async_suite.findall("testcase")) != count or int(async_suite.get("tests", "0")) != count
                     or any(node.tag in {"failure", "error", "skipped"} for node in async_suite.iter())):

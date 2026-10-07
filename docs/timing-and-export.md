@@ -108,7 +108,9 @@ Legacy contract/port ABI inventories must be regenerated for the current checker
 Timing markers are passive instances wired to constrained signals with declared
 parameters. They preserve intent through the tested optimization/deduplication
 route. A downstream synthesis flow must consume or preserve these constraints
-before removing marker cells. Sidecar names alone are not a physical constraint flow.
+before removing marker cells. Use [mapped timing checks](asic-mapping.md#check-the-mapped-timing-paths)
+to bind supported obligations to actual pins, generate SDC and test strict relative
+ordering with OpenSTA. Sidecar names alone are not a physical constraint flow.
 
 `contract.synchronousMemory` supports the pinned compiler's tested single masked
 `SyncReadMem` read/write-port lowering. It checks identity, array/port shape and

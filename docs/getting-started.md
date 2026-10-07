@@ -119,7 +119,7 @@ published package.
 ## Run the first test
 
 The project includes [AsyncDesignSpec.scala](../examples/quickstart/src/test/scala/AsyncDesignSpec.scala).
-With Icarus on PATH, on Windows or Linux:
+With Icarus 13 configured on Windows or Linux (see [simulator setup](testing.md#set-up-the-event-simulator)):
 
 ```text
 sbt "testOnly AsyncDesignSpec"
@@ -128,7 +128,9 @@ sbt "testOnly AsyncDesignSpec"
 These tests compare adder sums and GCD results with independent software functions,
 with repeated values, downstream stalls, and independently varied cell delays.
 `sbt "testOnly RoutingSpec AsicMappingSpec"` additionally runs the 300-configuration
-mux/fork campaigns and ASIC binding-interface checks. `sbt test` also runs the
+mux/fork campaigns and ASIC binding-interface checks. `sbt "testOnly ProtocolTestSpec"`
+tests native two-phase/dual-rail interfaces, typed literals, wire skew and closure
+faults. `sbt test` also runs the
 [ChiselSim bridge test](../examples/quickstart/src/test/scala/BridgeSpec.scala),
 which needs the additional Verilator setup. The [testing guide](testing.md)
 explains both paths and the native Windows ChiselSim adapter.

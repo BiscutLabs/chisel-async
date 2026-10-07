@@ -30,6 +30,7 @@ export const navigation = [
       ["contracts", "Protocol contracts"],
       ["timing-and-export", "Timing & export"],
       ["asic-mapping", "ASIC mapping"],
+      ["gf180-reference", "GF180 reference"],
       ["trace-format", "Trace formats"],
       ["compatibility", "Compatibility"],
       ["troubleshooting", "Troubleshooting"],
