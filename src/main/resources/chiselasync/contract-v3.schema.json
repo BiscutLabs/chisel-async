@@ -456,6 +456,9 @@
         },
         {
           "$ref": "#/$defs/qdiTiming"
+        },
+        {
+          "$ref": "#/$defs/clickTiming"
         }
       ]
     },
@@ -1274,6 +1277,129 @@
           }
         }
       ]
+    },
+    "clickTiming": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "marker",
+        "variant",
+        "initial_token",
+        "endpoints",
+        "times",
+        "cells",
+        "assumptions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "click-bundling-v1"
+        },
+        "marker": {
+          "$ref": "#/$defs/id"
+        },
+        "variant": {
+          "enum": [
+            "standard",
+            "phase-decoupled"
+          ]
+        },
+        "initial_token": {
+          "type": "boolean"
+        },
+        "endpoints": {
+          "type": "array",
+          "minItems": 8,
+          "maxItems": 9,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "times": {
+          "type": "object",
+          "required": [
+            "REQUEST_FS",
+            "ACKNOWLEDGE_FS",
+            "OUTPUT_FS",
+            "SETUP_FS",
+            "HOLD_FS",
+            "PULSE_HIGH_FS",
+            "PULSE_LOW_FS",
+            "CLOCK_SKEW_FS"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "REQUEST_FS": {
+              "$ref": "#/$defs/time"
+            },
+            "ACKNOWLEDGE_FS": {
+              "$ref": "#/$defs/time"
+            },
+            "OUTPUT_FS": {
+              "$ref": "#/$defs/time"
+            },
+            "SETUP_FS": {
+              "$ref": "#/$defs/time"
+            },
+            "HOLD_FS": {
+              "$ref": "#/$defs/time"
+            },
+            "PULSE_HIGH_FS": {
+              "$ref": "#/$defs/time"
+            },
+            "PULSE_LOW_FS": {
+              "$ref": "#/$defs/time"
+            },
+            "CLOCK_SKEW_FS": {
+              "$ref": "#/$defs/time"
+            }
+          }
+        },
+        "cells": {
+          "type": "object",
+          "required": [
+            "input_compare",
+            "output_compare",
+            "fire",
+            "input_phase",
+            "output_phase",
+            "payload",
+            "data_delay"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "input_compare": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "output_compare": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "fire": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "input_phase": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "output_phase": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "payload": {
+              "$ref": "#/$defs/delayBounds"
+            },
+            "data_delay": {
+              "$ref": "#/$defs/delayBounds"
+            }
+          }
+        },
+        "assumptions": {
+          "type": "string"
+        }
+      }
     }
   }
 }

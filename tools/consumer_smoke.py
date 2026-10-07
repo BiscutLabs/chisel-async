@@ -22,7 +22,9 @@ def main():
                      "chiselasync/sv/ChiselAsyncClosingLatch_v1.sv", "chiselasync/sv/ChiselAsyncTimingMarker_v1.sv",
                      "chiselasync/sv/ChiselAsyncAnd_v1.sv", "chiselasync/sv/ChiselAsyncProtocolGuard_v1.sv",
                      "chiselasync/sv/ChiselAsyncXor_v1.sv", "chiselasync/sv/ChiselAsyncToggle_v1.sv",
-                     "chiselasync/sv/ChiselAsyncMutex_v1.sv", "chiselasync/sv/ChiselAsyncQdiMarker_v1.sv"):
+                     "chiselasync/sv/ChiselAsyncMutex_v1.sv", "chiselasync/sv/ChiselAsyncQdiMarker_v1.sv",
+                     "chiselasync/sv/ChiselAsyncEventRegister_v1.sv", "chiselasync/sv/ChiselAsyncPhaseRegister_v1.sv",
+                     "chiselasync/sv/ChiselAsyncClickMarker_v1.sv"):
             if not library.read(name):
                 raise RuntimeError(f"Empty published resource: {name}")
     # The space in the path is intentional. Keep outputs for diagnosis/replay.

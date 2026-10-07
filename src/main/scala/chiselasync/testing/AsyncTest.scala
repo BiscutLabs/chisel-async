@@ -181,12 +181,14 @@ object AsyncTest {
         val stage = node("timing").arr.find(_("kind").str == "long-hold-bundling-v2")
         val phase = node("timing").arr.find(_("kind").str == "phase-conversion-v2")
         val qdi = node("timing").arr.find(_("kind").str == "qdi-digital-v1")
+        val click = node("timing").arr.find(_("kind").str == "click-bundling-v1")
         val fixedBoundary = node("timing").arr.exists(_("kind").str == "encoding-boundary-v1")
         node("primitives").arr.filter(p => !fixedBoundary && p("parameters").obj.contains("DELAY_FS") &&
-          !Set("request_delay", "output_delay", "request_guard", "return_guard").contains(p("id").str)).map { p =>
+          !Set("request_delay", "output_delay", "request_guard", "return_guard", "acknowledge_guard", "output_guard").contains(p("id").str)).map { p =>
           var lo = routingCells.min.fs; var hi = routingCells.max.fs
           def use(b: ujson.Value): Unit = { lo = b("min_fs").str.toLong; hi = b("max_fs").str.toLong }
           qdi.foreach(t => use(t("cells")))
+          click.foreach(t => use(t("cells")(if(p("id").str == "start_barrier") "fire" else p("id").str)))
           phase.foreach(t => use(if (p("id").str == "history_close") t("history_closure") else t("cells")))
           stage.foreach { t =>
             p("id").str match {

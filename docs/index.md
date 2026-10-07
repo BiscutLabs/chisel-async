@@ -13,6 +13,7 @@ components, connect different protocols and check your design's timing assumptio
 | [Component catalog](components.md) | What each public component does and when to use it |
 | [Terminology and chisel-click comparison](component-terminology.md) | Established names, matching operations, and differences in storage and implementation |
 | [Bundled-data composition](bundled-data.md) | Timing policy, type-changing stages, FIFO, fork/join, routing and arbitration |
+| [Native Click pipelines](click.md) | Standard and phase-decoupled stages, local pulses, initialized rings and timing tests |
 | [Dual-rail logic](dual-rail.md) | Rails, completion, indication, bounded DIMS functions, and conversion |
 | [Clocked integration](clocked-integration.md) | Decoupled bridges, memory backends, pending events, and reset release |
 | [Examples](examples.md) | Runnable designs and the properties their tests exercise |

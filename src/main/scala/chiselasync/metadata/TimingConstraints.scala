@@ -120,6 +120,8 @@ object TimingConstraints {
           case "phase-conversion-v2" if t("direction").str == "two-to-four" =>
             cellPath(t("id").str + ".return", "return_guard", "a",t("return_delay_fs").str.toLong,None)
             phaseCells(t,Set("return_guard"))
+          case "click-bundling-v1" => throw new IllegalArgumentException(
+            s"CLICK_REQUIRES_PULSE_AND_APERTURE_ANALYSIS: $id; propagation-only SDC cannot discharge local clock pulse, setup/hold and distribution constraints")
           case other => throw new IllegalArgumentException(s"UNSUPPORTED_TIMING_OBLIGATION: $id ($other)")
         }
         covered += id

@@ -71,6 +71,7 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Broadcast, pairing, routing | `FourPhaseFork`, `FourPhaseRegFork`, `FourPhaseJoin`, controlled `FourPhaseMux`, `FourPhaseDemux`, exclusive `FourPhaseMerge` |
 | Competing producers | `FourPhaseArbiter` and its finite digital MUTEX model |
 | Transition-signalling interfaces | `TwoPhase` components and explicit phase converters |
+| Native two-phase storage | [Standard and phase-decoupled Click stages, buffers and FIFOs](docs/click.md) |
 | Return-to-zero dual-rail logic | Strong storage, bounded DIMS functions, fork/join, demux, exclusive merge |
 | Clocked Chisel integration | `DecoupledToFourPhase`, `FourPhaseToDecoupled` |
 | Memory transactions and events | `AsyncMemoryPort`, `PendingEventBridge` |
@@ -78,8 +79,8 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Digital timing and compiler inspection | `BundledTiming.Simulation`, primitive models, `ExportDesign` |
 | ASIC integration | `AsicMapping`, `TimingConstraints`, `OpenSta`; optional partial GF180 reference, no physical qualification |
 
-`FourPhaseBuffer` is a behavioral reference model. New structural designs use the
-long-hold family. See the [terminology and chisel-click comparison](docs/component-terminology.md)
+`FourPhaseBuffer` is a behavioral reference model. Structural designs can use the
+four-phase long-hold family or native two-phase Click storage. See the [terminology and chisel-click comparison](docs/component-terminology.md)
 for operation, storage, and implementation differences. Classes under `experimental` retain a known failing controller
 for regression and must not be used in designs.
 

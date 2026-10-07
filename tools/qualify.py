@@ -121,7 +121,8 @@ def main():
                  "examples/runMain chiselasync.examples.EmitPhase target/generated",
                  "examples/runMain chiselasync.examples.EmitReference target/generated",
                  "examples/runMain chiselasync.examples.EmitQdi target/generated",
-                 "examples/runMain chiselasync.examples.EmitBoundaries target/generated"]
+                 "examples/runMain chiselasync.examples.EmitBoundaries target/generated",
+                 "examples/runMain chiselasync.examples.EmitClick target/generated"]
         steps = setup + [("docs", [python, str(ROOT / "tools/check_docs.py")]),
             ("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
             ("python", [python, "-m", "pytest", *[str(p) for p in sorted((ROOT / "verification").glob("test_*.py"))], "-q"])]

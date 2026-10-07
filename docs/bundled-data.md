@@ -118,6 +118,10 @@ arbitration latency or general starvation freedom.
 
 ## Two-phase interfaces
 
+For native two-phase storage, use the [standard and phase-decoupled Click
+stages](click.md). They have a separate `ClickTiming` contract and edge-triggered
+registers. The following adapter-based family remains available.
+
 The `TwoPhase*` family composes the same cores with sequential phase adapters.
 `TwoPhaseToFourPhase` and `FourPhaseToTwoPhase` provide explicit buffered boundaries.
 Their public capacity remains one token; internal protocol state is not extra

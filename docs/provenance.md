@@ -11,12 +11,15 @@ work and which timing, reset and storage assumptions each component relies on.
 | Rendezvous and arbitration | Sparsø–Furber fork/join/exclusive-merge discussion and figure 5.21 MUTEX/return-interlock topology |
 | Dual-rail functions | Strong/weak indication and DIMS construction, including all-input minterms for both data and spacer |
 | Sequential phase conversion | ASYNC 2000 tutorial protocol discussion, with buffered conversion and explicit closure guards |
+| Native Click storage | Peeters et al. (2010); Sparsø figures 9.4(b) and 9.11(b): shared or separate phase flip-flops, XOR/AND local firing, edge-triggered payload storage |
 | Chisel integration | Upstream RawModule, ExtModule resources, CIRCT stage, read probes and ChiselSim APIs |
 
 For links to the papers and the revisions used, see the
 [source notes](archive/development/provenance.md). The
 [long-hold controller notes](archive/development/long-hold-controller.md#inspected-source-and-preserved-topology)
 also identify the figures and circuit topology used in the implementation.
+The [Click guide](click.md#how-a-stage-fires) links the original paper and the
+phase-decoupled template, and describes the added explicit timing guards.
 To compare chisel-async with other libraries, see the
 [component comparison](component-terminology.md#how-this-compares-with-chisel-click)
 for interfaces, storage and encodings, and the

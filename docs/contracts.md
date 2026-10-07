@@ -45,6 +45,13 @@ at request time; a causal idle data update in the completion sample does not
 change the delivered token. Changes while pending fail. This convention cannot
 detect arbitrary delta-cycle glitches.
 
+Native Click stages reserve their one slot until the output token is acknowledged.
+Payload and phase registers capture on the same local firing pulse, subject to
+the declared pulse distribution and aperture bounds. A seeded phase-decoupled
+stage blocks its initial offer until `start` rises after coordinated reset settles.
+Keep `start` high until the next reset; resetting reinstalls the initial token.
+See [Click timing and initialization](click.md).
+
 ## Return-to-zero dual rail
 
 For each bit, the pair **`(zero, one)`** is `00` for spacer, `10` for logical zero,

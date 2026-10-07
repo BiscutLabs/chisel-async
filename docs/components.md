@@ -48,6 +48,17 @@ simulation guards, not made into defined routing behavior.
 
 ## Two-phase bundled data
 
+[Native Click stages](click.md) use local-pulse edge-triggered storage directly:
+
+| Component | Controller | Storage |
+| --- | --- | --- |
+| `ClickStage[A,B]`, `ClickBuffer[T]` | Standard Click, one shared phase register | One slot, empty after reset |
+| `PhaseDecoupledClickStage[A,B]`, `PhaseDecoupledClickBuffer[T]` | Two independent phase registers | One slot; optional initial literal and start barrier |
+| `ClickFifo[T]`, `PhaseDecoupledClickFifo[T]` | Native chain of the chosen stage | Exactly `depth >= 1` slots, initially empty |
+
+These components take `ClickTiming`. Their primitives and setup/hold, pulse-width
+and reset requirements are described in the Click guide.
+
 [`TwoPhaseStage`, `TwoPhaseBuffer`, `TwoPhaseFifo`, `TwoPhaseInitialTokens`,
 `TwoPhaseFork`, `TwoPhaseRegFork`, `TwoPhaseJoin`, `TwoPhaseMux`, `TwoPhaseDemux`, `TwoPhaseMerge`, and
 `TwoPhaseArbiter`](../src/main/scala/chiselasync/bundled/TwoPhaseComposition.scala)

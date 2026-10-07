@@ -14,7 +14,9 @@
   *  - [[chiselasync.metadata.ExportDesign]] emits RTL and timing contracts.
   *  - [[chiselasync.metadata.AsicMapping]] binds primitives to caller-supplied cells.
   *
-  * Two-phase compositions currently wrap four-phase cores with explicit adapters.
+  * ClickStage and PhaseDecoupledClickStage provide native two-phase storage with
+  * local-pulse edge registers. The TwoPhase* composition family retains explicit
+  * adapters around four-phase cores. Each controller family has its own timing policy.
   * Packaged behavioral models and randomized-delay tests do not establish physical
   * timing, metastability containment, or QDI layout assumptions. The ASIC interface
   * requires characterized technology implementations and subsequent physical checks.

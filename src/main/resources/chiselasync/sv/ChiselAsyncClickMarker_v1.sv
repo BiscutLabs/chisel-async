@@ -1,0 +1,37 @@
+// SPDX-License-Identifier: Apache-2.0
+// Passive Click constraint carrier. Consume before synthesis.
+module ChiselAsyncClickMarker_v1 #(
+  parameter longint unsigned WIDTH=0,
+  parameter longint unsigned DECOUPLED=0,
+  parameter longint unsigned SEEDED=0,
+  parameter longint unsigned REQUEST_FS=0,
+  parameter longint unsigned ACKNOWLEDGE_FS=0,
+  parameter longint unsigned OUTPUT_FS=0,
+  parameter longint unsigned SETUP_FS=0,
+  parameter longint unsigned HOLD_FS=0,
+  parameter longint unsigned PULSE_HIGH_FS=0,
+  parameter longint unsigned PULSE_LOW_FS=0,
+  parameter longint unsigned CLOCK_SKEW_FS=0,
+  parameter longint unsigned INPUT_COMPARE_MIN_FS=0,
+  parameter longint unsigned INPUT_COMPARE_MAX_FS=0,
+  parameter longint unsigned INPUT_COMPARE_MODEL_FS=0,
+  parameter longint unsigned OUTPUT_COMPARE_MIN_FS=0,
+  parameter longint unsigned OUTPUT_COMPARE_MAX_FS=0,
+  parameter longint unsigned OUTPUT_COMPARE_MODEL_FS=0,
+  parameter longint unsigned FIRE_MIN_FS=0,
+  parameter longint unsigned FIRE_MAX_FS=0,
+  parameter longint unsigned FIRE_MODEL_FS=0,
+  parameter longint unsigned INPUT_PHASE_MIN_FS=0,
+  parameter longint unsigned INPUT_PHASE_MAX_FS=0,
+  parameter longint unsigned INPUT_PHASE_MODEL_FS=0,
+  parameter longint unsigned OUTPUT_PHASE_MIN_FS=0,
+  parameter longint unsigned OUTPUT_PHASE_MAX_FS=0,
+  parameter longint unsigned OUTPUT_PHASE_MODEL_FS=0,
+  parameter longint unsigned PAYLOAD_MIN_FS=0,
+  parameter longint unsigned PAYLOAD_MAX_FS=0,
+  parameter longint unsigned PAYLOAD_MODEL_FS=0,
+  parameter longint unsigned DATA_DELAY_MIN_FS=0,
+  parameter longint unsigned DATA_DELAY_MAX_FS=0,
+  parameter longint unsigned DATA_DELAY_MODEL_FS=0
+)(input wire reset, input wire [WIDTH-1:0] values);
+endmodule

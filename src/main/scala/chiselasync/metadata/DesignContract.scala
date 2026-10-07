@@ -279,6 +279,34 @@ final class DesignContract private[chiselasync] (owner: AsyncModule) {
     markerId
   }
 
+  /** Native Click state, propagation, aperture and pulse-distribution obligations.
+    * A seeded stage additionally records its explicit post-reset start barrier.
+    */
+  def clickTiming(id: String, timing: ClickTiming, decoupled: Boolean, seeded: Boolean): Unit = {
+    claim(id)
+    val refs=Seq("in_request","in_data","in_acknowledge","out_request","out_data","out_acknowledge",
+      "capture","register_data") ++ (if(seeded) Seq("start") else Seq.empty)
+    val signals=refs.map(ref=>endpoints.find(_._1==ref).get._2)
+    val times=Map("REQUEST_FS"->timing.requestDelay,"ACKNOWLEDGE_FS"->timing.acknowledgeDelay,
+      "OUTPUT_FS"->timing.outputDelay,"SETUP_FS"->timing.setup,"HOLD_FS"->timing.hold,
+      "PULSE_HIGH_FS"->timing.pulseHigh,"PULSE_LOW_FS"->timing.pulseLow,"CLOCK_SKEW_FS"->timing.clockSkew)
+    val parameters=Map("WIDTH"->BigInt(signals.map(_.getWidth).sum),"DECOUPLED"->BigInt(if(decoupled) 1 else 0),
+      "SEEDED"->BigInt(if(seeded) 1 else 0)) ++ times.map { case(k,v)=>k->BigInt(v.fs) } ++
+      timing.cells.flatMap { case(k,b)=>Seq(s"${k.toUpperCase}_MIN_FS"->BigInt(b.min.fs),
+        s"${k.toUpperCase}_MAX_FS"->BigInt(b.max.fs),s"${k.toUpperCase}_MODEL_FS"->BigInt(b.model.fs)) }
+    val marker=Module(new ClickMarker(parameters)); marker.reset:=owner.reset
+    marker.values:=chisel3.util.Cat(signals.reverse.map(_.asUInt))
+    val markerId=s"${id}_marker"
+    primitive(markerId,marker,parameters,endpoints.find(_._2 eq owner.reset).get._1,
+      "passive Click timing carrier; endpoints packed least-significant first","constraint-marker")
+    obligations += ujson.Obj("id"->id,"kind"->"click-bundling-v1","marker"->markerId,
+      "variant"->(if(decoupled) "phase-decoupled" else "standard"),"initial_token"->seeded,
+      "endpoints"->ujson.Arr.from(refs),"times"->ujson.Obj.from(times.toSeq.sortBy(_._1).map {case(k,v)=>k->ujson.Str(v.fs.toString)}),
+      "cells"->ujson.Obj.from(timing.cells.toSeq.sortBy(_._1).map {case(k,b)=> k->ujson.Obj(
+        "min_fs"->b.min.fs.toString,"max_fs"->b.max.fs.toString,"model_fs"->b.model.fs.toString)}),
+      "assumptions"->"atomic XOR/AND cells; bounded local clock distribution; stable handshake inputs; coordinated quiescent reset; seeded start rises once after reset settles; whole transform budget replaces simulation delay; setup/hold and pulse widths checked separately from propagation")
+  }
+
   private def layout(data: Data): ujson.Value = {
     var offset = 0
     val leaves = ArrayBuffer.empty[ujson.Value]

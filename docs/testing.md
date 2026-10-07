@@ -5,6 +5,12 @@ two-phase or RTZ dual-rail circuits, or ChiselSim for clocked harnesses. Use eve
 propagation delays and four-state behavior. In either case, check completed token
 transfers and expected results as well as successful elaboration.
 
+Native [Click stages](click.md) also use `AsyncTest`. Their timing monitors check
+actual local-trigger setup/hold, pulse widths and clock skew. The consumer suite
+runs 300 configurations of each three-stage Click FIFO, and directed tests for
+stalls, reset, initial-token release and deliberately broken timing. The repository
+ring campaign adds 300 configurations of a two-slot, one-token feedback network.
+
 ## Test an asynchronous design from the JAR
 
 `chiselasync.testing.AsyncTest` runs a clockless design in Icarus from

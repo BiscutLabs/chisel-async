@@ -91,21 +91,30 @@ recordDependencies := IO.write(baseDirectory.value / "resolved-classpath.txt",
                 or cases[0].get("name") != "holds tokens through return"
                 or any(node.tag in {"failure", "error", "skipped"} for node in suite.iter())):
             raise RuntimeError("Quickstart simulation inventory or result mismatch")
-        for name, count in (("AsyncDesignSpec", 2), ("RoutingSpec", 5), ("AsicMappingSpec", 2), ("ProtocolTestSpec", 12)):
+        for name, count in (("AsyncDesignSpec", 2), ("RoutingSpec", 5), ("AsicMappingSpec", 2), ("ProtocolTestSpec", 12), ("ClickTestSpec", 7)):
             async_suite = ET.parse(consumer / f"target/test-reports/TEST-{name}.xml").getroot()
             if (len(async_suite.findall("testcase")) != count or int(async_suite.get("tests", "0")) != count
                     or any(node.tag in {"failure", "error", "skipped"} for node in async_suite.iter())):
                 raise RuntimeError(f"Quickstart async inventory or result mismatch: {name}")
         result["async_campaigns"] = {}
-        for fixture, count in (("routing-mux",300), ("routing-regfork",300), ("routing-phase",16)):
-            cases = sorted((consumer / "build" / fixture).glob("seed-*/result.json"))
+        campaigns = [(name, consumer / "build" / name, count) for name, count in
+                     (("routing-mux",300), ("routing-regfork",300), ("routing-phase",16))]
+        click_exports = []
+        for variant in ("standard", "decoupled"):
+            matches = list((consumer / "build/click-tests").glob(variant + "*"))
+            if len(matches) != 1:
+                raise RuntimeError(f"Missing or ambiguous Click campaign: {variant}")
+            campaigns.append(("click-" + variant, matches[0], 300))
+            click_exports.append(matches[0] / "export")
+        for fixture, directory, count in campaigns:
+            cases = sorted(directory.glob("seed-*/result.json"))
             records = [json.loads(p.read_text()) for p in cases]
             if (len(records) != count or {int(r["seed"]) for r in records} != set(range(1,count+1))
                     or any(r["status"] != "PASS" or not r["activity"] for r in records)):
                 raise RuntimeError(f"Missing async delay campaign evidence: {fixture}")
             result["async_campaigns"][fixture] = {"cases":count,"result_sha256":{p.parent.name:sha(p) for p in cases}}
         with (evidence / "export.log").open("w", encoding="utf-8") as log:
-            for exported in ("generated", "build/async-gcd/export", "build/routing-mux/export", "build/routing-regfork/export", "build/routing-phase/export"):
+            for exported in ["generated", "build/async-gcd/export", "build/routing-mux/export", "build/routing-regfork/export", "build/routing-phase/export", *click_exports]:
                 subprocess.run([sys.executable, str(ROOT / "tools/check_export.py"), str(consumer / exported)],
                                env=environment, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
                                check=True, timeout=180)

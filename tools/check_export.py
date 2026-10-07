@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import click_contract
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "verification"))
@@ -25,7 +26,7 @@ QDI_MODES = {"strong": "1", "forwarding": "2", "selected-strong": "3"}
 QDI_COMPONENTS = {"storage": "1", "dims": "2", "fork": "3", "join": "4", "demux": "5", "exclusive-merge": "6"}
 QDI_INDICATIONS = {"storage": "strong", "dims": "strong", "fork": "forwarding", "join": "strong",
                    "demux": "selected-strong", "exclusive-merge": "selected-strong"}
-MARKER_MODELS = {"ChiselAsyncTimingMarker_v1", "ChiselAsyncQdiMarker_v1"}
+MARKER_MODELS = {"ChiselAsyncTimingMarker_v1", "ChiselAsyncQdiMarker_v1", "ChiselAsyncClickMarker_v1"}
 
 
 def require(condition, diagnostic):
@@ -247,6 +248,9 @@ def validate_manifest(document):
                         delay = (timing["return_delay_fs"] if p["id"] == "acknowledge_guard" else
                                  timing["matched_delay_fs"] if p["id"] == "decoded_request_guard" else timing["cells"]["model_fs"])
                         require(p["parameters"].get("DELAY_FS") == delay, "ENCODING_PARAMETER_MISMATCH")
+            elif timing.get("kind") == "click-bundling-v1":
+                click_contract.validate(timing, node, endpoints)
+                refs, times = (), ()
             elif timing.get("kind") == "phase-conversion-v2":
                 shape(timing, "id kind marker direction input_request input_acknowledge output_request output_acknowledge cells return_delay_fs assumptions" +
                       (" history_closed history_closure request_delay_fs" if "history_closure" in timing else ""))
@@ -356,7 +360,8 @@ def validate_manifest(document):
             require(all(ref in endpoints for ref in timing_refs(timing)), "MISSING_TIMING_ENDPOINT")
             marker = next((p for p in node["primitives"] if p["id"] == timing["marker"]), None)
             require(marker and marker["view"] == "constraint-marker", "MISSING_TIMING_MARKER")
-            require(marker["model"] == ("ChiselAsyncQdiMarker_v1" if timing["kind"] == "qdi-digital-v1"
+            require(marker["model"] == ("ChiselAsyncClickMarker_v1" if timing["kind"] == "click-bundling-v1" else
+                                        "ChiselAsyncQdiMarker_v1" if timing["kind"] == "qdi-digital-v1"
                                         else "ChiselAsyncTimingMarker_v1"), "TIMING_MARKER_MODEL_MISMATCH")
             for name in times:
                 require(type(timing[name]) is str and re.fullmatch(r"0|[1-9][0-9]*", timing[name])
@@ -390,6 +395,8 @@ def validate_manifest(document):
         if qdi_markers or "qdi-digital-v1" in kinds:
             require(len(qdi_markers) == kinds.count("qdi-digital-v1") == 1, "QDI_CONSTRAINT_INVENTORY")
         primitive_ids = {p["id"] for p in node["primitives"]}
+        if any(p['model'] == 'ChiselAsyncClickMarker_v1' for p in node['primitives']) or {'fire','input_phase','payload'} <= primitive_ids:
+            require(kinds.count('click-bundling-v1') == 1, 'MISSING_CLICK_CONSTRAINT')
         if {"selected0", "rendezvous0"} <= primitive_ids:
             require(any(t.get("logic") == "controlled-multiplexer-input-mux" for t in node["timing"]), "MISSING_MUX_CONSTRAINT")
         if "request_phase" in primitive_ids or {"master_close", "phase", "returned"} <= primitive_ids:
@@ -419,6 +426,8 @@ def validate_manifest(document):
 
 def timing_refs(timing):
     """Endpoint IDs in marker packing order, least-significant first."""
+    if timing["kind"] == "click-bundling-v1":
+        return tuple(timing['endpoints'])
     if timing["kind"] == "qdi-digital-v1":
         return tuple(c[ref] for c in timing["input_channels"] + timing["output_channels"]
                      for ref in ("zero", "one", "acknowledge"))
@@ -437,6 +446,8 @@ def timing_refs(timing):
 
 def marker_parameters(timing, endpoints):
     width = str(sum(endpoints[ref]["width"] for ref in timing_refs(timing)))
+    if timing["kind"] == "click-bundling-v1":
+        return click_contract.marker_parameters(timing, endpoints)
     if timing["kind"] == "qdi-digital-v1":
         return {"MODE": QDI_MODES[timing["indication"]], "COMPONENT": QDI_COMPONENTS[timing["component"]],
                 "WIDTH": width, **{f"CELL_{b.upper()}_FS": timing["cells"][b + "_fs"] for b in ("min", "max", "model")}}
@@ -584,6 +595,9 @@ def probe_source(manifest, scopes, paired=False):
             expression = "{" + ", ".join(endpoint_by_id[ref]["rtl_path"] for ref in reversed(timing_refs(timing))) + "}"
             diagnostic = "QDI_MARKER_BINDING_MISMATCH" if timing["kind"] == "qdi-digital-v1" else "TIMING_MARKER_BINDING_MISMATCH"
             comparisons.append(f'if ({marker["rtl_path"]}.values !== {expression}) $fatal(1, "{diagnostic}");')
+            if timing['kind'] == 'click-bundling-v1':
+                comparisons += [f'if ({a} !== {b}) $fatal(1,"CLICK_BINDING_MISMATCH");'
+                                for a,b in click_contract.bindings(timing,node,endpoint_by_id)]
             if timing["kind"] == "bundled-data-path-v1":
                 owner = node
                 for child_id in timing["delay_owner"]:
@@ -883,7 +897,7 @@ def validate_export(directory: Path):
     (directory / "contract_simulation.log").write_text(simulation.stdout + simulation.stderr, encoding="utf-8")
     for diagnostic in ("RESET_BINDING_MISMATCH", "TIMING_MARKER_BINDING_MISMATCH", "PHASE_CLOSURE_BINDING_MISMATCH",
                        "PHASE_RETURN_BINDING_MISMATCH", "DATA_PATH_BINDING_MISMATCH", "HOLD_FORK_BINDING_MISMATCH",
-                       "QDI_MARKER_BINDING_MISMATCH"):
+                       "QDI_MARKER_BINDING_MISMATCH", "CLICK_BINDING_MISMATCH"):
         require(diagnostic not in simulation.stdout, diagnostic)
     require(simulation.returncode == 0 and f"CONTRACT_PROBES_PASS:{checks}" in simulation.stdout,
             "ENDPOINT_MAPPING_MISMATCH")
@@ -895,7 +909,9 @@ def validate_export(directory: Path):
               "port_abi_sha256": manifest["port_abi"]["sha256"],
               "probe_paths": {e["probe"]: e["rtl_path"] for n in nodes(manifest["design"]) for e in n["endpoints"]}, "source_sha256": {s.name: sha(s.read_bytes()) for s in sources},
               "hw_ir_sha256": sha((directory / "design.hw.mlir").read_bytes()),
-              "resolver_sha256": sha(Path(__file__).read_bytes()), "simulator": "Icarus 13.0"}
+              "resolver_sha256": sha(Path(__file__).read_bytes()),
+              "resolver_dependencies": {"click_contract.py": sha(Path(click_contract.__file__).read_bytes())},
+              "simulator": "Icarus 13.0"}
     output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result
 
@@ -917,7 +933,8 @@ def main():
                 "reference_bundled", "reference_qdi", "reference_gals", "reference_core",
                 "qdi_buffer", "qdi_packet", "qdi_not", "qdi_and", "qdi_or", "qdi_xor", "qdi_select",
                 "qdi_adder", "qdi_constant", "qdi_fork", "qdi_join", "qdi_demux", "qdi_merge", "qdi_composition",
-                "memory_ram", "memory_rom", "memory_port", "pending_events")
+                "memory_ram", "memory_rom", "memory_port", "pending_events",
+                "click_standard", "click_decoupled", "click_seeded", "click_fifo", "click_decoupled_fifo", "click_ring")
     directories = args.directories or [ROOT / "target/generated" / name for name in fixtures]
     require(bool(directories), "EMPTY_EXPORT_INVENTORY")
     for path in directories:

@@ -80,8 +80,8 @@ end"""
           Seq(before(history,request,"1'b1",s"TIMING_HISTORY_CLOSURE ${node("rtl_path").str}"))
         case _ => Seq.empty
       }}
-      local.toSeq ++ node("children").arr.flatMap(c => visit(c("contract")))
+      local.toSeq ++ ClickChecks(node,pin) ++ node("children").arr.flatMap(c => visit(c("contract")))
     }
-    if (targets.isEmpty) "" else visit(design).mkString("\n")
+    visit(design).mkString("\n")
   }
 }

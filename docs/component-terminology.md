@@ -47,12 +47,14 @@ and tools for testing and export.
 | `JoinReg`, `JoinRegFork` | Join followed by Stage or RegFork | Composition with additional operand storage, not the same fused topology or capacity |
 | `Merge` | `FourPhaseMerge`, `TwoPhaseMerge` | Same caller exclusivity obligation, but our output is buffered |
 | `FunctionBlock`, `LogicModule` | Typed stage transform / ordinary Chisel datapath | No direct unbuffered matched-delay function-block API; a stage adds storage |
-| `HandshakeRegister`, `ClickElement` | Long-hold stage plus phase adapters | **No native Click controller.** Externally two-phase, internally four-phase with guarded conversion |
+| `HandshakeRegister`, `ClickElement` | `ClickStage`, `PhaseDecoupledClickStage` and identity buffers | Native standard and phase-decoupled controllers; typed transforms, explicit digital bounds, optional initialized output in the phase-decoupled variant. No supplied FPGA mapping |
 
-Chisel-async's two-phase components use four-phase cores with phase adapters.
-Their internal transitions, latency, initialization and register behavior therefore
-differ from chisel-click's native Click circuits. A native Click implementation
-would need its own controller timing contract and delay tests.
+Chisel-async's [Click stages and FIFOs](click.md) use native two-phase controllers.
+The `TwoPhase*` family retains four-phase cores with phase adapters, including
+the routing components listed above. Its transitions, latency and initialization
+therefore differ from native Click circuits. Choose the implementation explicitly;
+sharing the `TwoPhase[T]` interface does not make the controllers interchangeable
+for timing or capacity analysis.
 
 For current constructors use the [catalog](components.md); for a controlled loop,
 run the [GCD example](examples.md#gcd-with-controlled-feedback).
