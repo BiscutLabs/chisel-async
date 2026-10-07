@@ -19,3 +19,20 @@ needs Verilator; on native Windows, that bridge test uses the
 [documented simulation adapter](../../docs/testing.md#native-windows-chiselsim).
 The library is not yet publicly released; the snapshot dependency must exist in
 your local Ivy cache.
+
+## Native Click example
+
+The [Click adder walkthrough](../../docs/click-example.md) combines a standard
+Click transform with a phase-decoupled FIFO. It preserves a transaction tag and
+the addition carry, using typed port helpers and named constructor arguments.
+From this directory:
+
+```text
+sbt "runMain EmitClickAdder"
+sbt "testOnly ClickAdderSpec"
+```
+
+The test checks 44 jobs under 64 per-cell delay configurations with backpressure.
+`ClickTestSpec` provides broader controller, reset and timing-fault coverage.
+Both use Icarus directly from ScalaTest; neither needs Python or Verilator.
+The simulation timing preset does not represent a characterized hardware target.

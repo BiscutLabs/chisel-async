@@ -1,8 +1,8 @@
 # Executable examples
 
 The [standalone quickstart](../examples/quickstart) shows how to use chisel-async in
-your own sbt project. It includes an adder pipeline, a controlled GCD loop and
-ScalaTest tests for both, plus a clocked bridge test. Follow
+your own sbt project. It includes four-phase and native Click adder pipelines,
+a controlled GCD loop, ScalaTest tests and a clocked bridge test. Follow
 [getting started](getting-started.md) to run it, then explore the examples below.
 
 Repository emitters live under
@@ -31,10 +31,26 @@ emission order and fresh output paths automatically.
 | `EmitReference` | Common small function across four implementation styles | `verification/run_reference.py`, `verification/run_dims.py` |
 | `EmitQdi` | Strong storage, truth tables, typed routing, mixed unequal paths | `verification/run_qdi.py`, `verification/run_qdi_sequences.py` |
 | `EmitBoundaries` | Standard-Chisel RAM/ROM and pending events | `verification/run_boundaries.py` (also needs `EmitArchitecture`) |
+| `EmitClick` | Native standard/phase-decoupled buffers, FIFOs and a one-token feedback ring | `verification/test_click.py`; standalone `ClickTestSpec` |
 
 `EmitControllerComparison` reproduces a controller comparison, including a known
-race in a withdrawn design. Use it to study that failure; use the long-hold
-components for new designs.
+race in a withdrawn design. Use it to study that failure; use the documented
+long-hold or Click components for new bundled-data designs.
+
+## Native Click adder
+
+The [Click adder walkthrough](click-example.md) includes complete source and a
+ScalaTest test. A standard Click stage accepts two operands and a tag, then sends
+the widened sum and preserved tag through a phase-decoupled FIFO. It shows typed
+port helpers, named constructor arguments, shared reset and contract export.
+
+From the standalone quickstart, run `sbt "runMain EmitClickAdder"` and
+`sbt "testOnly ClickAdderSpec"`. The test checks 44 jobs under 64 independent
+delay configurations, including carry, repeated tokens and consumer backpressure.
+
+For an initialized feedback network, see
+[ClickRing.scala](../examples/src/main/scala/chiselasync/examples/ClickRing.scala)
+and the [start-signal requirements](click.md#initialize-a-feedback-ring).
 
 ## Four-style reference
 

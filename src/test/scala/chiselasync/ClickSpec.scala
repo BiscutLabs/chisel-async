@@ -3,6 +3,7 @@ package chiselasync
 
 import chisel3._
 import chiselasync.bundled._
+import chiselasync.core.AsyncModule
 import chiselasync.metadata._
 import circt.stage.ChiselStage
 import java.nio.file.{Files,Paths}
@@ -10,6 +11,37 @@ import org.scalatest.funsuite.AnyFunSuite
 
 class ClickSpec extends AnyFunSuite {
   private val timing=ClickTiming.Simulation
+  test("two-phase port helpers compose a named-argument Click stage in one reset domain") {
+    class Example extends AsyncModule {
+      val in = twoPhaseInput("in", UInt(8.W))
+      val out = twoPhaseOutput("out", UInt(9.W))
+      private val stage = asyncChild("stage") { domain =>
+        new ClickStage(inGen = UInt(8.W), outGen = UInt(9.W),
+          transform = (x: UInt) => x +& 1.U(8.W), timing = timing, domain = domain)
+      }
+      chiselasync.protocol.TwoPhase.connect(stage.in, in)
+      chiselasync.protocol.TwoPhase.connect(out, stage.out)
+      contract.capacity(1)
+    }
+    val directory = Paths.get("build/click-api")
+    ExportDesign.emit(new Example, directory)
+    val node = ujson.read(Files.readString(directory.resolve("contract.json")))("manifest")("design")
+    val channels = node("channels").arr.map(c => c("id").str -> c).toMap
+    assert(channels.keySet == Set("in", "out"))
+    assert(channels.values.forall(_("protocol").str == "two-phase-bundled-v1"))
+    assert(channels("in")("role").str == "input" && channels("out")("role").str == "output")
+    assert(node("children").arr.size == 1 && node("capacity").num == 1)
+    assert(!Files.readString(directory.resolve("Example.sv")).contains("input clock"))
+  }
+
+  test("named stage arguments work with a default domain and optional initialization") {
+    assert(ChiselStage.emitCHIRRTL(new ClickStage(inGen = UInt(8.W), outGen = UInt(8.W),
+      transform = (x: UInt) => x, timing = timing)).nonEmpty)
+    assert(ChiselStage.emitCHIRRTL(new PhaseDecoupledClickStage(inGen = UInt(8.W), outGen = UInt(8.W),
+      transform = (x: UInt) => x, timing = timing)).nonEmpty)
+    assert(ChiselStage.emitCHIRRTL(new PhaseDecoupledClickStage(inGen = UInt(8.W), outGen = UInt(8.W),
+      transform = (x: UInt) => x, timing = timing, initial = Some(42.U(8.W)))).contains("input start"))
+  }
   test("native Click uses edge registers and one or two phase registers without adapters") {
     def inspect(decoupled: Boolean): String=ChiselStage.emitCHIRRTL(
       if(decoupled) new PhaseDecoupledClickBuffer(UInt(8.W),timing) else new ClickBuffer(UInt(8.W),timing))

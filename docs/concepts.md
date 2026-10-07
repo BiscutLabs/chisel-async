@@ -29,6 +29,12 @@ structures made from those leaves. Unknown widths, unsupported leaf types, and
 directioned payload fields are rejected. Use `IO(Flipped(channel.bundled))` for an
 input and `IO(channel.bundled)` for an output; keep direction outside the payload.
 
+Inside an `AsyncModule`, `fourPhaseInput`/`fourPhaseOutput` and
+`twoPhaseInput`/`twoPhaseOutput` combine IO declaration with channel contract
+registration. Each takes a semantic ID and payload type, and uses the parent's
+reset domain. See the [Click adder](click-example.md#implement-the-pipeline) for
+a complete example. These helpers add no storage.
+
 The checked helpers take **consumer first, producer second**:
 
 ```scala

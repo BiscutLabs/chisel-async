@@ -35,6 +35,7 @@ and observed setup/hold inequalities. It cannot qualify a controller by itself.
 | Four-to-two history closure | `requestDelay > historyClosure.max`, including distribution/skew/aperture allowance |
 | Dual-rail decode admission | `matchedDelay > phase.cells.max + dataDelay.max` |
 | QDI model envelope | Independent positive cell bounds, atomic cells, ideal forks, monotonic RTZ, coordinated reset |
+| Native Click | Independent cell bounds, setup/hold, pulse widths and trigger distribution; see [Click timing](click.md#primitives-and-timing) |
 
 The long-hold output-acknowledgement fork additionally requires acknowledgement to
 reach the hold OR before state A falls there. Whole-path records include transform
@@ -66,6 +67,8 @@ Register public channels with `contract.channel`, `twoPhaseChannel`,
 `dualRailChannel` or `clockedChannel`, as appropriate. Use `asyncChild` for nested
 async modules. Custom low-level primitives and timing paths require explicit
 registry entries too; unregistered instances are rejected by strict validation.
+The `AsyncModule` four-phase and two-phase port helpers register their channels
+automatically; do not register those same ports a second time.
 For exact registration signatures see
 [`DesignContract`](../src/main/scala/chiselasync/metadata/DesignContract.scala).
 

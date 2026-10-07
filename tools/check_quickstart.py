@@ -67,7 +67,7 @@ recordDependencies := IO.write(baseDirectory.value / "resolved-classpath.txt",
                "-Dsbt.color=false", "-Dsbt.override.build.repos=true",
                f"-Dsbt.repository.config={repositories}", "-jar",
                str(ROOT / ".tools/sbt-launch-1.12.4.jar"),
-               "recordDependencies", "runMain EmitQuickstart", "test"]
+               "recordDependencies", "runMain EmitQuickstart", "runMain EmitClickAdder", "test"]
     evidence = consumer / "verification/quickstart"
     evidence.mkdir(parents=True)
     result = {"status": "RUNNING", "system": platform.system(), "commit": git("rev-parse", "HEAD"),
@@ -91,14 +91,14 @@ recordDependencies := IO.write(baseDirectory.value / "resolved-classpath.txt",
                 or cases[0].get("name") != "holds tokens through return"
                 or any(node.tag in {"failure", "error", "skipped"} for node in suite.iter())):
             raise RuntimeError("Quickstart simulation inventory or result mismatch")
-        for name, count in (("AsyncDesignSpec", 2), ("RoutingSpec", 5), ("AsicMappingSpec", 2), ("ProtocolTestSpec", 12), ("ClickTestSpec", 7)):
+        for name, count in (("AsyncDesignSpec", 2), ("RoutingSpec", 5), ("AsicMappingSpec", 2), ("ProtocolTestSpec", 12), ("ClickTestSpec", 7), ("ClickAdderSpec", 1)):
             async_suite = ET.parse(consumer / f"target/test-reports/TEST-{name}.xml").getroot()
             if (len(async_suite.findall("testcase")) != count or int(async_suite.get("tests", "0")) != count
                     or any(node.tag in {"failure", "error", "skipped"} for node in async_suite.iter())):
                 raise RuntimeError(f"Quickstart async inventory or result mismatch: {name}")
         result["async_campaigns"] = {}
         campaigns = [(name, consumer / "build" / name, count) for name, count in
-                     (("routing-mux",300), ("routing-regfork",300), ("routing-phase",16))]
+                     (("routing-mux",300), ("routing-regfork",300), ("routing-phase",16), ("click-adder",64))]
         click_exports = []
         for variant in ("standard", "decoupled"):
             matches = list((consumer / "build/click-tests").glob(variant + "*"))
@@ -114,7 +114,7 @@ recordDependencies := IO.write(baseDirectory.value / "resolved-classpath.txt",
                 raise RuntimeError(f"Missing async delay campaign evidence: {fixture}")
             result["async_campaigns"][fixture] = {"cases":count,"result_sha256":{p.parent.name:sha(p) for p in cases}}
         with (evidence / "export.log").open("w", encoding="utf-8") as log:
-            for exported in ["generated", "build/async-gcd/export", "build/routing-mux/export", "build/routing-regfork/export", "build/routing-phase/export", *click_exports]:
+            for exported in ["generated", "generated-click", "build/async-gcd/export", "build/routing-mux/export", "build/routing-regfork/export", "build/routing-phase/export", "build/click-adder/export", *click_exports]:
                 subprocess.run([sys.executable, str(ROOT / "tools/check_export.py"), str(consumer / exported)],
                                env=environment, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
                                check=True, timeout=180)

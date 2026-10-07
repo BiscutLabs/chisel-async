@@ -24,6 +24,8 @@ The [documentation website](https://biscutlabs.github.io/chisel-async/) includes
 integration guides, examples, troubleshooting, and the generated
 [Scala API reference](https://biscutlabs.github.io/chisel-async/api/scala/).
 The same guides remain available in the repository's [documentation index](docs/index.md).
+For native two-phase hardware, the [Click adder walkthrough](docs/click-example.md)
+includes a complete tagged pipeline and ScalaTest test using both Click variants.
 
 Once a release is published, consumption will use a normal Maven Central dependency
 without GitHub credentials or a custom resolver. For the locally published snapshot:

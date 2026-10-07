@@ -6,19 +6,33 @@ import chisel3.util.Cat
 import chiselasync.core.{AsyncModule, ResetDomain}
 import chiselasync.metadata.{ClickTiming, ModelTime}
 import chiselasync.primitives.{ControlGate, EventRegister, GateOperation, PhaseRegister, XorGate}
-import chiselasync.protocol.{Channel, Payload, TwoPhase}
+import chiselasync.protocol.{Payload, TwoPhase}
 
-/** Shared implementation of the published single-phase and phase-decoupled Click
-  * templates (Peeters et al., ASYNC 2010; Sparso, chapter 9, figures 9.4b/9.11b).
-  * Primitive boundaries preserve the comparator/AND pulse circuit. Every payload
-  * capture and phase update is triggered by that local pulse, without adapters.
+/** Common ports and state for [[ClickStage]] and [[PhaseDecoupledClickStage]].
+  * Instantiate those concrete classes, or their identity buffers, in an
+  * [[chiselasync.core.AsyncModule]] using `asyncChild`.
+  *
+  * One local pulse captures the payload and toggles the phase state. Primitive
+  * boundaries preserve the XOR/AND controller in Peeters et al. (ASYNC 2010)
+  * and Sparsø, chapter 9, figures 9.4(b)/9.11(b). There is no global clock.
+  * Reset discards pending work and reinstalls the optional initial output token.
+  *
+  * @param inGen unbound input payload type with explicit widths
+  * @param outGen unbound output payload type with explicit widths
+  * @param transform pure combinational function returning exactly `outGen`'s type and shape
+  * @param timing per-cell bounds and local-pulse timing obligations
+  * @param phaseDecoupled whether input and output have separate phase registers
+  * @param initial optional fully specified output literal, emitted before new input
+  * @param domain shared reset identity supplied by the parent's `asyncChild`
   */
 abstract class NativeClickStage[A <: Data, B <: Data] private[bundled] (
     inGen: A, outGen: B, transform: A => B, val timing: ClickTiming,
     val phaseDecoupled: Boolean, val initial: Option[B], domain: ResetDomain) extends AsyncModule(domain) {
   require(phaseDecoupled || initial.isEmpty, "STANDARD_CLICK_INITIAL_TOKEN_REQUIRES_PHASE_DECOUPLING")
-  val in = IO(Flipped(new Channel(inGen,resetDomain).twoPhase))
-  val out = IO(new Channel(outGen,resetDomain).twoPhase)
+  /** Input token. Hold data from before either request edge until acknowledgement. */
+  val in = twoPhaseInput("in", inGen)
+  /** Output token. Data remains stable while request and acknowledgement differ. */
+  val out = twoPhaseOutput("out", outGen)
   /** Present only when an initial token is installed. Hold low through reset,
     * raise after the entire domain settles, and keep high until the next reset.
     */
@@ -31,7 +45,6 @@ abstract class NativeClickStage[A <: Data, B <: Data] private[bundled] (
     value.litValue & ((BigInt(1) << outGen.getWidth) - 1)
   }.getOrElse(BigInt(0))
   contract.capacity(1)
-  contract.twoPhaseChannel("in",in,"input"); contract.twoPhaseChannel("out",out,"output")
   private val resetRef = contract.endpoint("reset",reset)
   private def buffer(id: String, delay: ModelTime, width: Int = 1, value: BigInt = 0): ControlGate = {
     val c = Module(new ControlGate(width,GateOperation.Buffer,delay,value)); c.reset := reset; c.b := 0.U
@@ -91,54 +104,122 @@ abstract class NativeClickStage[A <: Data, B <: Data] private[bundled] (
   contract.clickTiming("click",timing,phaseDecoupled,initial.nonEmpty)
 }
 
-/** Native standard Click stage: one phase flip-flop drives both handshake phases.
-  * Resets empty. The transform may change payload type, with exact output width.
+/** One-slot native standard Click stage, empty after reset.
+  * One phase flip-flop drives both handshake phases. Use this for an ordinary
+  * two-phase pipeline; use [[PhaseDecoupledClickStage]] to install an initial token.
+  * The stage has `in`, `out` and explicit asynchronous `reset` ports; `start` is `None`.
+  *
+  * {{{
+  * val add = asyncChild("add") { domain =>
+  *   new ClickStage(
+  *     inGen = UInt(8.W), outGen = UInt(9.W),
+  *     transform = (x: UInt) => x +& 1.U(8.W),
+  *     timing = ClickTiming.Simulation, domain = domain)
+  * }
+  * }}}
+  *
+  * @param inGen unbound input payload type with explicit widths
+  * @param outGen unbound output payload type with explicit widths
+  * @param transform pure combinational function; no implicit resizing is allowed
+  * @param timing timing policy; [[chiselasync.metadata.ClickTiming.Simulation]] is a digital example
+  * @param domain shared reset identity from `asyncChild`; the default creates a standalone domain
   */
-class ClickStage[A <: Data,B <: Data](a: A,b: B,transform: A => B,timing: ClickTiming,
+class ClickStage[A <: Data, B <: Data](
+    inGen: A,
+    outGen: B,
+    transform: A => B,
+    timing: ClickTiming,
     domain: ResetDomain = new ResetDomain("root"))
-    extends NativeClickStage(a,b,transform,timing,false,None,domain)
+    extends NativeClickStage(inGen, outGen, transform, timing, false, None, domain)
 
-/** Native phase-decoupled Click stage: independent input/output phase flip-flops.
-  * An optional output-typed literal installs one token per reset epoch. Seeded
-  * stages expose start.get; release it only after coordinated reset has settled.
+/** One-slot native Click stage with separate input and output phase flip-flops.
+  * Separate phase state permits one initial output token while the input resets
+  * empty. The initial literal bypasses `transform`; later inputs use it normally.
+  * With `initial = Some(...)`, connect `start.get` to a signal held low through
+  * coordinated reset and settling, then high until the next reset. With `None`,
+  * the stage resets empty and has no start port.
+  *
+  * @param inGen unbound input payload type with explicit widths
+  * @param outGen unbound output payload type with explicit widths
+  * @param transform pure combinational function returning exactly the output type
+  * @param timing per-cell bounds and setup/hold, pulse-width and distribution obligations
+  * @param initial fully specified literal of `outGen`'s type; reinstated each reset epoch
+  * @param domain shared reset identity from `asyncChild`; the default creates a standalone domain
   */
-class PhaseDecoupledClickStage[A <: Data,B <: Data](a: A,b: B,transform: A => B,timing: ClickTiming,
-    initial: Option[B] = None,domain: ResetDomain = new ResetDomain("root"))
-    extends NativeClickStage(a,b,transform,timing,true,initial,domain)
-
-/** One-slot identity-transform standard Click register. */
-class ClickBuffer[T <: Data](gen: T,timing: ClickTiming,domain: ResetDomain = new ResetDomain("root"))
-    extends ClickStage(gen,gen,(x:T)=>x,timing,domain)
-
-/** One-slot identity-transform phase-decoupled Click register, optionally seeded. */
-class PhaseDecoupledClickBuffer[T <: Data](gen: T,timing: ClickTiming,initial: Option[T] = None,
+class PhaseDecoupledClickStage[A <: Data, B <: Data](
+    inGen: A,
+    outGen: B,
+    transform: A => B,
+    timing: ClickTiming,
+    initial: Option[B] = None,
     domain: ResetDomain = new ResetDomain("root"))
-    extends PhaseDecoupledClickStage(gen,gen,(x:T)=>x,timing,initial,domain)
+    extends NativeClickStage(inGen, outGen, transform, timing, true, initial, domain)
 
-/** Positive-depth FIFO composed entirely of native standard Click registers. */
-class ClickFifo[T <: Data](gen: T,val depth: Int,timing: ClickTiming,
+/** One-slot standard Click buffer with an identity transform, empty after reset.
+  * @param gen unbound input/output payload type with explicit widths
+  * @param timing per-cell bounds and local-pulse timing obligations
+  * @param domain shared reset identity from `asyncChild`
+  */
+class ClickBuffer[T <: Data](
+    gen: T, timing: ClickTiming, domain: ResetDomain = new ResetDomain("root"))
+    extends ClickStage(gen, gen, (x: T) => x, timing, domain)
+
+/** One-slot phase-decoupled Click buffer with an identity transform.
+  * An initial token requires wiring `start.get`; see [[PhaseDecoupledClickStage]].
+  * @param gen unbound input/output payload type with explicit widths
+  * @param timing per-cell bounds and local-pulse timing obligations
+  * @param initial fully specified payload literal, or `None` for an empty buffer
+  * @param domain shared reset identity from `asyncChild`
+  */
+class PhaseDecoupledClickBuffer[T <: Data](
+    gen: T, timing: ClickTiming, initial: Option[T] = None,
+    domain: ResetDomain = new ResetDomain("root"))
+    extends PhaseDecoupledClickStage(gen, gen, (x: T) => x, timing, initial, domain)
+
+/** Ordered FIFO of native standard Click buffers, empty after reset.
+  * Each stage stores one token; backpressure propagates when all slots are full.
+  * @param gen unbound input/output payload type with explicit widths
+  * @param depth positive number of storage slots; zero-depth bypass is not supported
+  * @param timing shared policy, with independent simulated delays in each stage
+  * @param domain shared reset identity from `asyncChild`
+  */
+class ClickFifo[T <: Data](
+    gen: T, val depth: Int, timing: ClickTiming,
     domain: ResetDomain = new ResetDomain("root")) extends AsyncModule(domain) {
-  require(depth>0,"CLICK_FIFO_DEPTH")
-  val in=IO(Flipped(new Channel(gen,resetDomain).twoPhase)); val out=IO(new Channel(gen,resetDomain).twoPhase)
-  contract.twoPhaseChannel("in",in,"input"); contract.twoPhaseChannel("out",out,"output"); contract.endpoint("reset",reset)
+  require(depth > 0, "CLICK_FIFO_DEPTH")
+  /** Incoming tokens, acknowledged only when storage is available. */
+  val in = twoPhaseInput("in", gen)
+  /** Outgoing tokens in input order; acknowledgement releases storage. */
+  val out = twoPhaseOutput("out", gen)
+  contract.endpoint("reset", reset)
   contract.capacity(depth)
-  private val stages=Seq.tabulate(depth)(i=>asyncChild(s"stage$i")(d=>new ClickBuffer(gen,timing,d)))
-  TwoPhase.connect(stages.head.in,in)
-  stages.sliding(2).filter(_.size==2).foreach(s=>TwoPhase.connect(s(1).in,s(0).out))
-  TwoPhase.connect(out,stages.last.out)
+  private val stages = Seq.tabulate(depth)(i => asyncChild(s"stage$i")(d => new ClickBuffer(gen, timing, d)))
+  TwoPhase.connect(stages.head.in, in)
+  stages.sliding(2).filter(_.size == 2).foreach(s => TwoPhase.connect(s(1).in, s(0).out))
+  TwoPhase.connect(out, stages.last.out)
 }
 
-/** Positive-depth empty FIFO composed entirely of phase-decoupled Click registers.
-  * Use explicitly seeded stages when constructing initialized feedback networks.
+/** Ordered FIFO of native phase-decoupled Click buffers, empty after reset.
+  * Use explicitly initialized [[PhaseDecoupledClickBuffer]] instances to build
+  * feedback networks. This FIFO has no initial tokens and no start port.
+  * @param gen unbound input/output payload type with explicit widths
+  * @param depth positive number of storage slots; zero-depth bypass is not supported
+  * @param timing shared policy, with independent simulated delays in each stage
+  * @param domain shared reset identity from `asyncChild`
   */
-class PhaseDecoupledClickFifo[T <: Data](gen: T,val depth: Int,timing: ClickTiming,
+class PhaseDecoupledClickFifo[T <: Data](
+    gen: T, val depth: Int, timing: ClickTiming,
     domain: ResetDomain = new ResetDomain("root")) extends AsyncModule(domain) {
-  require(depth>0,"CLICK_FIFO_DEPTH")
-  val in=IO(Flipped(new Channel(gen,resetDomain).twoPhase)); val out=IO(new Channel(gen,resetDomain).twoPhase)
-  contract.twoPhaseChannel("in",in,"input"); contract.twoPhaseChannel("out",out,"output"); contract.endpoint("reset",reset)
+  require(depth > 0, "CLICK_FIFO_DEPTH")
+  /** Incoming tokens, acknowledged only when storage is available. */
+  val in = twoPhaseInput("in", gen)
+  /** Outgoing tokens in input order; acknowledgement releases storage. */
+  val out = twoPhaseOutput("out", gen)
+  contract.endpoint("reset", reset)
   contract.capacity(depth)
-  private val stages=Seq.tabulate(depth)(i=>asyncChild(s"stage$i")(d=>new PhaseDecoupledClickBuffer(gen,timing,domain=d)))
-  TwoPhase.connect(stages.head.in,in)
-  stages.sliding(2).filter(_.size==2).foreach(s=>TwoPhase.connect(s(1).in,s(0).out))
-  TwoPhase.connect(out,stages.last.out)
+  private val stages = Seq.tabulate(depth)(i => asyncChild(s"stage$i")(d =>
+    new PhaseDecoupledClickBuffer(gen, timing, domain = d)))
+  TwoPhase.connect(stages.head.in, in)
+  stages.sliding(2).filter(_.size == 2).foreach(s => TwoPhase.connect(s(1).in, s(0).out))
+  TwoPhase.connect(out, stages.last.out)
 }

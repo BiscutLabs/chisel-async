@@ -3,7 +3,7 @@ package chiselasync.core
 
 import chisel3._
 import chiselasync.metadata.DesignContract
-import chiselasync.protocol.{Channel, FourPhase}
+import chiselasync.protocol.{Channel, FourPhase, TwoPhase}
 
 /** A clockless module with an explicit, active-high asynchronous reset. */
 abstract class AsyncModule(val resetDomain: ResetDomain = new ResetDomain("root")) extends RawModule {
@@ -33,6 +33,35 @@ abstract class AsyncModule(val resetDomain: ResetDomain = new ResetDomain("root"
   protected final def fourPhaseOutput[T <: Data](id: String, gen: T): FourPhase[T] = {
     val port = IO(new Channel(gen, resetDomain).bundled)
     contract.channel(id, port, "output")
+    port
+  }
+
+  /** Typed two-phase input IO and its export contract in one declaration.
+    * Either request edge offers a token; acknowledgement matches its parity.
+    * The producer holds the payload until acknowledgement. This helper adds no
+    * storage and inherits this module's coordinated reset domain.
+    *
+    * @param id unique channel identifier within this module's contract
+    * @param gen unbound payload type with explicit widths, such as `UInt(8.W)`
+    * @return input request/data and output acknowledgement, named by the Scala val
+    */
+  protected final def twoPhaseInput[T <: Data](id: String, gen: T): TwoPhase[T] = {
+    val port = IO(Flipped(new Channel(gen, resetDomain).twoPhase))
+    contract.twoPhaseChannel(id, port, "input")
+    port
+  }
+
+  /** Typed two-phase output IO and its export contract in one declaration.
+    * Request/data are outputs; acknowledgement is an input. This helper adds no
+    * storage or capacity. Connect matching channels with [[chiselasync.protocol.TwoPhase.connect]].
+    *
+    * @param id unique channel identifier within this module's contract
+    * @param gen unbound payload type with explicit widths, such as `UInt(8.W)`
+    * @return output request/data and input acknowledgement, named by the Scala val
+    */
+  protected final def twoPhaseOutput[T <: Data](id: String, gen: T): TwoPhase[T] = {
+    val port = IO(new Channel(gen, resetDomain).twoPhase)
+    contract.twoPhaseChannel(id, port, "output")
     port
   }
 

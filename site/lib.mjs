@@ -20,6 +20,7 @@ export const navigation = [
       ["component-terminology", "Terminology & comparison"],
       ["bundled-data", "Bundled data"],
       ["click", "Native Click pipelines"],
+      ["click-example", "Click adder example"],
       ["dual-rail", "Dual-rail logic"],
       ["clocked-integration", "Clocked integration"],
     ],

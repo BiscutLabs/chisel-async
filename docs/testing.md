@@ -10,6 +10,9 @@ actual local-trigger setup/hold, pulse widths and clock skew. The consumer suite
 runs 300 configurations of each three-stage Click FIFO, and directed tests for
 stalls, reset, initial-token release and deliberately broken timing. The repository
 ring campaign adds 300 configurations of a two-slot, one-token feedback network.
+The [tagged adder walkthrough](click-example.md#check-results-and-backpressure)
+shows a complete test of a consumer design using typed Bundle literals and an
+independent arithmetic oracle. Run it with `sbt "testOnly ClickAdderSpec"`.
 
 ## Test an asynchronous design from the JAR
 
@@ -57,9 +60,10 @@ Each seed also selects independent cell delays. Seeds 1/2 exercise the minimum
 and maximum corners; other seeds use `java.util.Random`. Long-hold cell and data
 delays stay inside their exported bounds; request/output guards remain fixed.
 Routing cells use the declared test envelope (default 1–10 ns). Phase adapters
-vary cells and history closure within their respective bounds; QDI cells use
-`QdiTiming`. Request/return guards remain fixed. Bundled/dual-rail encoding
-converters retain nominal delays; the separate encoding campaigns exercise their
+vary cells and history closure within their respective bounds while request/return
+guards remain fixed. QDI cells use `QdiTiming`. Click uses `ClickTiming` for each comparator, register, firing gate
+and data path; its request, acknowledgement and output guards remain fixed.
+Bundled/dual-rail encoding converters retain nominal delays; the separate encoding campaigns exercise their
 additional guards. Clocked top-level IO requires a ChiselSim harness.
 
 Pass `directory` to choose where exported RTL, contract, per-seed `delays.json`,

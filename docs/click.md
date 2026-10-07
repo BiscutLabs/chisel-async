@@ -16,6 +16,10 @@ accepts a pure combinational transform whose result exactly matches the declared
 output type. `ClickBuffer` is the identity transform. The existing `TwoPhase*`
 classes retain their four-phase cores and adapters; choosing Click is explicit.
 
+For a complete design and ScalaTest test, start with the
+[tagged Click adder](click-example.md). It combines both variants using only the
+public JAR API. The sections below explain the controller and its timing policy.
+
 ## How a stage fires
 
 The input XOR reports a pending token. The output XOR reports an unacknowledged
@@ -37,21 +41,35 @@ and [Sparsø, chapter 9](https://arc.cecs.pdx.edu/wp-content/uploads/2023/04/JSP
 
 ## Build and connect
 
-Use `ClickTiming.Simulation` for a digital experiment:
+Inside an `AsyncModule`, declare ports with `twoPhaseInput` and `twoPhaseOutput`.
+They share the module's reset domain and register the channel contracts. With
+`chisel3._`, `chiselasync.bundled.ClickStage`, `chiselasync.metadata.ClickTiming`
+and `chiselasync.protocol.TwoPhase` imported:
 
 ```scala
+val in = twoPhaseInput("in", UInt(8.W))
+val out = twoPhaseOutput("out", UInt(9.W))
 val stage = asyncChild("increment") { domain =>
-  new ClickStage(UInt(8.W), UInt(9.W),
-    (x: UInt) => x +& 1.U(8.W), ClickTiming.Simulation, domain)
+  new ClickStage(
+    inGen = UInt(8.W), outGen = UInt(9.W),
+    transform = (x: UInt) => x +& 1.U(8.W),
+    timing = ClickTiming.Simulation, domain = domain)
 }
 TwoPhase.connect(stage.in, in)
 TwoPhase.connect(out, stage.out)
+contract.capacity(1)
 ```
 
 `asyncChild` supplies the parent's reset domain, connects reset and registers the
 child contract. The surrounding ports must have matching payload types and share
 that domain. Ordinary Chisel combinational logic implements the transform;
 explicit primitive cells implement the controller.
+
+Choose `ClickBuffer` when no transform is needed and `ClickFifo` for several
+empty storage slots. Their phase-decoupled counterparts use the same port and
+connection patterns. Both stage constructors name the payload arguments `inGen`
+and `outGen`; update the earlier snapshot's named `a`/`b` arguments accordingly.
+Positional calls retain their original argument order.
 
 ## Initialize a feedback ring
 
@@ -110,8 +128,9 @@ The constructor requires:
 
 The independent minima cover the standard variant's shared phase register,
 which feeds both comparators. Both variants use this conservative policy even
-though standard Click instantiates only one phase register. The simulation preset uses independent 1–10 ns
-cell delays, an 11 ns request guard and 32 ns acknowledgement/output guards.
+though standard Click instantiates only one phase register. The simulation preset
+uses independent 1–10 ns cell delays, an 11 ns request guard and 32 ns
+acknowledgement/output guards.
 Those broad bounds support delay experiments; they are not a performance claim.
 
 ## Test and export

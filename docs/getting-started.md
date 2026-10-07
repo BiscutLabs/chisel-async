@@ -2,7 +2,8 @@
 
 Build a two-stage adder pipeline with chisel-async, then test it with ScalaTest
 and the included `AsyncTest` helper. The standalone sbt project also includes a
-GCD feedback loop and a ChiselSim test for a clocked bridge.
+GCD feedback loop, a [native Click adder](click-example.md) and a ChiselSim test
+for a clocked bridge.
 
 To get started, publish the JAR locally, copy the standalone example and run
 `sbt "testOnly AsyncDesignSpec"` with Icarus on PATH. These tests run without the

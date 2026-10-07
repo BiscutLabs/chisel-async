@@ -14,6 +14,7 @@ components, connect different protocols and check your design's timing assumptio
 | [Terminology and chisel-click comparison](component-terminology.md) | Established names, matching operations, and differences in storage and implementation |
 | [Bundled-data composition](bundled-data.md) | Timing policy, type-changing stages, FIFO, fork/join, routing and arbitration |
 | [Native Click pipelines](click.md) | Standard and phase-decoupled stages, local pulses, initialized rings and timing tests |
+| [Click adder example](click-example.md) | A complete tagged pipeline and ScalaTest test using the public JAR API |
 | [Dual-rail logic](dual-rail.md) | Rails, completion, indication, bounded DIMS functions, and conversion |
 | [Clocked integration](clocked-integration.md) | Decoupled bridges, memory backends, pending events, and reset release |
 | [Examples](examples.md) | Runnable designs and the properties their tests exercise |
