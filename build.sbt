@@ -32,6 +32,11 @@ lazy val root = (project in file("."))
     name := "chisel-async",
     description := "Typed asynchronous hardware components and digital simulation models for Chisel",
     publishMavenStyle := true,
+    Compile / doc / scalacOptions ++= Seq(
+      "-doc-title", "chisel-async Scala API",
+      "-doc-version", version.value,
+      "-doc-footer", "<a href=\"https://biscutlabs.github.io/chisel-async/\">chisel-async documentation</a>"
+    ),
     Compile / packageBin / mappings += baseDirectory.value / "LICENSE" -> "META-INF/LICENSE",
     Compile / packageSrc / mappings += baseDirectory.value / "LICENSE" -> "META-INF/LICENSE"
   )

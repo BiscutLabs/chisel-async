@@ -37,5 +37,6 @@ and historical acceptance results for auditing.
 
 For exact constructor signatures, browse the linked Scala sources or generate
 Scaladoc with `sbt doc` (`target/scala-2.13/api/index.html`). The sources and API-doc
-JARs accompany the binary artifact. The website will consume these guides in a
-separate step; no second documentation source is needed.
+JARs accompany the binary artifact. Browse the hosted
+[Scala API](https://biscutlabs.github.io/chisel-async/api/scala/) alongside these
+guides. [Website development](website.md) explains how to build and preview both.

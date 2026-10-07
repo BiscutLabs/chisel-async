@@ -88,5 +88,6 @@ also validates local links and heading anchors. Compile/run the example after
 code changes. Preserve old plans and acceptance records under `docs/archive/` for
 audit; do not update a retired roadmap as the active source of truth.
 
-The future website should render these versioned guides and link the matching API
-docs. Avoid a second manually maintained copy of installation instructions.
+The [website](website.md) renders these versioned guides and includes matching
+generated Scala API docs. Run its build and link checks after changing site
+templates or navigation. Avoid a second manually maintained copy of instructions.

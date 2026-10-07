@@ -4,6 +4,14 @@ The [README matrix](../README.md#compatibility-matrix) is the supported developm
 tuple. Pin that tuple for reproducible experiments. There is no published stable
 release yet; `0.1.0-SNAPSHOT` can change and is intended for local development.
 
+## Tested toolchain
+
+See the [README compatibility matrix](../README.md#compatibility-matrix) for the
+full tuple and host status. The website includes that same table below during
+its build; the README remains its single source.
+
+<!-- compatibility-matrix -->
+
 ## Different kinds of compatibility
 
 | Layer | What compatibility means |

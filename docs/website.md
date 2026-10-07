@@ -1,0 +1,74 @@
+# Website development
+
+The [documentation website](https://biscutlabs.github.io/chisel-async/) is hosted
+on GitHub Pages. Its user guides come directly from `docs/*.md`. The generated
+[Scala API](https://biscutlabs.github.io/chisel-async/api/scala/) lives in the
+`api/scala/` subfolder of the same site. Both are built from the same Git checkout.
+The site tracks `main`; it is development documentation, not a released-version
+archive. The footer links the exact source commit.
+
+## Build and preview
+
+Use the library's JDK/sbt toolchain and Node.js 22.23.3 (the version pinned in CI).
+From the repository root, with `JAVA_HOME` set to your JDK:
+
+```text
+python tools/check_docs.py
+python tools/sbt.py --bootstrap doc
+npm --prefix site ci
+npm --prefix site run build
+npm --prefix site run check
+npm --prefix site run preview
+```
+
+Open `http://127.0.0.1:4173/chisel-async/`. The preview serves the real project
+prefix, including `api/scala/`, so links are exercised as they will be on GitHub
+Pages. Stop the server with Ctrl+C. Rebuild and reload after editing a page.
+
+No simulator, Python verification environment, or Maven publication is needed to
+build the website. The Node dependencies are confined to `site/`; library consumers
+do not need them. Generated files under `site/dist/` remain ignored.
+
+## Edit the site
+
+- Edit guide content in `docs/`. Keep local Markdown links usable on GitHub.
+- Add guides to the navigation in [site/lib.mjs](../site/lib.mjs).
+- Change page layout in [site/build.mjs](../site/build.mjs) and styles in
+  [site/styles.css](../site/styles.css).
+- Search, theme switching, code copying and the illustrative handshake live in
+  [site/client.mjs](../site/client.mjs). Search runs locally in the browser.
+- Change API documentation in Scala source comments and regenerate with `sbt doc`.
+
+The builder rewrites guide links to website routes and source/archive links to
+the matching GitHub revision. The homepage code comes from the executable
+quickstart. The website compatibility table is read from the README. Do not copy
+those sources into the templates. The design uses its own styles and branding,
+with typography and layout inspired by Tailwind's documentation site.
+
+Fonts, code highlighting, search data, and Mermaid are served with the site;
+there are no runtime CDN dependencies or analytics. Inter's license accompanies
+its font. KaTeX is pinned through an npm override to 0.18.2 to avoid the advisory
+affecting Mermaid's older transitive dependency; recheck this override when
+upgrading Mermaid.
+
+## Checks and deployment
+
+`npm run check` tests link rewriting and failure controls, then checks every
+generated guide's links, fragment anchors, resources, project prefix and search
+inventory. It also requires the real Scala API entrypoint, its resources and
+`AsyncModule` reference page. A build without generated Scaladoc fails.
+
+Before publishing layout changes, check desktop and mobile widths, both color
+themes, keyboard navigation, search, code copying, and a Scala API deep link.
+These checks concern website behavior; they do not qualify hardware behavior.
+
+[The Pages workflow](../.github/workflows/pages.yml) builds and checks pull
+requests without deploying them. Pushes to `main` deploy the checked artifact
+using the `github-pages` environment. GitHub Settings → Pages must use **GitHub
+Actions** as its source. There is no generated `gh-pages` branch and no release
+tag is needed. Maven Central publication remains a separate tagged workflow.
+
+The default `SITE_BASE` is `/chisel-async/`. For another project prefix, set that
+environment variable to a path with leading and trailing slashes before building.
+Preview and validation read the resulting manifest. Hosting on another domain
+also requires updating the canonical origin in the builder.

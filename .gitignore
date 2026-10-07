@@ -11,3 +11,5 @@ build/
 __pycache__/
 .pytest_cache/
 *.pyc
+site/node_modules/
+site/dist/

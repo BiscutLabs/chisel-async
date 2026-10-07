@@ -21,9 +21,10 @@ physical cells or establish physical timing, QDI, or metastability closure.
 3. Choose from the [component catalog](docs/components.md).
 4. [Test your design](docs/testing.md) and [export timing contracts](docs/timing-and-export.md).
 
-The [documentation index](docs/index.md) includes integration guides, examples,
-troubleshooting, and contributor instructions. The docs are maintained in this
-repository; the website is a separate next step.
+The [documentation website](https://biscutlabs.github.io/chisel-async/) includes
+integration guides, examples, troubleshooting, and the generated
+[Scala API reference](https://biscutlabs.github.io/chisel-async/api/scala/).
+The same guides remain available in the repository's [documentation index](docs/index.md).
 
 Once a release is published, consumption will use a normal Maven Central dependency
 without GitHub credentials or a custom resolver. For the locally published snapshot:

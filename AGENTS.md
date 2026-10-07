@@ -9,4 +9,5 @@
 - Tests must check meaningful activity and specific failure reasons. Never turn required missing tools, empty suites or failed negative controls into a pass.
 - Use portable Python/JVM tooling and native Windows/Linux/macOS targets. Do not add Yosys, a PDK, Linux-only runtime assumptions or a Chiselator dependency.
 - Keep downloaded tools, generated files, virtual environments and simulation evidence out of Git. Pin tool versions and hashes where the bootstrap supports them.
+- The GitHub Pages site in `site/` renders `docs/` and generated Scaladoc. Keep one source for guide content. For website changes, run `npm --prefix site run build` and `npm --prefix site run check` after `sbt doc`; verify responsive layouts and interactive controls in a browser. Read `docs/website.md` for deployment details.
 - Update the README compatibility matrix and `docs/compatibility.md` when support changes. Keep quickstart snippets synchronized with their executable sources using `python tools/check_docs.py`. Preserve archived evidence and original project provenance; do not copy or rename ASYNC-Chisel implementation code.
