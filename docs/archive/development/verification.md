@@ -47,7 +47,7 @@ Before a release, freeze the implementation, oracle/checker revisions, case inve
 
 ## Comparison with inspected upstream tests
 
-These are source inspections, not claims that their suites were executed or that the projects share our scope. No upstream implementation or test code was copied.
+These are source inspections, not claims that their suites were executed or that the projects share our scope.
 
 | Pinned source | Observation and lesson |
 | --- | --- |

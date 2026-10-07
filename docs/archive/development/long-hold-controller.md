@@ -6,7 +6,7 @@
 
 ## Inspected source and preserved topology
 
-Source: S. B. Furber and P. Day, *Four-Phase Micropipeline Latch Control Circuits*, IEEE Transactions on VLSI Systems 4(2), 1996, DOI [10.1109/92.502196](https://doi.org/10.1109/92.502196). The [eight-page author-paper copy](https://courses.e-ce.uth.gr/CE664/papers/Template-Based/async-latch-control-circuits.pdf) was inspected, including Fig. 10's asymmetric-cell notation and section 7, Figs. 14–15 (PDF pages 4–5). SHA-256: `67ec63bc0cc169cc5c9cfd98a5c68239009ce7ffd5edb5bfa7bb5422c8112934`. Scala, SV and verification code were independently written; no external implementation source was copied.
+Source: S. B. Furber and P. Day, *Four-Phase Micropipeline Latch Control Circuits*, IEEE Transactions on VLSI Systems 4(2), 1996, DOI [10.1109/92.502196](https://doi.org/10.1109/92.502196). The [eight-page author-paper copy](https://courses.e-ce.uth.gr/CE664/papers/Template-Based/async-latch-control-circuits.pdf) was inspected, including Fig. 10's asymmetric-cell notation and section 7, Figs. 14–15 (PDF pages 4–5). SHA-256: `67ec63bc0cc169cc5c9cfd98a5c68239009ce7ffd5edb5bfa7bb5422c8112934`.
 
 Our transcription of Fig. 15 is:
 

@@ -33,8 +33,8 @@ require reading the project's development history.
 
 [Contributing](contributing.md) covers setup and focused verification.
 [Releasing](releasing.md) defines JAR packaging and GitHub Actions/Maven Central
-distribution. [Provenance](provenance.md) records the scientific sources and original
-implementation. [The archive](archive/README.md) preserves plans, reviews, counterexamples,
+distribution. [Scientific references](provenance.md) explain the circuit topologies
+and model assumptions. [The archive](archive/README.md) preserves plans, reviews, counterexamples,
 and historical acceptance results for auditing.
 
 For exact constructor signatures, browse the linked Scala sources or generate

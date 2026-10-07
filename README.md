@@ -1,8 +1,7 @@
 # chisel-async
 
 Typed asynchronous hardware components for Chisel: pipelines, routing, arbitration,
-dual-rail logic, and explicit bridges to clocked designs. Apache-2.0 licensed and
-independently implemented.
+dual-rail logic, and explicit bridges to clocked designs. Apache-2.0 licensed.
 
 Use ordinary Chisel payloads, `IO`, `Flipped`, and `Module`. Asynchronous components
 extend `RawModule` with explicit reset; clocked boundaries expose their clocks.
@@ -101,4 +100,4 @@ Public releases will use **GitHub Actions → Maven Central**. GitHub Releases w
 carry release notes and qualification bundles; GitHub Packages is optional for
 authenticated previews. See [release and packaging policy](docs/releasing.md).
 
-[License](LICENSE) · [Scientific and implementation provenance](docs/provenance.md)
+[License](LICENSE) · [Scientific references](docs/provenance.md)

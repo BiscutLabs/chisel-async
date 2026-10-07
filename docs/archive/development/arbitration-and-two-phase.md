@@ -26,7 +26,7 @@ Constructor examples, including different payload types, initialization, 65-bit 
 
 ## Arbiter provenance and service policy
 
-The two-client control topology follows Sparsø and Furber, *Asynchronous Circuit Design: A Tutorial*, §5.8.1–5.8.2, Figure 5.21 ([university-hosted draft](https://www.inf.pucrs.br/~calazans/graduate/SSD/Bibliography/Sparso-Furber-Short.pdf)). A MUTEX grant is gated by the other lane's acknowledgement being low before entering the exclusive merge. Mutual exclusion of grants alone does not serialize complete four-phase handshakes; the return interlocks are essential. The implementation is independently written and adds this library's buffered merge.
+The two-client control topology follows Sparsø and Furber, *Asynchronous Circuit Design: A Tutorial*, §5.8.1–5.8.2, Figure 5.21 ([university-hosted draft](https://www.inf.pucrs.br/~calazans/graduate/SSD/Bibliography/Sparso-Furber-Short.pdf)). A MUTEX grant is gated by the other lane's acknowledgement being low before entering the exclusive merge. Mutual exclusion of grants alone does not serialize complete four-phase handshakes; the return interlocks are essential. The implementation adds this library's buffered merge.
 
 `MutexPolicy.PreferFirst`, `PreferSecond`, `Alternate`, and `SeededRandom` specify **finite digital collision choices**. A granted requester retains service until it withdraws its request. Handover passes through zero grants. Fixed preference can starve a contender; alternating tie choice is only a model policy, not a general physical fairness theorem. The external ledger permits either legal collision winner while checking each input's order and conservation. Separate primitive tests check each declared policy, retained winners, handover and reset.
 

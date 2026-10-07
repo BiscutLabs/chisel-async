@@ -40,7 +40,7 @@ export const navigation = [
     [
       ["contributing", "Contributing"],
       ["releasing", "Releasing"],
-      ["provenance", "Scientific provenance"],
+      ["provenance", "Scientific references"],
       ["website", "Website development"],
     ],
   ],
