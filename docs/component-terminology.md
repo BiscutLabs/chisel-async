@@ -1,11 +1,11 @@
 # Component terminology and chisel-click comparison
 
-Names describe a token operation; the implementation and storage contract still
-matter. We use the terminology in Sparsø and Furber's
+Chisel-async uses the component names in Sparsø and Furber's
 [asynchronous circuit tutorial, figure 3.3](https://www.inf.pucrs.br/~calazans/graduate/SSD/Bibliography/Sparso-Furber-Short.pdf):
 fork, join, exclusive merge, controlled multiplexer (MUX), demultiplexer (DEMUX),
-storage, and function block. These are established design terms, not an IEEE
-standard requiring identical class names or circuit implementations.
+storage, and function block. These names describe what a component does with
+tokens. Components with the same name can differ in storage, protocol and timing,
+so the tables below explain those differences.
 
 | Term | Token-level meaning | Our implementation |
 | --- | --- | --- |
@@ -29,10 +29,11 @@ implicit arbitration in any mux or demux.
 
 ## How this compares with chisel-click
 
-This comparison inspects
+The table below compares chisel-async with
 [chisel-click revision ae87f671](https://github.com/KasperHesse/chisel-click/tree/ae87f671bce101a22ea3ec40ad0e9e18a8cc3a28).
-It compares contracts, not a count of public classes. Our public surface also
-includes dual rail, clocked boundaries, timing metadata, and testing/export tools.
+It covers the shared operations and explains where their behavior differs.
+Chisel-async also includes dual-rail components, clocked bridges, timing metadata
+and tools for testing and export.
 
 | chisel-click API / concept | chisel-async counterpart | Equivalence and remaining differences |
 | --- | --- | --- |
@@ -48,11 +49,10 @@ includes dual rail, clocked boundaries, timing metadata, and testing/export tool
 | `FunctionBlock`, `LogicModule` | Typed stage transform / ordinary Chisel datapath | No direct unbuffered matched-delay function-block API; a stage adds storage |
 | `HandshakeRegister`, `ClickElement` | Long-hold stage plus phase adapters | **No native Click controller.** Externally two-phase, internally four-phase with guarded conversion |
 
-The native Click stage remains a separate architecture choice. Interface
-compatibility does not establish Click's transition count, latency, initialization,
-or event-clock register behavior. A future native implementation needs its own
-controller timing contract and independent race campaign; renaming an adapter
-would not supply one.
+Chisel-async's two-phase components use four-phase cores with phase adapters.
+Their internal transitions, latency, initialization and register behavior therefore
+differ from chisel-click's native Click circuits. A native Click implementation
+would need its own controller timing contract and delay tests.
 
 For current constructors use the [catalog](components.md); for a controlled loop,
 run the [GCD example](examples.md#gcd-with-controlled-feedback).

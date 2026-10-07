@@ -1,8 +1,8 @@
 # Integrating clocked logic, memory, and events
 
-The library uses normal Chisel `DecoupledIO`, clocks and storage at clocked
-boundaries. Each bridge exposes `clock` and `reset`; no clock is inferred for the
-surrounding asynchronous network.
+Connect chisel-async to clocked logic through Chisel's standard `DecoupledIO`
+interfaces. Each bridge exposes `clock` and `reset`, so you choose its clock
+explicitly. The surrounding asynchronous network remains clockless.
 
 ## Decoupled bridges
 

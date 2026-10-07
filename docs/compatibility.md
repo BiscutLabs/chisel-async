@@ -1,13 +1,14 @@
 # Compatibility and versioning
 
-The [README matrix](../README.md#compatibility-matrix) is the supported development
-tuple. Pin that tuple for reproducible experiments. There is no published stable
-release yet; `0.1.0-SNAPSHOT` can change and is intended for local development.
+Use the versions in the [compatibility matrix](../README.md#compatibility-matrix)
+to build and test chisel-async with the supported toolchain. Pin those versions
+to make your results reproducible. The current `0.1.0-SNAPSHOT` is intended for
+local development and may change; a stable release has not been published yet.
 
 ## Tested toolchain
 
 See the [README compatibility matrix](../README.md#compatibility-matrix) for the
-full tuple and host status. The website includes that same table below during
+tested versions and host status. The website includes that same table below during
 its build; the README remains its single source.
 
 <!-- compatibility-matrix -->
@@ -27,13 +28,13 @@ describes its compatibility guarantees. Those guarantees do not automatically
 qualify this library's emitted artifacts on a different compiler. `ExportDesign`
 warns on runtime/compiler drift and records the actual versions. Set
 `qualifiedOnly = true` to reject drift at emission; strict `check_export.py`
-validation still requires the exact tested tuple. A warning is not qualification.
+validation still requires the exact tested versions.
 
-The library ships one JVM JAR per supported Scala binary line, not Windows/Linux
-variants. It packages SV text and schemas, not native simulator or compiler
-binaries. Operating-system qualification concerns installation, compiler execution,
-resource extraction, paths and simulation. There is no macOS claim until that
-route actually runs and is reviewed.
+Chisel-async uses the same JVM JAR on Windows and Linux for each supported Scala
+binary version. The JAR contains SystemVerilog sources and schemas; you install
+native simulators and compilers separately. Host tests cover installation,
+compiler execution, resource extraction, paths and simulation. macOS testing
+is deferred.
 
 ## Versioning
 
@@ -73,7 +74,7 @@ The existing [native workflow](../.github/workflows/ci.yml) still runs complete
 Windows/Linux campaigns, each with local publication and a clean consumer. The
 new [tagged release workflow](../.github/workflows/release.yml) builds once and calls
 that native workflow with the candidate artifact for an additional hash-bound
-consumer check. It must run successfully before claiming public release support.
+consumer check. Both hosts must pass before the release can be published.
 
 ## Evidence
 

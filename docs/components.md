@@ -1,9 +1,11 @@
 # Component catalog
 
-Choose the interface encoding first, then the operation. All asynchronous blocks
-require coordinated reset. Structural bundled blocks need a timing policy;
-dual-rail blocks need positive model delays. The tables distinguish storage from
-handshake coordination. Follow the linked sources for complete constructors.
+Chisel-async provides storage, routing, arithmetic and protocol converters for
+several channel encodings. Choose your encoding below, then find the operation
+you need. Each table shows which components store tokens and which only coordinate
+handshakes. All asynchronous blocks require coordinated reset; structural
+bundled-data blocks also need a timing policy, and dual-rail blocks need positive
+model delays. Follow the linked sources for complete constructors.
 The [terminology and chisel-click comparison](component-terminology.md) explains
 which operations correspond and where their storage or timing contracts differ.
 
@@ -114,8 +116,8 @@ blocks with explicit atomic-cell assumptions, not a technology cell library.
 
 N-input symmetric C behavior uses `AsymmetricCElement` with only common inputs.
 It is a direct N-input primitive, not an implicitly equivalent tree of two-input
-cells. `CompositionCells` and package-private phase helpers are implementation
-plumbing; use the public components above rather than bypassing their contracts.
+cells. `CompositionCells` and package-private phase helpers are internal utilities;
+use the public components above to build designs with the documented contracts.
 Timing and QDI marker cells carry constraints for export tooling, not token data.
 
 `experimental.UnsafeFourPhaseStage` and `UnsafeFourPhaseBuffer` preserve a known

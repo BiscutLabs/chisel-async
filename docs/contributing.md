@@ -1,9 +1,9 @@
 # Contributing and repository qualification
 
-Normal consumers need the JAR, matching Chisel build, and the tools required by
-their task. Contributors need the additional independent verification harness.
-Read [AGENTS.md](../AGENTS.md), [protocol contracts](contracts.md) and the relevant
-component guide before changing behavior.
+To contribute to chisel-async, set up the tools below and run the repository's
+verification suite. If you want to use chisel-async in your own project, start with
+the [quickstart](getting-started.md). Before changing component behavior, read
+[AGENTS.md](../AGENTS.md), [protocol contracts](contracts.md) and the relevant guide.
 
 ## Prerequisites
 
@@ -77,10 +77,15 @@ run does not rewrite the scope of a previously accepted candidate.
 
 ## Documentation maintenance
 
-The README answers what the library does and which versions were tested.
+The README explains what chisel-async does and which versions were tested.
 `docs/index.md` routes readers to tutorials, reference contracts and task guides.
 Keep current user instructions free of roadmap status and review chronology.
 Update the relevant guide when a public API or assumption changes.
+
+Write directly to the reader and use the component's name when it helps explain
+an action. Introduce chisel-async by name, use complete sentences, and explain
+technical limits where they affect a design decision. Avoid vague slogans,
+repeated caveats and commentary about what the documentation does not claim.
 
 Quickstart code is a standalone dependency consumer under `examples/quickstart`.
 Fenced snippets marked `source:` must match their checked-in files; the docs checker

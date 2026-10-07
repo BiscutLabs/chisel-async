@@ -100,7 +100,7 @@ function shell(title, body, route, description, isDocs = false) {
 <header class="site-header"><a class="brand" href="${base}" aria-label="chisel-async home">${icon}<span>chisel<span class="brand-divider">-</span>async</span></a><a class="version" href="${base}docs/compatibility/">${escape(version)}</a><div class="header-spacer"></div>${searchButton}<nav class="header-links" aria-label="Main">${docs("getting-started", "Docs", isDocs ? "current" : "")}<a href="${base}api/scala/">Scala API ${arrow}</a><a href="${repository}">GitHub ${arrow}</a></nav><button class="theme-toggle" type="button" aria-label="Toggle color theme" title="Toggle color theme">◐</button><button class="menu-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" aria-controls="mobile-nav">☰</button></header>
 <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation" hidden>${docs("getting-started", "Documentation")}<a href="${base}api/scala/">Scala API</a><a href="${repository}">GitHub</a>${isDocs ? navigation.map(([group, links]) => `<p>${group}</p>${links.map(([slug, label]) => docs(slug, label)).join("")}`).join("") : ""}</nav>
 ${body}
-<footer class="site-footer"><a class="brand" href="${base}">${icon}<span>chisel-async</span></a><p>Explicit protocols. Visible assumptions.</p><div>${docs("provenance", "References")}<a href="${repository}/blob/${commit}/LICENSE">Apache 2.0</a><a href="${repository}/commit/${commit}" title="Documentation source commit">${commit.slice(0, 7)}</a></div></footer>
+<footer class="site-footer"><a class="brand" href="${base}">${icon}<span>chisel-async</span></a><p>Asynchronous hardware components for Chisel.</p><div>${docs("provenance", "References")}<a href="${repository}/blob/${commit}/LICENSE">Apache 2.0</a><a href="${repository}/commit/${commit}" title="Documentation source commit">${commit.slice(0, 7)}</a></div></footer>
 <dialog id="search-dialog" aria-labelledby="search-title"><div class="search-heading"><label id="search-title" for="search-input">Search documentation</label><button id="close-search" type="button" aria-label="Close search">Esc</button></div><input id="search-input" type="search" placeholder="Try ‘reset’, ‘dual-rail’, or ‘timing’" autocomplete="off"><p id="search-status" role="status">Type to search the guides. Use Tab to browse results.</p><div id="search-results"></div><a class="search-api" href="${base}api/scala/">Looking for a class? Open the Scala API ${arrow}</a></dialog>
 </body></html>`;
 }
@@ -142,7 +142,7 @@ for (const [index, page] of pages.entries()) {
     .map((h) => `<a href="#${escape(h.id)}">${escape(h.title)}</a>`)
     .join("");
   const neighbors = [pages[index - 1], pages[index + 1]];
-  const html = `<div class="docs-layout"><aside class="sidebar"><nav aria-label="Documentation">${sidebar}<a class="api-sidebar" href="${base}api/scala/">Scala API reference ${arrow}</a></nav></aside><main id="main" class="docs-main"><div class="doc-eyebrow">${page.group}</div><article class="prose">${content}</article><div class="doc-end"><a href="${repository}/edit/main/${source}">Edit this page ${arrow}</a><span>Development documentation · ${escape(version)}</span></div><nav class="page-neighbors" aria-label="Adjacent guides">${neighbors.map((neighbor, i) => (neighbor ? docs(neighbor.slug, `<small>${i ? "Next" : "Previous"}</small><span>${neighbor.label} ${i ? "→" : ""}</span>`) : "<span></span>")).join("")}</nav></main><aside class="toc"><nav aria-label="On this page"><h2>On this page</h2>${toc}</nav><div class="api-callout"><span>Need the signature?</span><a href="${base}api/scala/">Browse Scala API ${arrow}</a></div></aside></div>`;
+  const html = `<div class="docs-layout"><aside class="sidebar"><nav aria-label="Documentation">${sidebar}<a class="api-sidebar" href="${base}api/scala/">Scala API reference ${arrow}</a></nav></aside><main id="main" class="docs-main"><div class="doc-eyebrow">${page.group}</div><article class="prose">${content}</article><div class="doc-end"><a href="${repository}/edit/main/${source}">Edit this page ${arrow}</a><span>Development documentation · ${escape(version)}</span></div><nav class="page-neighbors" aria-label="Adjacent guides">${neighbors.map((neighbor, i) => (neighbor ? docs(neighbor.slug, `<small>${i ? "Next" : "Previous"}</small><span>${neighbor.label} ${i ? "→" : ""}</span>`) : "<span></span>")).join("")}</nav></main><aside class="toc"><nav aria-label="On this page"><h2>On this page</h2>${toc}</nav><div class="api-callout"><span>Constructor and method details</span><a href="${base}api/scala/">Browse the Scala API ${arrow}</a></div></aside></div>`;
   await write(
     docRoute(page.slug),
     shell(
@@ -164,15 +164,15 @@ const example = quickstart
     quickstart.indexOf("\nobject EmitQuickstart"),
   )
   .trim();
-const home = `<main id="main" class="home"><section class="hero">${circuitArtwork()}<div class="hero-copy"><div class="eyebrow"><span class="status-dot"></span> OPEN SOURCE · BUILT WITH CHISEL</div><h1>Asynchronous hardware.<br><span>Naturally Chisel.</span></h1><p class="hero-description">Build typed, composable hardware with explicit handshakes.<br class="desktop-break"> Explore bundled data, dual rail, and clocked boundaries in one Scala library.</p><div class="hero-actions">${docs("getting-started", 'Start building <span aria-hidden="true">→</span>', "button primary")}<a class="button secondary" href="${base}api/scala/">Explore the Scala API ${arrow}</a></div><p class="hero-note">Development snapshot <strong>${escape(version)}</strong><span>·</span> Scala ${scala}<span>·</span> Chisel ${chisel}</p></div></section>
-<section class="showcase" aria-label="Typed pipeline example"><div class="showcase-code"><div class="editor-bar"><span><i></i><i></i><i></i></span><a href="${repository}/blob/${commit}/examples/quickstart/src/main/scala/Quickstart.scala">Quickstart.scala ${arrow}</a></div>${highlight(example, "scala")}<div class="editor-caption">A type-changing adder. A storage stage. One shared reset domain.</div></div><div class="handshake"><div class="eyebrow">THE PROTOCOL, MADE VISIBLE</div><h2>Data moves.<br>Both sides agree.</h2><p>A four-phase channel pairs each request with an acknowledgement before returning to idle.</p><div class="pipeline-art" aria-hidden="true"><div class="node"><span>A + B</span><small>Operands</small></div><div class="wire"><span>req →</span><b></b><span>← ack</span></div><div class="node accent"><span>Σ</span><small>UInt(9.W)</small></div></div><div class="signal-display"><div><span>req</span><b id="request-bit">0</b></div><div><span>ack</span><b id="ack-bit">0</b></div><div class="phase-label" id="phase-label" aria-live="polite">0 · Ready for a token</div></div><button type="button" id="step-handshake">Step handshake <span aria-hidden="true">→</span></button><small class="demo-caption">Illustrative protocol sequence, not a circuit simulation.</small></div></section>
-<div class="principles"><span><b>Typed channels</b> Preserve your payloads</span><span><b>Explicit reset</b> Own every boundary</span><span><b>Timing contracts</b> Record the assumptions</span></div>
-<section class="styles-section"><div class="section-heading"><div><span class="eyebrow">ONE LIBRARY. DIFFERENT DESIGN STYLES.</span><h2>Choose how your<br>hardware communicates.</h2></div><p>Start with the protocol your design needs. Compose with explicit converters when you cross a boundary.</p></div><div class="style-cards">${[
+const home = `<main id="main" class="home"><section class="hero">${circuitArtwork()}<div class="hero-copy"><div class="eyebrow"><span class="status-dot"></span> OPEN SOURCE · BUILT WITH CHISEL</div><h1>Asynchronous hardware.<br><span>Built with Chisel.</span></h1><p class="hero-description">Chisel-async gives you typed pipelines, routing and protocol converters.<br class="desktop-break"> Connect bundled-data, dual-rail and clocked logic in Scala.</p><div class="hero-actions">${docs("getting-started", 'Start building <span aria-hidden="true">→</span>', "button primary")}<a class="button secondary" href="${base}api/scala/">Explore the Scala API ${arrow}</a></div><p class="hero-note">Development snapshot <strong>${escape(version)}</strong><span>·</span> Scala ${scala}<span>·</span> Chisel ${chisel}</p></div></section>
+<section class="showcase" aria-label="Typed pipeline example"><div class="showcase-code"><div class="editor-bar"><span><i></i><i></i><i></i></span><a href="${repository}/blob/${commit}/examples/quickstart/src/main/scala/Quickstart.scala">Quickstart.scala ${arrow}</a></div>${highlight(example, "scala")}<div class="editor-caption">This pipeline adds two operands and stores the result, with both stages sharing a reset domain.</div></div><div class="handshake"><div class="eyebrow">FOUR-PHASE HANDSHAKE</div><h2>Follow a token<br>through a handshake.</h2><p>The producer offers data with a request. The consumer acknowledges it, then both signals return to idle before the next token.</p><div class="pipeline-art" aria-hidden="true"><div class="node"><span>A + B</span><small>Operands</small></div><div class="wire"><span>req →</span><b></b><span>← ack</span></div><div class="node accent"><span>Σ</span><small>UInt(9.W)</small></div></div><div class="signal-display"><div><span>req</span><b id="request-bit">0</b></div><div><span>ack</span><b id="ack-bit">0</b></div><div class="phase-label" id="phase-label" aria-live="polite">0 · Ready for a token</div></div><button type="button" id="step-handshake">Step handshake <span aria-hidden="true">→</span></button><small class="demo-caption">This illustration shows the protocol steps. Circuit delays are not simulated.</small></div></section>
+<div class="principles"><span><b>Typed channels</b> Keep your Chisel payload types</span><span><b>Explicit reset</b> Coordinate reset across components</span><span><b>Timing contracts</b> Declare delay bounds and guards</span></div>
+<section class="styles-section"><div class="section-heading"><div><span class="eyebrow">CHANNELS AND CONVERTERS</span><h2>Choose how your<br>hardware communicates.</h2></div><p>Choose a protocol for your design, then use converters to connect components with different encodings or clocks.</p></div><div class="style-cards">${[
   [
     "01",
     "Bundled data",
     "req / data / ack",
-    "Typed transforms, long-hold storage, routing, and arbitration with declared digital delay bounds.",
+    "Build pipelines, route tokens and arbitrate between producers, with explicit bounds on modeled delays.",
     "bundled-data",
     "cyan",
   ],
@@ -180,7 +180,7 @@ const home = `<main id="main" class="home"><section class="hero">${circuitArtwor
     "02",
     "Dual-rail logic",
     "rail₀ / rail₁ / ack",
-    "Return-to-zero encoding, completion detection, and strongly indicating components.",
+    "Represent each bit with two rails, detect complete words and compose strongly indicating logic.",
     "dual-rail",
     "violet",
   ],
@@ -188,7 +188,7 @@ const home = `<main id="main" class="home"><section class="hero">${circuitArtwor
     "03",
     "Clocked boundaries",
     "ready / valid / bits",
-    "Connect to Chisel Decoupled interfaces, memory backends, and retained events.",
+    "Connect async channels to Chisel Decoupled interfaces, clocked memory backends and pending-event capture.",
     "clocked-integration",
     "amber",
   ],
@@ -198,17 +198,17 @@ const home = `<main id="main" class="home"><section class="hero">${circuitArtwor
       `<a class="style-card ${color}" href="${base}${docRoute(slug)}"><div class="card-top"><span>${number}</span>${arrow}</div><div class="signal-glyph"><span></span><span></span><span></span></div><code>${signal}</code><h3>${title}</h3><p>${description}</p><span class="card-link">Read the guide →</span></a>`,
   )
   .join("")}</div></section>
-<section class="verification-section"><div><span class="eyebrow">BUILT TO BE EXAMINED</span><h2>Know what your<br>tests actually prove.</h2><p>Independent reference models, deliberate failure controls, and retained traces make the evidence inspectable. Digital-model checks have explicit limits; physical timing and metastability need their own qualification.</p>${docs("testing", "Explore verification →", "text-link")}</div><div class="verification-list">${[
+<section class="verification-section"><div><span class="eyebrow">TESTING YOUR DESIGN</span><h2>Test the function<br>and the handshake.</h2><p>Compare results with a software model, stall consumers and vary cell delays to look for races. Saved traces help you investigate failures. Hardware implementation also requires physical timing and metastability checks.</p>${docs("testing", "Read the testing guide →", "text-link")}</div><div class="verification-list">${[
   [
     "01",
-    "Write a Chisel-native test",
-    "ScalaTest and ChiselSim for clocked bridges and functional behavior.",
+    "Test from ScalaTest",
+    "Use AsyncTest for four-phase designs and ChiselSim for clocked harnesses.",
     "testing",
   ],
   [
     "02",
-    "Exercise timing assumptions",
-    "Event simulation for delayed cells, reset, and protocol races.",
+    "Vary delays and stalls",
+    "Exercise delayed cells, backpressure and reset with event simulation.",
     "bundled-data",
   ],
   [
@@ -223,11 +223,11 @@ const home = `<main id="main" class="home"><section class="hero">${circuitArtwor
       `<a href="${base}${docRoute(slug)}"><span>${n}</span><div><h3>${title}</h3><p>${description}</p></div><b aria-hidden="true">↗</b></a>`,
   )
   .join("")}</div></section>
-<section class="start-section"><span class="eyebrow">FROM YOUR FIRST TOKEN TO A COMPLETE DESIGN</span><h2>Start with something that runs.</h2><p>The quickstart emits a typed pipeline from a standalone sbt project.</p>${docs("getting-started", "Open the quickstart →", "button primary")} ${docs("components", "Browse all components", "button secondary")}</section></main>`;
+<section class="start-section"><span class="eyebrow">GET STARTED</span><h2>Build and test your first pipeline.</h2><p>Run the adder pipeline and GCD loop in a standalone sbt project, with ScalaTest tests for both.</p>${docs("getting-started", "Open the quickstart →", "button primary")} ${docs("components", "Browse all components", "button secondary")}</section></main>`;
 await write(
   "",
   shell(
-    "Asynchronous hardware. Naturally Chisel.",
+    "Asynchronous hardware. Built with Chisel.",
     home,
     "",
     "Typed asynchronous hardware for Chisel. Explore bundled-data, dual-rail, and clocked interfaces with explicit protocols and timing contracts.",

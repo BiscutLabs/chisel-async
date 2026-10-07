@@ -1,8 +1,9 @@
 # Channels, tokens, and composition
 
-A token is one transaction with a typed payload. Two consecutive transactions
-containing the same bits are still two tokens. Components preserve order and
-propagate backpressure; protocol edges, not changes in data, identify transfers.
+Chisel-async components exchange tokens: transactions with typed payloads. Two
+consecutive transactions containing the same bits are still two tokens. Handshake
+events identify each transfer, including repeated values. A receiver can slow the
+producer when it is not ready for more work; this is called backpressure.
 
 ## Logical intent and electrical encoding
 
@@ -16,9 +17,10 @@ no storage and performs no conversion. Its factories create distinct interfaces:
 | `.dualRail` | `DualRail[T]` | One of two rails asserted for each bit, then return to spacer |
 | `.decoupled` | Chisel `DecoupledIO[T]` | `valid && ready` at the clock's rising edge |
 
-The common intent is an ordered stream. Transfer events, holding rules, capacity,
-and reset behavior still belong to each component. Creating two bindings does not
-connect them. Converters contain state and have timing requirements.
+Each interface carries an ordered stream of tokens, with transfer events and holding rules
+defined by its protocol. Storage capacity and reset behavior depend on the
+component. Connect matching interfaces explicitly, and use a converter to cross
+encodings. Converters add state and have their own timing requirements.
 
 ## Types and directions
 
@@ -58,7 +60,7 @@ long-hold stage's event order everywhere.
 
 For a buffer, an independent ledger tracks
 `accepted = delivered + outstanding + aborted`. Reset removes outstanding work;
-it never retrospectively undelivers a token. A waiting offer is not automatically
+it does not undo a completed delivery. A waiting offer is not automatically
 an accepted token. [Protocol contracts](contracts.md) define the exact events.
 
 ## Reset is part of the interface
@@ -98,12 +100,12 @@ flowchart LR
   R --> C[Clocked consumer]
 ```
 
-Every boundary is explicit. Use only the conversions needed by your application;
-each can add storage, latency, and reset/timing obligations. The
+Use converters where your application crosses protocols or clock boundaries.
+Each can add storage, latency and reset or timing requirements. The
 [four-style reference](examples.md#four-style-reference) provides a concrete
 comparison of the same arithmetic function.
 
-The library separates typed composition, primitive digital models, and compiler
-metadata. Tests establish behavior within declared bounds. Mapping those models
-to physical cells and closing wire, fork, setup/hold, and metastability constraints
-is a separate implementation activity.
+Chisel-async records timing assumptions alongside your design and tests behavior
+within the declared bounds. For a physical implementation, you also need to map
+the primitives to cells and verify wire, fork, setup/hold and metastability
+constraints for your technology.

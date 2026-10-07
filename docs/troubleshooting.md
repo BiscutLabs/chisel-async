@@ -4,7 +4,7 @@
 | --- | --- |
 | Dependency `chisel-async_2.13` cannot be resolved | There is no public release yet. Run `sbt publishLocal` in the library checkout, then build the standalone consumer under the same user account. |
 | Compiler-plugin or elaboration errors | Match Chisel 7.16.0, compiler plugin 7.16.0 and Scala 2.13.18. Use `CrossVersion.full` for the plugin; inspect dependency eviction. |
-| `unqualified runtime` / `unqualified firtool` | Normal emission warns on drift; `qualifiedOnly = true` and strict validation reject it. Use the README tuple for qualified exports; never disguise the compiler in the manifest. |
+| `unqualified runtime` / `unqualified firtool` | Your tool versions differ from the tested configuration. Normal emission warns; `qualifiedOnly = true` and strict validation reject the mismatch. Use the versions in the README compatibility matrix for validated exports. |
 | Payload shape/width error | Specify positive widths and preserve Bundle/Vec field shapes and signedness. Implement explicit conversion in a typed stage. |
 | Reset domains differ despite equal names | Domains compare by object identity. Use `asyncChild` or explicitly pass the actual shared parent domain and wire/register reset. |
 | No token after reset | Check idle external drivers, enough time for delayed cells to quiesce, and running clocks through bridge reset release. Check that a feedback cycle has an initial token. |
@@ -19,7 +19,7 @@
 | Lost events from narrow pulses | Both high and low must span `stages + 1` destination edges. Use a different capture protocol for shorter or clockless events. |
 | Write happened but response disappeared on reset | Reset aborts transport, not committed backend effects. Define recovery at the application level; do not blindly retry writes. |
 
-For a report, include the source revision, full dependency/tool tuple, host,
-smallest reproducer, first failure and relevant retained logs. Keep failed-run
-evidence. Follow [testing](testing.md) and [contributing](contributing.md) for
-focused replay; a missing tool or unrelated crash is not a passing negative test.
+When reporting an issue, include the source revision, dependency and tool versions,
+operating system, a minimal example, and the first error with its logs. Keep the
+output from the failed run. See [testing](testing.md) and [contributing](contributing.md)
+for commands to reproduce specific tests.

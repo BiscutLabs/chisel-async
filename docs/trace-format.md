@@ -1,8 +1,9 @@
 # Reading verification traces
 
-Repository tests retain observations as well as pass/fail summaries. Trace
-vocabularies differ by campaign; inspect the schema/header before choosing a
-reader. A waveform or an empty successful test log is not a transaction ledger.
+Chisel-async's repository tests save event traces alongside pass/fail summaries
+so you can inspect what happened during a run. Formats differ between test suites;
+check the schema or header to choose the right reader. Use the transaction counts
+and traces together to check that the expected transfers occurred.
 
 ## Functional and timing JSONL
 

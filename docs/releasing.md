@@ -1,13 +1,14 @@
 # Packaging and releasing
 
-Public distribution uses **GitHub Actions to build/test and Maven Central to host
-dependencies**. GitHub Releases carries release notes, signed bundles and evidence.
+Chisel-async's release workflow uses **GitHub Actions to build and test JARs, and
+Maven Central to distribute them**. GitHub Releases hosts release notes, signed
+bundles and verification reports.
 GitHub Packages may host authenticated previews later; it is not required to use
-the public library. The website is a separate presentation layer over these docs.
+chisel-async. The documentation website is built and deployed separately.
 
-No public version has been published yet. The release automation is implemented;
-namespace ownership, signing credentials, environment configuration and public
-release acceptance must be established before triggering a real release.
+No public version has been published yet. Before using the release workflow,
+verify the namespace, configure signing credentials and the GitHub environment,
+and complete the release checks described below.
 
 ## Artifacts
 
@@ -114,9 +115,10 @@ a replacement for reviewing the candidate's complete release scope.
 ## Preparing a release
 
 Update the README and quickstart dependency/version text for the actual candidate,
-state the supported tool/host matrix and migration notes, and verify the complete
-catalog and user workflow. Keep physical qualification claims separate. The
-historical acceptance records do not automatically close complete-release acceptance.
+state the supported tools and hosts, add migration notes, and test the component
+catalog and user workflow against that candidate. Earlier verification results
+apply to their recorded revisions. Report any physical implementation testing
+separately from digital simulation results.
 
 Commit the reviewed changes, create an annotated tag, and push that specific tag
 when ready to trigger publication. A manual workflow dispatch defaults to dry-run;

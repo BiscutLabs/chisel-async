@@ -1,8 +1,8 @@
 # Scientific foundations and references
 
-The library uses published asynchronous circuit topologies, with explicit timing,
-reset and storage contracts. These references explain the designs behind the
-components and the assumptions used in their digital models.
+Chisel-async builds on published designs for asynchronous pipelines, storage,
+arbitration and dual-rail logic. The references below explain how those circuits
+work and which timing, reset and storage assumptions each component relies on.
 
 | Area | Source and relationship |
 | --- | --- |
@@ -13,24 +13,26 @@ components and the assumptions used in their digital models.
 | Sequential phase conversion | ASYNC 2000 tutorial protocol discussion, with buffered conversion and explicit closure guards |
 | Chisel integration | Upstream RawModule, ExtModule resources, CIRCT stage, read probes and ChiselSim APIs |
 
-The [source record](archive/development/provenance.md) preserves primary-source
-links, paper revisions and model assumptions. The
-[long-hold source record](archive/development/long-hold-controller.md#inspected-source-and-preserved-topology)
-contains the inspected paper, figure references, hash and topology details.
-[Component comparisons](component-terminology.md#how-this-compares-with-chisel-click)
-describe differences in interfaces, storage, supported encodings and implementation.
-[Verification comparisons](archive/development/verification.md#comparison-with-inspected-upstream-tests)
-compare test coverage, independent oracles and deliberately broken controls.
+For links to the papers and the revisions used, see the
+[source notes](archive/development/provenance.md). The
+[long-hold controller notes](archive/development/long-hold-controller.md#inspected-source-and-preserved-topology)
+also identify the figures and circuit topology used in the implementation.
+To compare chisel-async with other libraries, see the
+[component comparison](component-terminology.md#how-this-compares-with-chisel-click)
+for interfaces, storage and encodings, and the
+[test comparison](archive/development/verification.md#comparison-with-inspected-upstream-tests)
+for coverage, reference models and tests that deliberately introduce faults.
 
-The original custom structural stage failed under internal delay variation and
-was withdrawn. Its counterexample remains in regression; the
-[review response](archive/development/review-response.md) records why. Keeping that
-failure is part of the scientific record, not an endorsement of the withdrawn API.
+An earlier custom controller failed when its internal delays varied and was
+withdrawn. The regression suite still reproduces that race and checks that the
+tests detect it. The [review response](archive/development/review-response.md)
+explains the failure and the decision to replace it.
 
-Digital models use bounded delays, atomic cells and declared wire/reset assumptions.
-They do not establish physical QDI behavior, analog metastability resolution or
-technology-specific timing closure. Model values in examples are experimental
-parameters, not measured silicon performance.
+The digital models assume bounded delays, atomic cells and the documented wire
+and reset behavior. Their tests check behavior under those assumptions. Physical
+QDI behavior, analog metastability resolution and timing closure still need to be
+verified for the chosen technology. Example delay values are simulation settings,
+not silicon measurements.
 
-chisel-async is [Apache-2.0 licensed](../LICENSE). Tools and dependencies retain
+Chisel-async is [Apache-2.0 licensed](../LICENSE). Tools and dependencies retain
 their respective licenses.

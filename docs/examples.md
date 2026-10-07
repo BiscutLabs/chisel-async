@@ -1,9 +1,9 @@
 # Executable examples
 
-The [standalone quickstart](../examples/quickstart) is the smallest consumer: one
-library dependency, a typed adder pipeline, a controlled GCD loop, and ScalaTest
-tests of those actual designs plus a bridge harness. Follow
-[getting started](getting-started.md) before exploring the repository fixtures.
+The [standalone quickstart](../examples/quickstart) shows how to use chisel-async in
+your own sbt project. It includes an adder pipeline, a controlled GCD loop and
+ScalaTest tests for both, plus a clocked bridge test. Follow
+[getting started](getting-started.md) to run it, then explore the examples below.
 
 Repository emitters live under
 [`examples/src/main/scala/chiselasync/examples`](../examples/src/main/scala/chiselasync/examples).
@@ -17,7 +17,7 @@ python verification/run_composition.py --help
 
 The final command lists supported replay options; it does not run the campaign.
 Use the corresponding runner without `--help` to execute it. Some campaigns require
-additional fixtures or a new output directory. The complete qualifier handles
+additional fixtures or a new output directory. `tools/qualify.py` handles
 emission order and fresh output paths automatically.
 
 | Emitter | What to study | Campaign |
@@ -32,9 +32,9 @@ emission order and fresh output paths automatically.
 | `EmitQdi` | Strong storage, truth tables, typed routing, mixed unequal paths | `verification/run_qdi.py`, `verification/run_qdi_sequences.py` |
 | `EmitBoundaries` | Standard-Chisel RAM/ROM and pending events | `verification/run_boundaries.py` (also needs `EmitArchitecture`) |
 
-`EmitControllerComparison` preserves a historical comparison and unsafe-controller
-counterexample. It is not a recommended user design. The archive explains that
-experiment without placing it on the normal learning path.
+`EmitControllerComparison` reproduces a controller comparison, including a known
+race in a withdrawn design. Use it to study that failure; use the long-hold
+components for new designs.
 
 ## Four-style reference
 
@@ -83,6 +83,6 @@ The preset timings are digital experiments, not characterized GCD silicon timing
 
 Keep your expected function independent of the implementation, preserve token
 identity when payloads repeat, and register the new hierarchy/ports for export.
-Change input widths and delay bounds deliberately; do not assume an example's
-numbers qualify a different datapath. Add tests for backpressure, partial reset
+Check widths and delay bounds for your own datapath when adapting an example.
+Add tests for backpressure, partial reset
 and the component-specific assumptions in the [testing guide](testing.md).

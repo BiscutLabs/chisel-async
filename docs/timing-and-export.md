@@ -1,16 +1,16 @@
 # Timing intent and compiler export
 
-The library records digital timing assumptions alongside emitted hardware. A
-checked export establishes that the supported compiler route preserved declared
-types, resources, endpoint bindings and constraints. It does not perform static
-timing analysis or prove a mapped circuit safe.
+Chisel-async exports your design's timing assumptions alongside its hardware.
+The export validator checks that the supported compiler flow preserved declared
+types, resources, endpoint bindings and constraints. Static timing analysis and
+verification of mapped hardware are separate steps.
 
 ## Time and propagation models
 
 `ModelTime(fs)` uses exact nonnegative signed 64-bit femtoseconds.
 `ModelTime.ps(n)` converts picoseconds with overflow checking; `ticks(precision)`
 rejects inexact conversion instead of rounding. Exported times use decimal strings
-to avoid JSON floating-point precision loss. The event lane uses 1 fs precision.
+to avoid JSON floating-point precision loss. Event simulation uses 1 fs precision.
 
 `DelayBounds(min, max, model)` separates the tested envelope from the nominal
 emitted delay. All three use `ModelTime`; the model must fall within the bounds.
@@ -43,7 +43,7 @@ These obligations matter even where RTL glue evaluates with zero simulation dela
 
 Constructors reject invalid policies. The validator checks consistency between
 policies, declared constraints, marker instances and actual primitive parameters.
-The user must supply credible physical bounds when mapping the design; increasing
+Supply characterized physical bounds when mapping your design; increasing
 guards cannot compensate for every control hazard or incorrect cell decomposition.
 
 ## Export workflow
@@ -59,7 +59,8 @@ ExportDesign.emit(new MyDesign, java.nio.file.Paths.get("generated"))
 [quickstart](../examples/quickstart/src/main/scala/Quickstart.scala) is a complete
 example. The default mode is `ExportDesign.Optimized` (release optimization and
 deduplication). `ExportDesign.Debug` is an explicit comparison mode using
-debug/no-dedup options. Neither route authorizes arbitrary later transformations.
+debug/no-dedup options. Later compiler or synthesis transformations need their own
+checks to ensure they preserve the recorded assumptions.
 
 Register public channels with `contract.channel`, `twoPhaseChannel`,
 `dualRailChannel` or `clockedChannel`, as appropriate. Use `asyncChild` for nested
@@ -99,7 +100,7 @@ after a design, model, compiler or schema change.
 Strict export validation requires Chisel 7.16.0, Scala 2.13.18 and firtool 1.160.0.
 Emission itself warns and records actual versions on drift. Use
 `ExportDesign.emit(..., qualifiedOnly = true)` to reject drift at emission too.
-Neither successful linking nor unqualified emission expands the supported matrix.
+Use the tested versions when you need a validated export.
 The exact options are defined in
 [`ExportDesign`](../src/main/scala/chiselasync/metadata/ExportDesign.scala).
 Legacy contract/port ABI inventories must be regenerated for the current checker.

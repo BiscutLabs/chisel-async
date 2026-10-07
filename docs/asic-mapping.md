@@ -1,9 +1,10 @@
 # ASIC cell-mapping interface
 
-`AsicMapping` produces a synthesis input set using **explicit technology bindings**.
-It is an interface for integrating your cell library, not a supplied PDK or a
-claim of physical closure. Ordinary `ExportDesign` output contains simulation
-models; never send that file list to synthesis and rely on `#delay` being ignored.
+Use `AsicMapping` to connect chisel-async primitives to your technology's cells and
+generate a separate set of synthesis inputs. You supply the cell implementations
+and verify their physical timing; chisel-async does not include a PDK binding.
+Ordinary `ExportDesign` output uses simulation models whose `#delay` statements
+cannot implement the required hardware delays.
 
 ## Prepare and bind
 
@@ -18,10 +19,11 @@ val bindings: Seq[AsicMapping.Binding] = loadMyTechnologyBindings(plan.required)
 val output = plan.emit(bindings, Seq(Paths.get("technology/async_cells.v")))
 ```
 
-`MyDesign` and `loadMyTechnologyBindings` are project-specific. Inspect
-`required-cells.json`; do not fabricate a binding by copying a simulation model
-under another module name. Each `Binding` provides the exact `Key`, technology
-module name, a map from every logical port to its technology pin, and a provenance
+Replace `MyDesign` and `loadMyTechnologyBindings` with your own design and binding
+loader. Use `required-cells.json` to identify the cells you need. Each binding
+must use a technology implementation that meets the listed requirements. Each
+`Binding` provides the exact `Key`, technology module name, a map from every logical
+port to its technology pin, and a provenance
 description identifying the implementation and characterization. Technology
 adapters have fixed ports for that specialization; they may instantiate the
 actual library macro internally. Supply all required RTL/black-box declarations.
@@ -57,10 +59,10 @@ this separate synthesis view. Do not mix simulation and ASIC file lists.
 | Toggle and other control cells | Event/reset semantics and propagation assumptions in the selected protocol |
 | Wires/forks | Long-hold acknowledgement fork ordering and applicable isochronic-fork assumptions |
 
-The interface cannot infer these properties from Verilog syntax or a provenance
-string. No Liberty, LEF, SDC generation, synthesis/P&R run, extracted-delay
-simulation, or physical equivalence proof is included. Complete those with the
-chosen technology before using the design as hardware.
+The mapping interface checks that bindings are complete; verifying these physical
+properties is part of your technology flow. That flow must provide Liberty and
+LEF data, synthesis constraints, synthesis and place-and-route, extracted-delay
+simulation and physical equivalence checks. These steps are outside `AsicMapping`.
 
 The consumer [mapping test](../examples/quickstart/src/test/scala/AsicMappingSpec.scala)
 uses deliberately labeled black-box test cells to check binding completeness,

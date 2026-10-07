@@ -92,7 +92,7 @@ export function createMarkdown(highlight, base, ref) {
     const token = tokens[idx];
     const lang = token.info.trim().split(/\s/)[0] || "text";
     if (lang === "mermaid")
-      return `<figure class="diagram"><pre class="mermaid">${escape(token.content)}</pre><figcaption>Channel connections · see the surrounding text for timing obligations.</figcaption></figure>`;
+      return `<figure class="diagram"><pre class="mermaid">${escape(token.content)}</pre><figcaption>Channel connections. Timing requirements are explained in the guide.</figcaption></figure>`;
     return `<div class="code-block"><div class="code-bar"><span>${escape(lang)}</span><button class="copy-code" type="button" aria-label="Copy code">Copy</button></div>${highlight(token.content, lang)}</div>`;
   };
   md.core.ruler.push("website", (state) => {

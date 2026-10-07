@@ -1,11 +1,11 @@
 # Website development
 
-The [documentation website](https://biscutlabs.github.io/chisel-async/) is hosted
-on GitHub Pages. Its user guides come directly from `docs/*.md`. The generated
+Chisel-async's [website](https://biscutlabs.github.io/chisel-async/) is hosted on
+GitHub Pages, with user guides built directly from `docs/*.md`. The generated
 [Scala API](https://biscutlabs.github.io/chisel-async/api/scala/) lives in the
 `api/scala/` subfolder of the same site. Both are built from the same Git checkout.
-The site tracks `main`; it is development documentation, not a released-version
-archive. The footer links the exact source commit.
+The site follows `main` and describes the current development version. The footer
+links to the exact source commit used for each build.
 
 ## Build and preview
 
@@ -65,7 +65,6 @@ inventory. It also requires the real Scala API entrypoint, its resources and
 
 Before publishing layout changes, check desktop and mobile widths, both color
 themes, keyboard navigation, search, code copying, and a Scala API deep link.
-These checks concern website behavior; they do not qualify hardware behavior.
 
 [The Pages workflow](../.github/workflows/pages.yml) builds and checks pull
 requests without deploying them. Pushes to `main` deploy the checked artifact

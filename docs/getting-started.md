@@ -1,15 +1,14 @@
 # Getting started
 
-This walkthrough emits a two-stage adder pipeline from a standalone sbt project
-that depends only on the library JAR. ScalaTest exercises the actual adder pipeline
-and a GCD feedback network through the JAR's `AsyncTest` event-simulation helper.
-A separate bridge test demonstrates ChiselSim.
+Build a two-stage adder pipeline with chisel-async, then test it with ScalaTest
+and the included `AsyncTest` helper. The standalone sbt project also includes a
+GCD feedback loop and a ChiselSim test for a clocked bridge.
 
-The shortest path is local JAR publication, copying the standalone example, then
-`sbt "testOnly AsyncDesignSpec"` with Icarus on PATH. You do not need the
-repository's qualification environment for those async tests. Start with
-`BundledTiming.Simulation` and the channel-declaration helpers; introduce explicit
-per-cell timing bounds and lower-level contract registration when your design needs them.
+To get started, publish the JAR locally, copy the standalone example and run
+`sbt "testOnly AsyncDesignSpec"` with Icarus on PATH. These tests run without the
+repository's contributor environment. The example uses `BundledTiming.Simulation`
+and helpers that declare channels and register their contracts together. You can
+set per-cell timing bounds or register contracts directly as your design grows.
 
 ## Install the tools you need
 
@@ -98,9 +97,10 @@ payload shape, and reset identity. `fourPhaseInput` and `fourPhaseOutput` declar
 ordinary typed IO and register their channel contracts together. Explicit
 `IO` plus `contract.channel` remains available. Capacity is declared separately.
 
-The timing values in the example are **illustrative digital-model values**. They
-are positive bounds with conservative guards, not a target frequency or a physical
-implementation prescription. See [bundled timing](bundled-data.md#timing-policy).
+The example's timing values are **simulation settings** with positive delay bounds
+and conservative guards. To implement the design in hardware, choose bounds for
+your mapped cells and data paths; these values do not specify a target frequency.
+See [bundled timing](bundled-data.md#timing-policy).
 
 The `generated` directory contains SystemVerilog, packaged primitive sources,
 `filelist.f`, `design.hw.mlir`, `ref_AddPipeline.sv`, `ports.json`, and

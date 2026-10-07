@@ -20,7 +20,7 @@ Choose storage according to the surrounding indication requirements.
 
 Completion must retain state during partial spacer return. A combinational
 all-bits-present AND can fall on the first returning bit and acknowledge spacer
-too early. The library uses direct N-input/asymmetric C-element primitives where
+too early. Chisel-async uses direct N-input/asymmetric C-element primitives where
 the topology requires their atomic semantics.
 
 ## Bounded DIMS functions
@@ -65,11 +65,10 @@ timing obligation.
 
 ## Assumptions and tests
 
-`QdiTiming(DelayBounds(...))` records independent positive cell bounds; it does not
-introduce a bundled-data relative-delay inequality. The current experiment assumes
-atomic cells, ideal wire forks, monotonic RTZ traffic and coordinated reset.
-Physical QDI implementation still needs an appropriate cell mapping and fork
-assumptions; passing these digital tests is not physical QDI certification.
+`QdiTiming(DelayBounds(...))` records independent positive cell bounds without a
+bundled-data relative-delay inequality. The digital models assume atomic cells,
+ideal wire forks, monotonic RTZ traffic and coordinated reset. For a physical QDI
+implementation, you must also choose suitable cells and verify the fork assumptions.
 
 Test all input values for small tables, then separately test partial valid and
 spacer waves, different per-cell delays, stalled consumers, repeated values and

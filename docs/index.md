@@ -1,8 +1,8 @@
 # chisel-async documentation
 
-Start with a working project, then choose components and verification appropriate
-to your design. These guides describe the current API and its limits. They do not
-require reading the project's development history.
+Chisel-async provides typed components for asynchronous hardware in Chisel. Start
+with the quickstart to build and test a pipeline, then use these guides to choose
+components, connect different protocols and check your design's timing assumptions.
 
 ## Learn and build
 
@@ -34,11 +34,11 @@ require reading the project's development history.
 [Contributing](contributing.md) covers setup and focused verification.
 [Releasing](releasing.md) defines JAR packaging and GitHub Actions/Maven Central
 distribution. [Scientific references](provenance.md) explain the circuit topologies
-and model assumptions. [The archive](archive/README.md) preserves plans, reviews, counterexamples,
-and historical acceptance results for auditing.
+and model assumptions. [The archive](archive/README.md) contains earlier plans,
+reviews, failing test cases and verification results.
 
-For exact constructor signatures, browse the linked Scala sources or generate
-Scaladoc with `sbt doc` (`target/scala-2.13/api/index.html`). The sources and API-doc
-JARs accompany the binary artifact. Browse the hosted
-[Scala API](https://biscutlabs.github.io/chisel-async/api/scala/) alongside these
-guides. [Website development](website.md) explains how to build and preview both.
+For constructor signatures and method details, browse the
+[Scala API](https://biscutlabs.github.io/chisel-async/api/scala/) or generate a local
+copy with `sbt doc` (`target/scala-2.13/api/index.html`). Source and API documentation
+JARs are also included in the release artifacts. [Website development](website.md)
+explains how to build and preview the guides and API docs together.
