@@ -139,4 +139,10 @@ jobs:
             target/consumers/**/generated/**/filelist.f
             target/consumers/**/generated/**/design.hw.mlir
             target/consumers/**/target/test-reports
+            target/consumers/**/build/**/seed-*/*.json
+            target/consumers/**/build/**/seed-*/*.log
+            target/consumers/**/build/**/seed-*/testbench.sv
+            target/consumers/**/build/**/export/*.json
+            target/consumers/**/build/**/export/*.sv
+            target/consumers/**/build/**/export/filelist.f
           if-no-files-found: error

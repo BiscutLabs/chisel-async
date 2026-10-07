@@ -25,7 +25,9 @@ its build; the README remains its single source.
 Chisel's [versioning policy](https://www.chisel-lang.org/docs/appendix/versioning)
 describes its compatibility guarantees. Those guarantees do not automatically
 qualify this library's emitted artifacts on a different compiler. `ExportDesign`
-currently requires the exact tested runtime/compiler tuple and fails on drift.
+warns on runtime/compiler drift and records the actual versions. Set
+`qualifiedOnly = true` to reject drift at emission; strict `check_export.py`
+validation still requires the exact tested tuple. A warning is not qualification.
 
 The library ships one JVM JAR per supported Scala binary line, not Windows/Linux
 variants. It packages SV text and schemas, not native simulator or compiler

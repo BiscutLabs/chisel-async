@@ -75,13 +75,52 @@ class TwoPhaseJoin[A <: Data, B <: Data](a: A, b: B, timing: BundledTiming, phas
   FourPhase.connect(core.left, input("left", left)); FourPhase.connect(core.right, input("right", right))
   output("out", out, core.out)
 }
-class TwoPhaseSelect[T <: Data](gen: T, val destinations: Int, timing: BundledTiming, phase: PhaseTiming,
+/** Embedded-selector demultiplexer using [[FourPhaseDemux]] and phase adapters.
+  * The input's [[Selected]] tag chooses one destination; other outputs receive no token.
+  * Adapter guards are additional to the core's bundled-data timing policy.
+  */
+class TwoPhaseDemux[T <: Data](gen: T, val destinations: Int, timing: BundledTiming, phase: PhaseTiming,
     cellDelay: ModelTime, domain: ResetDomain = new ResetDomain("root")) extends PhaseComposition(phase, domain) {
   val in = IO(Flipped(new Channel(new Selected(gen, destinations), resetDomain).twoPhase))
   val out = IO(Vec(destinations, new Channel(gen, resetDomain).twoPhase))
-  private val core = asyncChild("core")(d => new FourPhaseSelect(gen, destinations, timing, cellDelay, d))
+  private val core = asyncChild("core")(d => new FourPhaseDemux(gen, destinations, timing, cellDelay, d))
   FourPhase.connect(core.in, input("in", in))
   out.zipWithIndex.foreach { case (port, i) => output(s"out$i", port, core.out(i)) }
+  contract.capacity(1)
+}
+@deprecated("Use TwoPhaseDemux; selection is carried in Selected[T]", "0.1.0")
+class TwoPhaseSelect[T <: Data](gen: T, destinations: Int, timing: BundledTiming, phase: PhaseTiming,
+    cellDelay: ModelTime, domain: ResetDomain = new ResetDomain("root"))
+    extends TwoPhaseDemux(gen, destinations, timing, phase, cellDelay, domain)
+
+/** Controlled mux through phase adapters; one selector slot and one data slot.
+  * See [[FourPhaseMux]] for selection, storage and backpressure semantics.
+  * `phase` declares the adapters' closure guards; this is not a native Click controller.
+  */
+class TwoPhaseMux[T <: Data](gen: T, val inputs: Int, timing: BundledTiming, phase: PhaseTiming,
+    cellDelay: ModelTime, domain: ResetDomain = new ResetDomain("root")) extends PhaseComposition(phase, domain) {
+  require(inputs >= 2, "multiplexer needs at least two inputs")
+  val in = IO(Flipped(Vec(inputs, new Channel(gen, resetDomain).twoPhase)))
+  val select = IO(Flipped(new Channel(UInt(chisel3.util.log2Ceil(inputs).W), resetDomain).twoPhase))
+  val out = IO(new Channel(gen, resetDomain).twoPhase)
+  private val core = asyncChild("core")(d => new FourPhaseMux(gen, inputs, timing, cellDelay, d))
+  in.zipWithIndex.foreach { case (port, i) => FourPhase.connect(core.in(i), input(s"in$i", port)) }
+  FourPhase.connect(core.select, input("select", select)); output("out", out, core.out)
+}
+
+/** Typed registered fork using [[FourPhaseRegFork]] and explicit phase adapters.
+  * Both branches share one payload slot and must complete before reuse. Reset
+  * empties both; independent initial branch tokens/phases are not supported.
+  * The adapters add the guards in `phase` to the core's timing requirements.
+  */
+class TwoPhaseRegFork[A <: Data, B <: Data, C <: Data](a: A, b: B, c: C,
+    transform: A => (B, C), timing: BundledTiming, phase: PhaseTiming, cellDelay: ModelTime,
+    domain: ResetDomain = new ResetDomain("root")) extends PhaseComposition(phase, domain) {
+  val in = IO(Flipped(new Channel(a, resetDomain).twoPhase))
+  val left = IO(new Channel(b, resetDomain).twoPhase)
+  val right = IO(new Channel(c, resetDomain).twoPhase)
+  private val core = asyncChild("core")(d => new FourPhaseRegFork(a, b, c, transform, timing, cellDelay, d))
+  FourPhase.connect(core.in, input("in", in)); output("left", left, core.left); output("right", right, core.right)
   contract.capacity(1)
 }
 class TwoPhaseMerge[T <: Data](gen: T, val inputs: Int, timing: BundledTiming, phase: PhaseTiming,

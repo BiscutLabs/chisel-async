@@ -18,7 +18,7 @@ class InitialWideExample extends InitialTokens(UInt(65.W),
   ConsumerTiming.digital, ModelTime.ps(1000))
 class ForkExample extends FourPhaseFork(UInt(8.W), 3, ModelTime.ps(1000))
 class JoinExample extends FourPhaseJoin(UInt(8.W), SInt(9.W), ConsumerTiming.digital, ModelTime.ps(1000))
-class SelectExample extends FourPhaseSelect(UInt(8.W), 3, ConsumerTiming.digital, ModelTime.ps(1000))
+class SelectExample extends FourPhaseDemux(UInt(8.W), 3, ConsumerTiming.digital, ModelTime.ps(1000))
 class MergeExample extends FourPhaseMerge(UInt(8.W), 3, ConsumerTiming.digital, ModelTime.ps(1000))
 
 /** Unequal branch depths and type-changing arithmetic reconverge by token position. */

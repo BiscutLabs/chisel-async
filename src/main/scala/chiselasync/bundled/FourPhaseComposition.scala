@@ -60,7 +60,7 @@ class FourPhaseJoin[A <: Data, B <: Data](a: A, b: B, timing: BundledTiming, cel
 }
 
 /** One buffered transaction, routed using a one-hot choice captured with its data. */
-class FourPhaseSelect[T <: Data](gen: T, val destinations: Int, timing: BundledTiming, cellDelay: ModelTime,
+class FourPhaseDemux[T <: Data](gen: T, val destinations: Int, timing: BundledTiming, cellDelay: ModelTime,
                                  domain: ResetDomain = new ResetDomain("root")) extends AsyncModule(domain) {
   val in = IO(Flipped(new Channel(new Selected(gen, destinations), resetDomain).bundled))
   val out = IO(Vec(destinations, new Channel(gen, resetDomain).bundled))
@@ -82,6 +82,12 @@ class FourPhaseSelect[T <: Data](gen: T, val destinations: Int, timing: BundledT
   cells.guard("index_guard", Seq(in.req), Seq(in.ack), in.bits.index < destinations.U, 1)
   contract.capacity(1); contract.channel("in", in, "input")
 }
+
+/** Compatibility name; this operation routes one input to one output (demultiplexing). */
+@deprecated("Use FourPhaseDemux; selection is carried in Selected[T]", "0.1.0")
+class FourPhaseSelect[T <: Data](gen: T, destinations: Int, timing: BundledTiming, cellDelay: ModelTime,
+    domain: ResetDomain = new ResetDomain("root"))
+    extends FourPhaseDemux(gen, destinations, timing, cellDelay, domain)
 
 /** Buffered exclusive merge. The caller must serialize COMPLETE input handshakes.
   * There is no priority or arbitration; overlap is diagnosed by the simulation view.

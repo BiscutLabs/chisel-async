@@ -1,7 +1,8 @@
 # Executable examples
 
 The [standalone quickstart](../examples/quickstart) is the smallest consumer: one
-library dependency, a typed adder pipeline, and a ScalaTest bridge harness. Follow
+library dependency, a typed adder pipeline, a controlled GCD loop, and ScalaTest
+tests of those actual designs plus a bridge harness. Follow
 [getting started](getting-started.md) before exploring the repository fixtures.
 
 Repository emitters live under
@@ -25,7 +26,7 @@ emission order and fresh output paths automatically.
 | `EmitLongHold` | Published controller, type-changing transform, independently bounded delays | `verification/run_longhold.py` |
 | `EmitArchitecture` | Dual-rail completion and explicit-clock bridge round trip | `verification/run_architecture.py` |
 | `EmitOptimized` | Replicated pipelines under release/dedup versus debug export | `verification/run_optimized.py` |
-| `EmitComposition` | FIFO, initial tokens, unequal fork/join paths, select, exclusive merge, feedback | `verification/run_composition.py` |
+| `EmitComposition` | FIFO, initial tokens, fork/join, mux, registered fork, demux, exclusive merge, feedback | `verification/run_composition.py`; new mux/fork behavior in quickstart `RoutingSpec` |
 | `EmitPhase` | Arbitration, sequential two-phase composition, mixed encodings | `verification/run_phase.py`, `verification/run_closure.py`, `verification/run_mutex.py` |
 | `EmitReference` | Common small function across four implementation styles | `verification/run_reference.py`, `verification/run_dims.py` |
 | `EmitQdi` | Strong storage, truth tables, typed routing, mixed unequal paths | `verification/run_qdi.py`, `verification/run_qdi_sequences.py` |
@@ -46,6 +47,37 @@ Use it to understand differences in handshakes, storage, indication and clock
 boundaries. Raw simulation latency reflects selected model delays and clocks.
 It is not a silicon area, power, energy or throughput comparison. Those conclusions
 need comparable physical implementations and measurements.
+
+## GCD with controlled feedback
+
+[Gcd.scala](../examples/quickstart/src/main/scala/Gcd.scala) implements Euclid's
+subtraction algorithm using only public components. Run `sbt "runMain EmitGcd"`
+or test it with `sbt "testOnly AsyncDesignSpec"` in the standalone quickstart.
+
+```mermaid
+flowchart LR
+  I[Input operands] --> M[Controlled mux]
+  S[Selector FIFO: initially 0] --> M
+  M --> R[Registered fork: subtract and test]
+  R --> D[Demux: feedback or result]
+  R --> S
+  D -->|unfinished| M
+  D -->|finished| O[Result stage]
+```
+
+The initial selector chooses the external input. Each unfinished iteration emits
+selector 1 and feeds the updated operands back; completion emits selector 0 for
+the next external job and routes the result out. A new job cannot enter the mux
+while the current one still needs iterations. Output stages may retain completed
+results while the next job starts; this is not a one-outstanding-response service.
+All queues and forks propagate backpressure. Reset discards in-flight work and
+reinstalls the initial selector.
+
+The test compares against `BigInt.gcd`, not a second subtraction controller.
+It includes equal values, repeated jobs, either/both zero operands, extreme
+asymmetry, seeded stalls and independent cell delays. The mux/fork consumer suite
+separately exercises 300 delay configurations per component and reset recovery.
+The preset timings are digital experiments, not characterized GCD silicon timing.
 
 ## Adapting an example
 

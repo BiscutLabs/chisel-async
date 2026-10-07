@@ -42,7 +42,8 @@ for emission and simulation.
 ## Compatibility matrix
 
 This is the **tested development configuration**, not a claim that unlisted
-versions work. The strict export path enforces the listed Chisel/Scala/firtool tuple.
+versions work. Strict validation enforces the listed Chisel/Scala/firtool tuple;
+emission warns on drift and records the actual versions.
 
 | Library | Scala | Chisel | Chisel compiler plugin | firtool | Java |
 | --- | --- | --- | --- | --- | --- |
@@ -67,16 +68,19 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Need | Components |
 | --- | --- |
 | Typed transform or pipeline storage | `FourPhaseStage[A, B]`, `LongHoldBuffer`, `FourPhaseFifo` |
-| Broadcast, pairing, routing | `FourPhaseFork`, `FourPhaseJoin`, `FourPhaseSelect`, exclusive `FourPhaseMerge` |
+| Broadcast, pairing, routing | `FourPhaseFork`, `FourPhaseRegFork`, `FourPhaseJoin`, controlled `FourPhaseMux`, `FourPhaseDemux`, exclusive `FourPhaseMerge` |
 | Competing producers | `FourPhaseArbiter` and its finite digital MUTEX model |
 | Transition-signalling interfaces | `TwoPhase` components and explicit phase converters |
 | Return-to-zero dual-rail logic | Strong storage, bounded DIMS functions, fork/join, demux, exclusive merge |
 | Clocked Chisel integration | `DecoupledToFourPhase`, `FourPhaseToDecoupled` |
 | Memory transactions and events | `AsyncMemoryPort`, `PendingEventBridge` |
-| Digital timing and compiler inspection | Timing policies, primitive models, `ExportDesign` |
+| Consumer async tests | `AsyncTest` in the JAR; ScalaTest plus Icarus, no Python |
+| Digital timing and compiler inspection | `BundledTiming.Simulation`, primitive models, `ExportDesign` |
+| ASIC integration | `AsicMapping`: explicit technology bindings; no supplied PDK or physical qualification |
 
 `FourPhaseBuffer` is a behavioral reference model. New structural designs use the
-long-hold family. Classes under `experimental` retain a known failing controller
+long-hold family. See the [terminology and chisel-click comparison](docs/component-terminology.md)
+for operation, storage, and implementation differences. Classes under `experimental` retain a known failing controller
 for regression and must not be used in designs.
 
 ## Contributing

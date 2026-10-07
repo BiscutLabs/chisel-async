@@ -88,7 +88,12 @@ Clocked local release requires running clocks. Initial-token sources reinstall
 their declared literal sequence once per reset epoch.
 
 Fork acknowledgement waits for every branch in both phases. Join pairs the nth
-left token with the nth right token. Select captures routing choice with data.
+left token with the nth right token. Demux captures routing choice with data.
+Mux consumes one selector and one token from the selected input per output;
+unselected inputs are not acknowledged. The buffered selector may be accepted
+before its data input arrives. Both selected requests must return before that
+rendezvous can be reused. RegFork stores both transformed branch values in one
+shared slot and waits for every branch's complete return before reusing it.
 Exclusive merges require complete input handshakes to be serialized, including
 return. Use an arbiter for independent competitors; a merge is not an arbiter.
 

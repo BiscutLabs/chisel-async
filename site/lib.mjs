@@ -17,6 +17,7 @@ export const navigation = [
     "Build your design",
     [
       ["components", "Component catalog"],
+      ["component-terminology", "Terminology & comparison"],
       ["bundled-data", "Bundled data"],
       ["dual-rail", "Dual-rail logic"],
       ["clocked-integration", "Clocked integration"],
@@ -28,6 +29,7 @@ export const navigation = [
       ["testing", "Testing"],
       ["contracts", "Protocol contracts"],
       ["timing-and-export", "Timing & export"],
+      ["asic-mapping", "ASIC mapping"],
       ["trace-format", "Trace formats"],
       ["compatibility", "Compatibility"],
       ["troubleshooting", "Troubleshooting"],

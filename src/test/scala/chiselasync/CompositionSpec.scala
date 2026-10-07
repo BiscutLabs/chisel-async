@@ -13,6 +13,28 @@ class CompositionSpec extends AnyFunSuite {
   private val cell = ModelTime(1)
   private val timing = BundledTiming.Digital(ModelTime(4), DelayBounds.fixed(cell),
     ControlDelays.uniform(DelayBounds.fixed(cell)), DelayBounds.fixed(cell), ModelTime(4))
+  test("controlled mux rejects vacuous fanin and registers selector/data slots separately") {
+    intercept[IllegalArgumentException] { ChiselStage.emitCHIRRTL(new FourPhaseMux(UInt(8.W),1,timing,cell)) }
+    val mux = ChiselStage.emitCHIRRTL(new FourPhaseMux(UInt(8.W),3,timing,cell))
+    assert(mux.contains("select :") && mux.contains("UInt<2>"))
+    assert(mux.contains("ChiselAsyncAsymmetricC_v1") && !mux.contains("input clock"))
+  }
+  test("registered fork rejects implicit branch resizing") {
+    val typed = ChiselStage.emitCHIRRTL(new FourPhaseRegFork(UInt(8.W),UInt(9.W),SInt(9.W),
+      (x: UInt) => (x +& 1.U(8.W),x.zext),timing,cell))
+    assert(typed.contains("SInt<9>") && !typed.contains("input clock"))
+    intercept[IllegalArgumentException] {
+      ChiselStage.emitCHIRRTL(new FourPhaseRegFork(UInt(8.W),UInt(8.W),UInt(9.W),
+        (x: UInt) => (x +& 1.U(8.W),x +& 1.U(8.W)),timing,cell))
+    }
+  }
+  test("simulation presets derive strict guards from the complete worst case") {
+    val t = BundledTiming.simulation(ModelTime(2),ModelTime(9),ModelTime(17))
+    assert(t.matchedDelay.fs == 19 && t.outputDelay.fs == 29)
+    intercept[IllegalArgumentException] { BundledTiming.simulation(ModelTime(0)) }
+    intercept[IllegalArgumentException] { BundledTiming.simulation(ModelTime(9),ModelTime(2)) }
+    intercept[ArithmeticException] { BundledTiming.simulation(ModelTime(1),ModelTime(Long.MaxValue)) }
+  }
   test("composition rejects impossible capacities, fanout and zero-time initialization") {
     Seq(() => new FourPhaseFifo(UInt(8.W), 0, timing),
       () => new FourPhaseFifo(UInt(8.W), 1, timing, Seq(1.U(8.W), 2.U(8.W))),

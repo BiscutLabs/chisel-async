@@ -11,6 +11,7 @@ require reading the project's development history.
 | [Getting started](getting-started.md) | Install the snapshot, emit a typed pipeline, run a first Scala test |
 | [Concepts](concepts.md) | Tokens, encodings, backpressure, acceptance, delivery, and reset |
 | [Component catalog](components.md) | What each public component does and when to use it |
+| [Terminology and chisel-click comparison](component-terminology.md) | Established names, matching operations, and differences in storage and implementation |
 | [Bundled-data composition](bundled-data.md) | Timing policy, type-changing stages, FIFO, fork/join, routing and arbitration |
 | [Dual-rail logic](dual-rail.md) | Rails, completion, indication, bounded DIMS functions, and conversion |
 | [Clocked integration](clocked-integration.md) | Decoupled bridges, memory backends, pending events, and reset release |
@@ -23,6 +24,7 @@ require reading the project's development history.
 | [Testing](testing.md) | ScalaTest/ChiselSim, event simulation, independent oracles, reset and negative controls |
 | [Protocol contracts](contracts.md) | Exact transfer and hold obligations at each interface |
 | [Timing and export](timing-and-export.md) | Delay bounds, strict inequalities, compiler configuration, metadata and validation |
+| [ASIC mapping](asic-mapping.md) | Bind every primitive to a technology adapter and emit a separate synthesis input set |
 | [Trace formats](trace-format.md) | Interpret retained observations without confusing campaign formats |
 | [Compatibility](compatibility.md) | Tested versions/hosts, version policy and known limitations |
 | [Troubleshooting](troubleshooting.md) | Resolve dependency, reset, simulation and export failures |

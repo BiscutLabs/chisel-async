@@ -4,6 +4,8 @@ Choose the interface encoding first, then the operation. All asynchronous blocks
 require coordinated reset. Structural bundled blocks need a timing policy;
 dual-rail blocks need positive model delays. The tables distinguish storage from
 handshake coordination. Follow the linked sources for complete constructors.
+The [terminology and chisel-click comparison](component-terminology.md) explains
+which operations correspond and where their storage or timing contracts differ.
 
 ## Foundation
 
@@ -30,20 +32,22 @@ follows the fully decoupled Furber–Day long-hold topology.
 | `InitialTokens[T]` | `out`, `done`; emits literals once per reset epoch | Finite source; `done` follows final complete return |
 | `FourPhaseFork[T]` | `in`, `out: Vec`; broadcast | Unbuffered; both acknowledgement phases wait for every branch |
 | `FourPhaseJoin[A, B]` | `left`, `right`, `out: Joined[A, B]` | One stored operand per input; nth left pairs with nth right |
-| `FourPhaseSelect[T]` | `in: Selected[T]`, `out: Vec` | One captured transaction; only indexed destination is offered |
+| [`FourPhaseRegFork[A,B,C]`](../src/main/scala/chiselasync/bundled/FourPhaseRegFork.scala) | `A => (B,C)`, outputs `left`, `right` | One shared slot, waits for both branches; resets empty |
+| [`FourPhaseMux[T]`](../src/main/scala/chiselasync/bundled/FourPhaseMux.scala) | `in: Vec`, `select: UInt` channel, `out` | One selector slot plus one output data slot; only selected data is consumed |
+| `FourPhaseDemux[T]` | `in: Selected[T]`, `out: Vec` | One captured transaction; only indexed destination is offered |
 | `FourPhaseMerge[T]` | `in: Vec`, `out` | One buffered output; caller serializes whole input handshakes |
 | [`FourPhaseArbiter[T]`](../src/main/scala/chiselasync/bundled/FourPhaseArbiter.scala) | Two competing inputs, one output | One buffered output with MUTEX and return interlocks |
 | `Selected[T]` | `index`, `data` | Routing choice travels with the payload |
 | `Joined[A, B]` | `left`, `right` | Typed pair, with independently sized operands |
 
-Fork/select/merge counts must be at least two. A select index must be within the
+Fork/mux/demux/merge counts must be at least two. A routing index must be within the
 declared destination count; invalid codes and merge overlap are diagnosed by
 simulation guards, not made into defined routing behavior.
 
 ## Two-phase bundled data
 
 [`TwoPhaseStage`, `TwoPhaseBuffer`, `TwoPhaseFifo`, `TwoPhaseInitialTokens`,
-`TwoPhaseFork`, `TwoPhaseJoin`, `TwoPhaseSelect`, `TwoPhaseMerge`, and
+`TwoPhaseFork`, `TwoPhaseRegFork`, `TwoPhaseJoin`, `TwoPhaseMux`, `TwoPhaseDemux`, `TwoPhaseMerge`, and
 `TwoPhaseArbiter`](../src/main/scala/chiselasync/bundled/TwoPhaseComposition.scala)
 present equivalent typed operations through transition-signalling ports.
 
@@ -52,6 +56,7 @@ They wrap the four-phase cores with sequential phase adapters. They require
 independently synthesized two-phase pipeline topologies, and fewer external edges
 do not by themselves imply lower latency. The core's capacity, routing, and
 exclusivity obligations still apply.
+`FourPhaseSelect` / `TwoPhaseSelect` are deprecated aliases of the demultiplexers.
 
 ## Dual-rail family
 
@@ -104,6 +109,8 @@ blocks with explicit atomic-cell assumptions, not a technology cell library.
 | `DelayBounds`, `ControlDelays`, `BundledTiming`, `PhaseTiming`, `QdiTiming` | Declared model envelopes and guards, described in the timing guide |
 | [`TimedCapture[T]`](../src/main/scala/chiselasync/bundled/TimedCapture.scala) | Independent data/control-delay experiment with transaction identity and setup/hold observation; not a handshake stage |
 | [`ExportDesign`](../src/main/scala/chiselasync/metadata/ExportDesign.scala) | Optimized or debug RTL plus typed metadata/probes; validate before consuming as a checked export |
+| [`AsicMapping`](../src/main/scala/chiselasync/metadata/AsicMapping.scala) | Exhaustive technology-cell binding and a separate synthesis file list; no supplied PDK or physical closure |
+| [`AsyncTest`](../src/main/scala/chiselasync/testing/AsyncTest.scala) | JAR-contained Scala helper for event-driven four-phase tests and seeded cell-delay variation |
 
 N-input symmetric C behavior uses `AsymmetricCElement` with only common inputs.
 It is a direct N-input primitive, not an implicitly equivalent tree of two-input

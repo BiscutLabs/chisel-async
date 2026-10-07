@@ -19,8 +19,11 @@ class InitialWideExample extends InitialTokens(UInt(65.W),
   LongHoldModels.digital, ModelTime.ps(1000))
 class ForkExample extends FourPhaseFork(UInt(8.W), 3, ModelTime.ps(1000))
 class JoinExample extends FourPhaseJoin(UInt(8.W), SInt(9.W), LongHoldModels.digital, ModelTime.ps(1000))
-class SelectExample extends FourPhaseSelect(UInt(8.W), 3, LongHoldModels.digital, ModelTime.ps(1000))
+class SelectExample extends FourPhaseDemux(UInt(8.W), 3, LongHoldModels.digital, ModelTime.ps(1000))
 class MergeExample extends FourPhaseMerge(UInt(8.W), 3, LongHoldModels.digital, ModelTime.ps(1000))
+class MuxExample extends FourPhaseMux(UInt(8.W), 3, LongHoldModels.digital, ModelTime.ps(1000))
+class RegForkExample extends FourPhaseRegFork(UInt(8.W), UInt(9.W), SInt(9.W),
+  (x: UInt) => (x +& 1.U(8.W), x.zext), LongHoldModels.digital, ModelTime.ps(1000))
 
 /** Unequal branch depths and type-changing arithmetic reconverge by token position. */
 class ForkJoinExample extends AsyncModule {
@@ -65,6 +68,7 @@ object EmitComposition {
       "initial_wide" -> (() => new InitialWideExample),
       "fork" -> (() => new ForkExample), "join" -> (() => new JoinExample),
       "select" -> (() => new SelectExample), "merge" -> (() => new MergeExample),
+      "mux" -> (() => new MuxExample), "regfork" -> (() => new RegForkExample),
       "fork_join" -> (() => new ForkJoinExample), "feedback" -> (() => new FeedbackExample)
     ).foreach { case (id, gen) => ExportDesign.emit(gen(), Paths.get(args(0), id)) }
   }

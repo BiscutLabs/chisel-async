@@ -1,8 +1,15 @@
 # Getting started
 
 This walkthrough emits a two-stage adder pipeline from a standalone sbt project
-that depends only on the library JAR. A separate first test exercises a clocked
-bridge using ScalaTest and ChiselSim.
+that depends only on the library JAR. ScalaTest exercises the actual adder pipeline
+and a GCD feedback network through the JAR's `AsyncTest` event-simulation helper.
+A separate bridge test demonstrates ChiselSim.
+
+The shortest path is local JAR publication, copying the standalone example, then
+`sbt "testOnly AsyncDesignSpec"` with Icarus on PATH. You do not need the
+repository's qualification environment for those async tests. Start with
+`BundledTiming.Simulation` and the channel-declaration helpers; introduce explicit
+per-cell timing bounds and lower-level contract registration when your design needs them.
 
 ## Install the tools you need
 
@@ -12,9 +19,10 @@ firtool 1.160.0. Chisel can resolve its compiler; to use an installed copy, set
 `CHISEL_FIRTOOL_PATH` to the **directory containing** `firtool` or `firtool.exe`.
 Python is not needed to compile or elaborate your consumer project.
 
-Simulation is optional for the first emission. The included Scala test needs
-Verilator 5.046 and its C++/make toolchain. Delay-sensitive asynchronous tests and
-strict export validation use Icarus 13 and the repository's Python tools. Follow
+Simulation is optional for the first emission. The async Scala tests need Icarus
+13 (`iverilog` and `vvp` on PATH), with no Python setup. The optional ChiselSim
+bridge test needs Verilator 5.046 and its C++/make toolchain. Strict export
+validation still uses the repository's Python tools. Follow
 [testing](testing.md) when you reach that step.
 
 ## Obtain the library
@@ -86,8 +94,9 @@ flowchart LR
 
 `asyncChild` shares the parent's reset-domain identity, wires reset, and registers
 each child for export. `FourPhase.connect(consumer, producer)` checks widths,
-payload shape, and reset identity. The top-level channels and capacity are
-registered explicitly in the contract.
+payload shape, and reset identity. `fourPhaseInput` and `fourPhaseOutput` declare
+ordinary typed IO and register their channel contracts together. Explicit
+`IO` plus `contract.channel` remains available. Capacity is declared separately.
 
 The timing values in the example are **illustrative digital-model values**. They
 are positive bounds with conservative guards, not a target frequency or a physical
@@ -109,19 +118,20 @@ published package.
 
 ## Run the first test
 
-The project includes [BridgeSpec.scala](../examples/quickstart/src/test/scala/BridgeSpec.scala).
-On a configured Linux host:
+The project includes [AsyncDesignSpec.scala](../examples/quickstart/src/test/scala/AsyncDesignSpec.scala).
+With Icarus on PATH, on Windows or Linux:
 
 ```text
-sbt test
+sbt "testOnly AsyncDesignSpec"
 ```
 
-This test drives a `DecoupledToFourPhase` bridge through four complete handshakes,
-including repeated equal values and downstream stalls. It checks stable payloads,
-backpressure, request return and acknowledgement return with bounded waits.
-It tests the clocked bridge; it is not a simulation of the delayed adder pipeline.
-The [testing guide](testing.md) explains how to test that pipeline with an event
-simulator and how to configure native Windows ChiselSim.
+These tests compare adder sums and GCD results with independent software functions,
+with repeated values, downstream stalls, and independently varied cell delays.
+`sbt "testOnly RoutingSpec AsicMappingSpec"` additionally runs the 300-configuration
+mux/fork campaigns and ASIC binding-interface checks. `sbt test` also runs the
+[ChiselSim bridge test](../examples/quickstart/src/test/scala/BridgeSpec.scala),
+which needs the additional Verilator setup. The [testing guide](testing.md)
+explains both paths and the native Windows ChiselSim adapter.
 
 Next: [understand channels and reset](concepts.md), then
 [choose and compose components](components.md).

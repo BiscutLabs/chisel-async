@@ -303,6 +303,7 @@ def validate_manifest(document):
                 require(timing["logic_model_fs"] == "0" and timing["accounting"] ==
                         "included-in-delay-cell; replace-model-with-mapped-path; not-additive", "INVALID_DATA_PATH_ACCOUNTING")
                 expected = {"chisel-transform-including-decode": ([], "data_delay", "in_data", "latch_data"),
+                            "controlled-multiplexer-input-mux": (["storage"], "data_delay", "mux_sources", "mux_result"),
                             "exclusive-merge-input-mux": (["storage"], "data_delay", "mux_sources", "mux_result"),
                             "initial-token-literal-mux": ([], "data", "mux_state", "out_data")}
                 require(timing["logic"] in expected and
@@ -389,6 +390,8 @@ def validate_manifest(document):
         if qdi_markers or "qdi-digital-v1" in kinds:
             require(len(qdi_markers) == kinds.count("qdi-digital-v1") == 1, "QDI_CONSTRAINT_INVENTORY")
         primitive_ids = {p["id"] for p in node["primitives"]}
+        if {"selected0", "rendezvous0"} <= primitive_ids:
+            require(any(t.get("logic") == "controlled-multiplexer-input-mux" for t in node["timing"]), "MISSING_MUX_CONSTRAINT")
         if "request_phase" in primitive_ids or {"master_close", "phase", "returned"} <= primitive_ids:
             require(kinds.count("phase-conversion-v2") == 1, "MISSING_PHASE_CONSTRAINT")
         if "decoded" in primitive_ids or {"zero0", "one0"} <= primitive_ids and any(c["id"] == "storage" for c in node["children"]):
@@ -587,7 +590,7 @@ def probe_source(manifest, scopes, paired=False):
                     owner = next(c["contract"] for c in owner["children"] if c["id"] == child_id)
                 cell = next(p for p in owner["primitives"] if p["id"] == timing["delay_cell"])["rtl_path"]
                 sink = endpoint_by_id[timing["sink"]]["rtl_path"]
-                if timing["logic"] == "exclusive-merge-input-mux":
+                if timing["logic"] in ("exclusive-merge-input-mux", "controlled-multiplexer-input-mux"):
                     storage_input = next(e for e in owner["endpoints"] if e["id"] == "in_data")["rtl_path"]
                     pairs = [(sink, storage_input), (sink, cell + ".a")]
                 else:

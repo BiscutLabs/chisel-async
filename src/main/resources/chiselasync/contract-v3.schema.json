@@ -795,6 +795,7 @@
           "enum": [
             "chisel-transform-including-decode",
             "exclusive-merge-input-mux",
+            "controlled-multiplexer-input-mux",
             "initial-token-literal-mux"
           ]
         },

@@ -7,6 +7,11 @@ type-changing stage and two-stage pipeline.
 
 ## Timing policy
 
+Start with `BundledTiming.Simulation` for a digital experiment. It provides
+1–10 ns cell bounds, a 10 ns data budget, and derives strictly larger request and
+output guards. `BundledTiming.simulation(cellMin, cellMax, dataMax)` adjusts those
+three values and recomputes the guards. Neither preset is a physical speed grade.
+
 Every structural stage takes an explicit `BundledTiming`. `FunctionalOnly` names
 the zero-delay experiment; it is not an implicit default. For delayed digital
 models, construct `BundledTiming.Digital`:
@@ -67,7 +72,7 @@ cycle may need spare capacity to make progress. Build a ledger for the actual
 network; local component correctness does not prove deadlock freedom for an
 arbitrary cyclic composition.
 
-## Fork, join, select, and merge
+## Fork, join, mux, demux, and merge
 
 `FourPhaseFork` broadcasts one token to every output. It adds no storage: the
 producer must retain data until every branch has completed. A fast branch may
@@ -78,9 +83,25 @@ branch's completed delivery from the scoreboard.
 Its output is `Joined[A, B]` with `left` and `right` fields. Buffer counts are
 operand counts, not two independent output-tuple slots.
 
-`FourPhaseSelect` takes `Selected[T]` (`index`, `data`) and captures both routing
+`FourPhaseRegFork[A,B,C]` captures the two results of `A => (B,C)` in one shared
+slot, then broadcasts them on `left` and `right`. Both branches must return before
+the slot can be reused. It resets empty and does not support independently
+initialized branch tokens.
+
+`FourPhaseMux` has `in: Vec`, `select: FourPhase[UInt]`, and `out`. Each selector
+chooses one input; unselected offers remain pending without acknowledgement.
+A captured selector and the chosen input rendezvous in C-elements, including
+both return transitions. The selector may arrive before or after the data.
+There is one selector slot and one output data slot; selector acceptance can
+precede data acceptance. This is controlled selection, not arbitration or a join
+over every input. See the [GCD example](examples.md#gcd-with-controlled-feedback).
+
+`FourPhaseDemux` takes `Selected[T]` (`index`, `data`) and captures both routing
 choice and data. Only the selected output requests; its backpressure holds the
 transaction. Every index must satisfy `index < destinations`.
+`FourPhaseSelect` remains as a deprecated compatibility name. See the
+[terminology and comparison](component-terminology.md) for differences from
+components that use a separate selector channel.
 
 `FourPhaseMerge` assumes only one input handshake is active at a time, including
 return-to-idle. It does not choose a priority when inputs overlap. Its simulation

@@ -96,8 +96,10 @@ after a design, model, compiler or schema change.
 
 ## Compiler scope
 
-Strict export requires Chisel 7.16.0, Scala 2.13.18 and firtool 1.160.0. A dependency
-eviction or compiler change fails closed, even if ordinary Scala linking succeeds.
+Strict export validation requires Chisel 7.16.0, Scala 2.13.18 and firtool 1.160.0.
+Emission itself warns and records actual versions on drift. Use
+`ExportDesign.emit(..., qualifiedOnly = true)` to reject drift at emission too.
+Neither successful linking nor unqualified emission expands the supported matrix.
 The exact options are defined in
 [`ExportDesign`](../src/main/scala/chiselasync/metadata/ExportDesign.scala).
 Legacy contract/port ABI inventories must be regenerated for the current checker.
@@ -113,4 +115,6 @@ metadata, not arbitrary memory equivalence. Other memory lowerings are not cover
 
 Remaining compiler annotation warnings are visible in test logs. Unsupported
 reference forms fail instead of being guessed. No arbitrary CIRCT importer,
-downstream synthesis equivalence, physical timing closure or PDK mapping is supplied.
+downstream synthesis equivalence or physical timing closure is supplied. The
+[ASIC mapping interface](asic-mapping.md) emits a separate synthesis file list
+once all technology primitives have explicit bindings; it does not supply a PDK.

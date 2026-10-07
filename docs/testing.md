@@ -5,7 +5,60 @@ ChiselSim and an event simulator for asynchronous propagation and four-state
 experiments. A successful elaboration or a test with no transfers is not evidence
 of correct protocol behavior.
 
-## First ScalaTest test
+## Test an asynchronous design from the JAR
+
+`chiselasync.testing.AsyncTest` runs a clockless four-phase design in Icarus from
+ScalaTest. It ships inside the library JAR, needs `iverilog` and `vvp` on PATH, and
+does not require Python, cocotb, C++ compilation or a repository checkout. The
+[quickstart test](../examples/quickstart/src/test/scala/AsyncDesignSpec.scala)
+is executable consumer code:
+
+```scala
+import chiselasync.testing.AsyncTest
+import chiselasync.testing.AsyncTest.{Input, Output}
+
+AsyncTest.check(new AddPipeline,
+  Seq(Input("in", Seq(Map("in_bits_a" -> BigInt(3), "in_bits_b" -> BigInt(5))))),
+  Seq(Output("out", Seq(Map("out_bits" -> BigInt(8))))))
+```
+
+Streams run concurrently with seeded source/consumer pauses. Maps name every
+flattened payload leaf; values are unsigned bit patterns, with signed leaves
+encoded in two's complement. The helper checks channel coverage, leaf widths,
+exact output sequences, stable held data, handshake order, and bounded completion.
+Empty streams, skipped outputs, simulator errors and missing completion markers fail.
+
+Each seed also selects independent cell delays. Seeds 1/2 exercise the minimum
+and maximum corners; other seeds use `java.util.Random`. Long-hold cell and data
+delays stay inside their exported bounds; request/output guards remain fixed.
+Routing cells use the declared test envelope (default 1–10 ns). Conversion
+boundaries retain nominal delays; the separate phase/encoding campaigns exercise
+their additional closure guards. This helper currently requires four-phase
+top-level channels, not arbitrary two-phase/dual-rail or clocked top-level IO.
+
+Pass `directory` to choose where exported RTL, contract, per-seed `delays.json`,
+testbench, compile log, simulation log and transfer-count `result.json` are retained.
+Otherwise the helper creates a temporary directory and returns its per-seed paths.
+Use a fresh directory for each campaign to preserve earlier evidence. Simulator
+failures report the log path; a passing result requires observed output transfers.
+The helper elaborates once per call. Custom
+concurrent/reset scenarios use `AsyncTest.run` with an SV body; its time unit is
+1 fs. Monitors settle for 1 fs, so custom drivers must leave handshake states
+observable for longer than that rather than collapsing multiple phases in one
+timestamp. It is not a delta-cycle glitch detector.
+
+The helper does not run the full structural export validator or prove physical
+timing. Its delays and ideal wires are digital assumptions. Validate exports
+separately when using their timing/probe metadata as checked evidence.
+
+Run `sbt "testOnly AsyncDesignSpec"` in the standalone quickstart to test the
+adder and GCD. `RoutingSpec` adds 300 configurations each for mux and registered
+fork, independent payload oracles, unselected-input checks, reset recovery and
+required diagnostic failures. Sixteen further configurations exercise the new
+two-phase mux/fork through explicit converters. The consumer check includes these suites on both
+native CI hosts.
+
+## Clocked ScalaTest with ChiselSim
 
 The standalone [quickstart test](../examples/quickstart/src/test/scala/BridgeSpec.scala)
 mixes `AnyFunSuite` with `chisel3.simulator.scalatest.ChiselSim`, calls
@@ -60,8 +113,9 @@ Windows generated layer filenames also count toward path-length limits.
 Use Icarus 13 with 1 fs resolution for the packaged delayed and four-state views.
 Emit and validate your design before simulation. Use the generated file inventory
 and packaged resources rather than copying or rewriting primitive models. The
-repository's runners handle fixtures, compilation, observers, evidence and replay;
-they are not yet a general published Scala or Python testkit.
+repository's runners handle more extensive fixtures, observers, raw traces and
+independent replay. Use the JAR's `AsyncTest` for a consumer-owned four-phase
+design; use these campaigns for the broader encoding/timing corpus.
 
 For a custom circuit, adapt a relevant
 [executable example and campaign](examples.md). Drive offers legally, keep passive

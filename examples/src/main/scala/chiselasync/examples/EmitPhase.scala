@@ -26,7 +26,7 @@ class TwoInitialExample extends TwoPhaseInitialTokens(UInt(8.W), Seq(0x12.U(8.W)
   LongHoldModels.digital, PhaseModels.phase, ModelTime.ps(1000))
 class TwoForkExample extends TwoPhaseFork(UInt(8.W), 3, PhaseModels.phase, ModelTime.ps(1000))
 class TwoJoinExample extends TwoPhaseJoin(UInt(8.W), SInt(9.W), LongHoldModels.digital, PhaseModels.phase, ModelTime.ps(1000))
-class TwoSelectExample extends TwoPhaseSelect(UInt(8.W), 3, LongHoldModels.digital, PhaseModels.phase, ModelTime.ps(1000))
+class TwoSelectExample extends TwoPhaseDemux(UInt(8.W), 3, LongHoldModels.digital, PhaseModels.phase, ModelTime.ps(1000))
 class TwoMergeExample extends TwoPhaseMerge(UInt(8.W), 3, LongHoldModels.digital, PhaseModels.phase, ModelTime.ps(1000))
 class TwoArbiterExample extends TwoPhaseArbiter(UInt(8.W), LongHoldModels.digital, PhaseModels.phase,
   ModelTime.ps(1000), ModelTime.ps(1000), MutexPolicy.Alternate)

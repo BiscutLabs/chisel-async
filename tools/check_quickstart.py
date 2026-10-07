@@ -91,10 +91,24 @@ recordDependencies := IO.write(baseDirectory.value / "resolved-classpath.txt",
                 or cases[0].get("name") != "holds tokens through return"
                 or any(node.tag in {"failure", "error", "skipped"} for node in suite.iter())):
             raise RuntimeError("Quickstart simulation inventory or result mismatch")
+        for name, count in (("AsyncDesignSpec", 2), ("RoutingSpec", 5), ("AsicMappingSpec", 2)):
+            async_suite = ET.parse(consumer / f"target/test-reports/TEST-{name}.xml").getroot()
+            if (len(async_suite.findall("testcase")) != count or int(async_suite.get("tests", "0")) != count
+                    or any(node.tag in {"failure", "error", "skipped"} for node in async_suite.iter())):
+                raise RuntimeError(f"Quickstart async inventory or result mismatch: {name}")
+        result["async_campaigns"] = {}
+        for fixture, count in (("routing-mux",300), ("routing-regfork",300), ("routing-phase",16)):
+            cases = sorted((consumer / "build" / fixture).glob("seed-*/result.json"))
+            records = [json.loads(p.read_text()) for p in cases]
+            if (len(records) != count or {int(r["seed"]) for r in records} != set(range(1,count+1))
+                    or any(r["status"] != "PASS" or not r["activity"] for r in records)):
+                raise RuntimeError(f"Missing async delay campaign evidence: {fixture}")
+            result["async_campaigns"][fixture] = {"cases":count,"result_sha256":{p.parent.name:sha(p) for p in cases}}
         with (evidence / "export.log").open("w", encoding="utf-8") as log:
-            subprocess.run([sys.executable, str(ROOT / "tools/check_export.py"), str(consumer / "generated")],
-                           env=environment, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
-                           check=True, timeout=180)
+            for exported in ("generated", "build/async-gcd/export", "build/routing-mux/export", "build/routing-regfork/export", "build/routing-phase/export"):
+                subprocess.run([sys.executable, str(ROOT / "tools/check_export.py"), str(consumer / exported)],
+                               env=environment, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+                               check=True, timeout=180)
         if not (consumer / "generated/resolved.json").is_file():
             raise RuntimeError("Quickstart export produced no resolution evidence")
         if args.qualification_report:
