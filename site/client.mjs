@@ -184,3 +184,12 @@ async function renderDiagrams() {
   }
 }
 renderDiagrams();
+
+const circuitHero = document.querySelector(".hero:has(.circuit-art)");
+if (circuitHero) {
+  import("./circuit-animation.mjs")
+    .then(({ animateCircuit }) => animateCircuit(circuitHero))
+    .catch(() => {
+      /* The static etched artwork remains usable without animation. */
+    });
+}
