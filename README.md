@@ -106,3 +106,6 @@ checksums. Stable releases are planned for Maven Central. See the
 [RC1 release notes](docs/releases/0.1.0-RC1.md) and [release policy](docs/releasing.md).
 
 [License](LICENSE) · [Scientific references](docs/provenance.md)
+
+The patches in [bazel/patches](bazel/patches/README.md) change other projects and carry
+the license of the project each one patches.
