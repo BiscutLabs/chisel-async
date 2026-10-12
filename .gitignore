@@ -13,3 +13,5 @@ __pycache__/
 *.pyc
 site/node_modules/
 site/dist/
+/bazel-*
+tmp/

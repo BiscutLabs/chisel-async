@@ -1,0 +1,23 @@
+load("@rules_scala//scala:scala.bzl", "scala_library")
+load("//bazel:defs.bzl", "CHISEL_PLUGIN", "SCALACOPTS")
+
+package(default_visibility = ["//visibility:public"])
+
+exports_files(["LICENSE"])
+
+# The library JAR: Scala sources plus the packaged SystemVerilog models,
+# schemas and timing scripts, at the same resource paths as sbt's JAR.
+scala_library(
+    name = "chisel_async",
+    srcs = glob(["src/main/scala/**/*.scala"]),
+    plugins = CHISEL_PLUGIN,
+    resource_strip_prefix = "src/main/resources",
+    resources = glob(["src/main/resources/**"]),
+    scalacopts = SCALACOPTS,
+    deps = [
+        "@maven//:com_lihaoyi_geny_2_13",
+        "@maven//:com_lihaoyi_ujson_2_13",
+        "@maven//:com_lihaoyi_upickle_core_2_13",
+        "@maven//:org_chipsalliance_chisel_2_13",
+    ],
+)

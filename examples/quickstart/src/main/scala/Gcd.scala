@@ -11,9 +11,8 @@ class GcdOperands extends Bundle { val a = UInt(8.W); val b = UInt(8.W) }
   * The initial selector admits a job; each iteration selects feedback until done.
   * All state and control use public library components, with no implicit clock.
   */
-class Gcd extends AsyncModule {
-  private val timing = BundledTiming.Simulation
-  private val cell = ModelTime.ps(1000)
+class Gcd(timing: BundledTiming = BundledTiming.Simulation, cell: ModelTime = ModelTime.ps(1000))
+    extends AsyncModule {
   val in = fourPhaseInput("in", new GcdOperands)
   val out = fourPhaseOutput("out", UInt(8.W))
   private val mux = asyncChild("mux")(d => new FourPhaseMux(new GcdOperands, 2, timing, cell, d))

@@ -15,12 +15,12 @@ object ExampleTiming {
   val bundled = BundledTiming.Simulation
 }
 
-class AddPipeline extends AsyncModule {
+class AddPipeline(timing: BundledTiming = ExampleTiming.bundled) extends AsyncModule {
   val in = fourPhaseInput("in", new Operands)
   val out = fourPhaseOutput("out", UInt(9.W))
   private val add = asyncChild("add")(d => new FourPhaseStage(
-    new Operands, UInt(9.W), (x: Operands) => x.a +& x.b, ExampleTiming.bundled, d))
-  private val hold = asyncChild("hold")(d => new LongHoldBuffer(UInt(9.W), ExampleTiming.bundled, d))
+    new Operands, UInt(9.W), (x: Operands) => x.a +& x.b, timing, d))
+  private val hold = asyncChild("hold")(d => new LongHoldBuffer(UInt(9.W), timing, d))
   FourPhase.connect(add.in, in)
   FourPhase.connect(hold.in, add.out)
   FourPhase.connect(out, hold.out)

@@ -1,0 +1,44 @@
+load("@rules_scala//scala:scala.bzl", "scala_binary", "scala_library")
+load("//bazel:defs.bzl", "CHISEL_PLUGIN", "SCALACOPTS")
+
+package(default_visibility = ["//visibility:public"])
+
+# Structural standard-cell adapters for the library's primitives, the export
+# that hands them to AsicMapping, and the routed-netlist sign-off.
+scala_library(
+    name = "openroad",
+    srcs = glob(["*.scala"]),
+    plugins = CHISEL_PLUGIN,
+    scalacopts = SCALACOPTS,
+    deps = [
+        "//:chisel_async",
+        "@maven//:com_lihaoyi_geny_2_13",
+        "@maven//:com_lihaoyi_ujson_2_13",
+        "@maven//:com_lihaoyi_upickle_core_2_13",
+        "@maven//:org_chipsalliance_chisel_2_13",
+    ],
+)
+
+scala_binary(
+    name = "export",
+    main_class = "chiselasync.openroad.Export",
+    runtime_deps = [
+        ":openroad",
+        "//examples/quickstart",
+    ],
+)
+
+scala_binary(
+    name = "signoff",
+    main_class = "chiselasync.openroad.Signoff",
+    runtime_deps = [":openroad"],
+)
+
+exports_files([
+    "async.sdc",
+    "corner.tcl",
+    "flatten.ys",
+    "images.tcl",
+    "preserve.tcl",
+    "signoff_test.sh",
+])

@@ -1,0 +1,75 @@
+load("@bazel-orfs//:openroad.bzl", "orfs_flow")
+load("@rules_scala//scala:scala.bzl", "scala_binary")
+load("//bazel:defs.bzl", "CHISEL_PLUGIN", "SCALACOPTS", "chisel_async_run")
+load("//openroad:async_flow.bzl", "FAST_SETTINGS")
+
+# The synchronous baseline: the quickstart algorithms with a clock and Decoupled
+# interfaces, through the same flow and PDKs as the asynchronous designs.
+scala_binary(
+    name = "emit_sync",
+    srcs = glob(["src/main/scala/*.scala"]),
+    main_class = "EmitSync",
+    plugins = CHISEL_PLUGIN,
+    scalacopts = SCALACOPTS,
+    deps = ["@maven//:org_chipsalliance_chisel_2_13"],
+)
+
+# A target period on each PDK, near what the designs reach; the comparison
+# reads the period actually reached (target - WNS), not this number.
+CLOCK_PERIOD = {
+    "asap7": "300",
+    "gf180": "8",
+}
+
+[
+    chisel_async_run(
+        name = "{}_rtl_dir".format(design.lower()),
+        args = [
+            design,
+            "$(OUT)",
+        ],
+        tool = ":emit_sync",
+    )
+    for design in [
+        "SyncAddPipeline",
+        "SyncGcd",
+    ]
+]
+
+[
+    genrule(
+        name = "{}_rtl".format(design.lower()),
+        srcs = [":{}_rtl_dir".format(design.lower())],
+        outs = ["{}.sv".format(design)],
+        cmd = "cp $(location :{}_rtl_dir)/{}.sv $@".format(design.lower(), design),
+    )
+    for design in [
+        "SyncAddPipeline",
+        "SyncGcd",
+    ]
+]
+
+[
+    orfs_flow(
+        name = "{}_{}".format(design.lower(), tech),
+        # Full timing repair: the baseline gets everything the flow can do.
+        arguments = {
+            k: v
+            for k, v in FAST_SETTINGS.items()
+            if k not in ["SKIP_CTS_REPAIR_TIMING", "SKIP_INCREMENTAL_REPAIR"]
+        } | {
+            "CORE_UTILIZATION": "30",
+            "PLACE_DENSITY": "0.60",
+        },
+        pdk = "@orfs//flow:" + tech,
+        sources = {"SDC_FILE": [":constraints.sdc"]},
+        top = design,
+        user_arguments = {"CLOCK_PERIOD": period} | ({"TRACK_OPTION": "7t"} if tech == "gf180" else {}),
+        verilog_files = [":{}_rtl".format(design.lower())],
+    )
+    for design in [
+        "SyncAddPipeline",
+        "SyncGcd",
+    ]
+    for tech, period in CLOCK_PERIOD.items()
+]

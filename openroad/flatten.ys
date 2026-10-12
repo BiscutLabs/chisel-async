@@ -1,0 +1,8 @@
+# AsicMapping's wrappers ask for their adapters to stay hierarchical. The
+# adapters are already library cells marked keep and dont_touch, so flatten:
+# OpenROAD's hierarchical link cannot read yosys's uniquified module names.
+setattr -unset keep_hierarchy
+setattr -mod -unset keep_hierarchy
+# The contract names its channel endpoints by probe wires (ca_p_*). Keep them,
+# so the routed netlist still has a net of that name to bind each one to.
+setattr -set keep 1 w:*ca_p_*

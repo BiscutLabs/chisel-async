@@ -1,0 +1,106 @@
+gf180: latch and adder maps for the 7-track library
+
+flow/platforms/gf180/cells_adders.v and cells_latch.v name the 9-track
+cells (gf180mcu_fd_sc_mcu9t5v0__addh_1, __addf_1, __latq_1) whatever
+TRACK_OPTION says. With TRACK_OPTION=7t yosys maps every extracted adder
+and inferred latch to a cell the 7-track liberty does not have, and
+synthesis fails `check -assert` on the undriven outputs.
+
+This adds 7-track copies of both maps and selects them by TRACK_OPTION.
+
+Carried by chisel-async for its gf180 flow, which uses the 7-track library
+as docs/gf180-reference.md does. Not upstreamed. Retires at an ORFS bump
+that fixes the maps for 7t.
+
+diff --git a/flow/platforms/gf180/cells_adders_7t.v b/flow/platforms/gf180/cells_adders_7t.v
+new file mode 100644
+index 0000000..5544497
+--- /dev/null
++++ b/flow/platforms/gf180/cells_adders_7t.v
+@@ -0,0 +1,48 @@
++
++(* techmap_celltype = "$fa" *)
++module _tech_fa (A, B, C, X, Y);
++  parameter WIDTH = 1;
++  (* force_downto *)
++    input [WIDTH-1 : 0] A, B, C;
++  (* force_downto *)
++    output [WIDTH-1 : 0] X, Y;
++  
++  parameter _TECHMAP_CONSTVAL_A_ = WIDTH'bx;
++  parameter _TECHMAP_CONSTVAL_B_ = WIDTH'bx;
++  parameter _TECHMAP_CONSTVAL_C_ = WIDTH'bx;
++  
++  genvar i;
++  generate for (i = 0; i < WIDTH; i = i + 1) begin
++      if (_TECHMAP_CONSTVAL_A_[i] === 1'b0 || _TECHMAP_CONSTVAL_B_[i] === 1'b0 || _TECHMAP_CONSTVAL_C_[i] === 1'b0) begin
++        if (_TECHMAP_CONSTVAL_C_[i] === 1'b0) begin
++          gf180mcu_fd_sc_mcu7t5v0__addh_1 halfadder_Cconst (
++              .A(A[i]),
++              .B(B[i]),
++              .CO(X[i]), .S(Y[i])
++            );
++        end 
++        else begin
++          if (_TECHMAP_CONSTVAL_B_[i] === 1'b0) begin
++            gf180mcu_fd_sc_mcu7t5v0__addh_1 halfadder_Bconst (
++                .A(A[i]),
++                .B(C[i]),
++                .CO(X[i]), .S(Y[i])
++              );
++          end
++          else begin
++            gf180mcu_fd_sc_mcu7t5v0__addh_1 halfadder_Aconst (
++                .A(B[i]),
++                .B(C[i]),
++                .CO(X[i]), .S(Y[i])
++              );
++          end
++        end
++      end
++      else begin
++        gf180mcu_fd_sc_mcu7t5v0__addf_1 fulladder (
++            .A(A[i]), .B(B[i]), .CI(C[i]), .CO(X[i]), .S(Y[i])
++          );
++      end
++    end endgenerate
++
++endmodule
+diff --git a/flow/platforms/gf180/cells_latch_7t.v b/flow/platforms/gf180/cells_latch_7t.v
+new file mode 100644
+index 0000000..a65ea12
+--- /dev/null
++++ b/flow/platforms/gf180/cells_latch_7t.v
+@@ -0,0 +1,15 @@
++module $_DLATCH_P_(input E, input D, output Q);
++    gf180mcu_fd_sc_mcu7t5v0__latq_1 _TECHMAP_REPLACE_ (
++        .D(D),
++        .E(E),
++        .Q(Q)
++        );
++endmodule
++
++module $_DLATCH_N_(input E, input D, output Q);
++    gf180mcu_fd_sc_mcu7t5v0__latsnq_1 _TECHMAP_REPLACE_ (
++        .D(D),
++        .E(E),
++        .Q(Q)
++        );
++endmodule
+diff --git a/flow/platforms/gf180/config.mk b/flow/platforms/gf180/config.mk
+index 59d9ed8..991cf12 100644
+--- a/flow/platforms/gf180/config.mk
++++ b/flow/platforms/gf180/config.mk
+@@ -58,8 +58,10 @@ export MIN_BUF_CELL_AND_PORTS                 = gf180mcu_fd_sc_mcu$(TRACK_OPTION
+ export MAX_FANOUT                             = 20
+ 
+ # Yosys mapping files
+-export LATCH_MAP_FILE ?= $(PLATFORM_DIR)/cells_latch.v
+-export ADDER_MAP_FILE ?= $(PLATFORM_DIR)/cells_adders.v
++# The maps name cells, and cell names carry the track option.
++_MAP_SUFFIX = $(if $(filter 7t,$(TRACK_OPTION)),_7t)
++export LATCH_MAP_FILE ?= $(PLATFORM_DIR)/cells_latch$(_MAP_SUFFIX).v
++export ADDER_MAP_FILE ?= $(PLATFORM_DIR)/cells_adders$(_MAP_SUFFIX).v
+ 
+ #--------------------------------------------------------
+ # Floorplan

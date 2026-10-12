@@ -1,0 +1,89 @@
+load("@rules_scala//scala:scala.bzl", "scala_binary", "scala_library")
+load("//bazel:defs.bzl", "CHISEL_PLUGIN", "SCALACOPTS", "chisel_async_run")
+load("//openroad:async_flow.bzl", "orfs_async_flow")
+
+package(default_visibility = ["//visibility:public"])
+
+# The quickstart designs, built against the library in this repository rather
+# than the published JAR.
+scala_library(
+    name = "quickstart",
+    srcs = glob(["src/main/scala/*.scala"]),
+    plugins = CHISEL_PLUGIN,
+    scalacopts = SCALACOPTS,
+    deps = [
+        "//:chisel_async",
+        "@maven//:com_lihaoyi_geny_2_13",
+        "@maven//:com_lihaoyi_ujson_2_13",
+        "@maven//:com_lihaoyi_upickle_core_2_13",
+        "@maven//:org_chipsalliance_chisel_2_13",
+    ],
+)
+
+scala_binary(
+    name = "prepare_asic_reference_bin",
+    main_class = "PrepareAsicReference",
+    runtime_deps = [":quickstart"],
+)
+
+# docs/gf180-reference.md's first step: export the pipeline and the GCD and
+# inventory the cells and timing bindings they need.
+chisel_async_run(
+    name = "asic_reference",
+    args = ["$(OUT)/reference"],
+    tool = ":prepare_asic_reference_bin",
+)
+
+# The timing policy each export is built for, in ps: cell min, cell max, and the
+# data budget of the widest transform. Cell max covers a control cell at the
+# slow corner; the data budget covers the design's transform logic there.
+POLICY = {
+    ("AddPipeline", "asap7"): ["5", "100", "400"],
+    ("Gcd", "asap7"): ["5", "100", "800"],
+    ("AddPipeline", "gf180"): ["50", "3000", "12000"],
+    ("Gcd", "gf180"): ["50", "3000", "24000"],
+}
+
+[
+    chisel_async_run(
+        name = "{}_{}_export".format(design.lower(), tech),
+        args = [
+            design,
+            tech,
+            "$(OUT)/export",
+        ] + policy,
+        tool = "//openroad:export",
+    )
+    for (design, tech), policy in POLICY.items()
+]
+
+# The quickstart designs, placed and routed. Utilization is low: the designs
+# are a few hundred cells and the point is to look at them.
+[
+    orfs_async_flow(
+        name = "{}_{}".format(design.lower(), tech),
+        arguments = {
+            "CORE_UTILIZATION": "30",
+            "PLACE_DENSITY": "0.60",
+        },
+        export = ":{}_{}_export".format(design.lower(), tech),
+        pdk = tech,
+        top = design,
+        # The 7-track library, as in docs/gf180-reference.md. Read by the
+        # platform's config.mk, not listed in ORFS's variables.yaml.
+        # Gcd's contract times its initial-token selector state to the token's
+        # data output, a path synthesis removes: the initial value is a
+        # constant. The library's checker rightly refuses a bit with no path;
+        # whether such a path belongs in the contract is a library question.
+        signoff_tags = ["manual"] if design == "Gcd" else [],
+        user_arguments = {"TRACK_OPTION": "7t"} if tech == "gf180" else {},
+    )
+    for design in [
+        "AddPipeline",
+        "Gcd",
+    ]
+    for tech in [
+        "asap7",
+        "gf180",
+    ]
+]
