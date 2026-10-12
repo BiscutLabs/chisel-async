@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import chisel3._
 import chisel3.util._
-import circt.stage.ChiselStage
+import _root_.circt.stage.ChiselStage
 
 /** The quickstart designs again, synchronous: the same algorithms with ordinary
   * Decoupled interfaces and a clock, for a like-for-like comparison through the

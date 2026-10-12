@@ -1,7 +1,7 @@
 load("@bazel-orfs//:openroad.bzl", "orfs_flow")
 load("@rules_scala//scala:scala.bzl", "scala_binary")
 load("//bazel:defs.bzl", "CHISEL_PLUGIN", "SCALACOPTS", "chisel_async_run")
-load("//openroad:async_flow.bzl", "FAST_SETTINGS")
+load("//openroad:async_flow.bzl", "FAST_SETTINGS", "LIBERTY", "icarus_sim", "idle_power", "minimum_period")
 
 # The synchronous baseline: the quickstart algorithms with a clock and Decoupled
 # interfaces, through the same flow and PDKs as the asynchronous designs.
@@ -41,7 +41,8 @@ CLOCK_PERIOD = {
         name = "{}_rtl".format(design.lower()),
         srcs = [":{}_rtl_dir".format(design.lower())],
         outs = ["{}.sv".format(design)],
-        cmd = "cp $(location :{}_rtl_dir)/{}.sv $@".format(design.lower(), design),
+        # firtool writes one file per module and lists them in filelist.f.
+        cmd = "d=$(location :{}_rtl_dir); for f in $$(cat $$d/filelist.f); do cat $$d/$$f; done > $@".format(design.lower()),
     )
     for design in [
         "SyncAddPipeline",
@@ -72,4 +73,114 @@ CLOCK_PERIOD = {
         "SyncGcd",
     ]
     for tech, period in CLOCK_PERIOD.items()
+]
+
+# Functional cell models for simulating routed netlists.
+CELL_MODELS = {
+    "asap7": ["@orfs//flow:platforms/asap7/verilog/stdcell/asap7sc7p5t_{}.v".format(f) for f in [
+        "AO_RVT_TT_201020",
+        "INVBUF_RVT_TT_201020",
+        "OA_RVT_TT_201020",
+        "SEQ_RVT_TT_220101",
+        "SIMPLE_RVT_TT_201020",
+    ]],
+    "gf180": [
+        "@gf180mcu_fd_sc_mcu7t5v0//:functional",
+        ":gf180_udp_aliases",
+    ],
+}
+
+# The routed synchronous netlists, simulated like the asynchronous ones.
+[
+    filegroup(
+        name = "sync{}_{}_netlist".format(design, tech),
+        srcs = [":sync{}_{}_final".format(design, tech)],
+        output_group = "6_final.v",
+    )
+    for design in [
+        "addpipeline",
+        "gcd",
+    ]
+    for tech in CELL_MODELS
+]
+
+# The GF180MCU 7-track functional models instantiate their state UDPs by
+# legacy names; the cell library defines the same tables as
+# gf180mcu_fd_sc_mcu7t5v0__udp_*. Copies under the legacy names.
+genrule(
+    name = "gf180_udp_aliases",
+    srcs = ["@gf180mcu_fd_sc_mcu7t5v0//:udps"],
+    outs = ["gf180_udp_aliases.v"],
+    # The copies drop the originals' include guards, or they would be skipped.
+    cmd = "cat $(SRCS) | grep -v '^`\\(ifndef\\|define\\|endif\\)' | sed " + " ".join([
+        "-e 's/primitive gf180mcu_fd_sc_mcu7t5v0__udp_{}(/primitive UDP_GF018hv5v_mcu_sc7_TT_1P8V_25C_verilog_nonpg_MGM_{}_UDP(/'".format(new, old)
+        for new, old in [
+            ("n_iq_ff", "N_IQ_FF"),
+            ("hn_iq_ff", "HN_IQ_FF"),
+            ("n_iq_latch", "N_IQ_LATCH"),
+            ("hn_iq_latch", "HN_IQ_LATCH"),
+        ]
+    ]) + " > $@",
+)
+
+# The A/B, per PDK and corner: the asynchronous design's routed netlist with
+# its STA delays in it, and the synchronous design at the period it reaches.
+[
+    [
+        icarus_sim(
+            name = "{}_{}_{}_sim".format(design, tech, corner),
+            srcs = [
+                "//examples/quickstart:{}_{}_timed_{}".format(design, tech, corner),
+                "//examples/comparison/bench:async_{}_tb.sv".format(bench),
+                "//examples/comparison/bench:jobs.svh",
+            ] + CELL_MODELS[tech],
+            tags = ["manual"] if design == "gcd" else [],
+        ),
+        minimum_period(
+            name = "sync{}_{}_{}_period".format(design, tech, corner),
+            final = ":sync{}_{}_final".format(design, tech),
+            liberty = LIBERTY[tech][corner],
+            top = "Sync" + top,
+        ),
+        icarus_sim(
+            name = "sync{}_{}_{}_sim".format(design, tech, corner),
+            srcs = [
+                ":sync{}_{}_netlist".format(design, tech),
+                "//examples/comparison/bench:sync_{}_tb.sv".format(bench),
+                "//examples/comparison/bench:jobs.svh",
+            ] + CELL_MODELS[tech],
+            period = ":sync{}_{}_{}_period".format(design, tech, corner),
+        ),
+    ]
+    for design, top, bench in [
+        ("addpipeline", "AddPipeline", "pipeline"),
+        ("gcd", "Gcd", "gcd"),
+    ]
+    for tech in CELL_MODELS
+    for corner in LIBERTY[tech]
+]
+
+# Waiting: the power each design draws while no data moves, per PDK and corner.
+[
+    [
+        idle_power(
+            name = "{}_{}_{}_idle".format(design, tech, corner),
+            final = "//examples/quickstart:{}_{}_final".format(design, tech),
+            liberty = LIBERTY[tech][corner],
+            top = top,
+        ),
+        idle_power(
+            name = "sync{}_{}_{}_idle".format(design, tech, corner),
+            clocked = True,
+            final = ":sync{}_{}_final".format(design, tech),
+            liberty = LIBERTY[tech][corner],
+            top = "Sync" + top,
+        ),
+    ]
+    for design, top in [
+        ("addpipeline", "AddPipeline"),
+        ("gcd", "Gcd"),
+    ]
+    for tech in CELL_MODELS
+    for corner in LIBERTY[tech]
 ]

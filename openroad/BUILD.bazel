@@ -29,6 +29,12 @@ scala_binary(
 )
 
 scala_binary(
+    name = "timed",
+    main_class = "chiselasync.openroad.Timed",
+    runtime_deps = [":openroad"],
+)
+
+scala_binary(
     name = "signoff",
     main_class = "chiselasync.openroad.Signoff",
     runtime_deps = [":openroad"],
@@ -37,6 +43,7 @@ scala_binary(
 exports_files([
     "async.sdc",
     "corner.tcl",
+    "delays.tcl",
     "flatten.ys",
     "images.tcl",
     "preserve.tcl",

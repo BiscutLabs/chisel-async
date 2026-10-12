@@ -92,6 +92,14 @@ def orfs_async_flow(name, export, top, pdk, arguments = {}, signoff_tags = [], *
             liberty = liberty,
             tags = signoff_tags,
         )
+        chisel_async_timed(
+            name = "{}_timed_{}".format(name, corner),
+            final = name + "_final",
+            liberty = liberty,
+            signoff = "{}_signoff_{}".format(name, corner),
+            tags = signoff_tags,
+            top = top,
+        )
         sh_test(
             name = "{}_signoff_{}_test".format(name, corner),
             srcs = [Label("//openroad:signoff_test.sh")],
@@ -225,7 +233,185 @@ chisel_async_images = rule(
     attrs = {
         "export": attr.label(mandatory = True, allow_single_file = True),
         "final": attr.label(mandatory = True),
-        "_openroad": attr.label(default = "@openroad//:openroad", executable = True, cfg = "exec"),
+        "_openroad": attr.label(default = "@openroad//:openroad-qt", executable = True, cfg = "exec"),
         "_script": attr.label(default = "//openroad:images.tcl", allow_single_file = True),
+    },
+)
+
+def _timed_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name + ".v")
+    table = ctx.actions.declare_file(ctx.label.name + ".tsv")
+    spef = [f for f in ctx.files.final if f.basename == "6_final.spef"]
+    if len(spef) != 1:
+        fail("{}: expected one 6_final.spef".format(ctx.label))
+    signoff = ctx.file.signoff
+    ctx.actions.run_shell(
+        command = """
+set -e
+LIBERTY="{libs}" NETLIST={signoff}/check/analysis.v TOP={top} SPEF={spef} OUT={table} \
+  {sta} -no_splash -exit {script} > {table}.log 2>&1 || {{ cat {table}.log; exit 1; }}
+HOME="$PWD" {timed} {netlist} {table} {out}
+""".format(
+            libs = " ".join([f.path for f in ctx.files.liberty]),
+            signoff = signoff.path,
+            top = ctx.attr.top,
+            spef = spef[0].path,
+            table = table.path,
+            sta = ctx.executable._sta.path,
+            script = ctx.file._script.path,
+            timed = ctx.executable._timed.path,
+            netlist = [f for f in ctx.files.final if f.basename == "6_final.v"][0].path,
+            out = out.path,
+        ),
+        inputs = [signoff, spef[0], ctx.file._script] + ctx.files.liberty + ctx.files.final,
+        tools = [ctx.attr._sta[DefaultInfo].files_to_run, ctx.attr._timed[DefaultInfo].files_to_run],
+        outputs = [out, table],
+        mnemonic = "ChiselAsyncTimed",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+chisel_async_timed = rule(
+    implementation = _timed_impl,
+    doc = "The routed netlist with per-output rise/fall delays from STA, for event simulation.",
+    attrs = {
+        "final": attr.label(mandatory = True),
+        "liberty": attr.label_list(allow_files = True, mandatory = True),
+        "signoff": attr.label(mandatory = True, allow_single_file = True),
+        "top": attr.string(mandatory = True),
+        "_script": attr.label(default = "//openroad:delays.tcl", allow_single_file = True),
+        "_sta": attr.label(default = "@openroad//src/sta:opensta", executable = True, cfg = "exec"),
+        "_timed": attr.label(default = "//openroad:timed", executable = True, cfg = "exec"),
+    },
+)
+
+def _sim_impl(ctx):
+    log = ctx.actions.declare_file(ctx.label.name + ".log")
+    includes = {f.dirname: True for f in ctx.files.srcs if f.extension == "svh"}
+    period = ctx.file.period
+    ctx.actions.run_shell(
+        command = """
+set -e
+export IVL_BASE="$PWD/{base}"
+{defines}
+{iverilog} -g2012 -o {log}.vvp {includes} $DEFINES {srcs} > {log} 2>&1 || {{ cat {log}; exit 1; }}
+{vvp} -M "$IVL_BASE" {log}.vvp >> {log} 2>&1
+grep -q '^CA_SIM design=' {log} || {{ cat {log}; exit 1; }}
+""".format(
+            base = ctx.file._ivl_base.path,
+            defines = 'DEFINES="-DPERIOD=$(cat {})"'.format(period.path) if period else 'DEFINES=""',
+            iverilog = ctx.executable._iverilog.path,
+            vvp = ctx.executable._vvp.path,
+            log = log.path,
+            includes = " ".join(["-I" + d for d in includes]),
+            srcs = " ".join([f.path for f in ctx.files.srcs if f.extension != "svh"]),
+        ),
+        inputs = ctx.files.srcs + [ctx.file._ivl_base] + ([period] if period else []),
+        tools = [ctx.attr._iverilog[DefaultInfo].files_to_run, ctx.attr._vvp[DefaultInfo].files_to_run],
+        outputs = [log],
+        mnemonic = "IcarusSim",
+    )
+    return [DefaultInfo(files = depset([log]))]
+
+icarus_sim = rule(
+    implementation = _sim_impl,
+    doc = "Compile and run an Icarus simulation; the log carries a CA_SIM result line.",
+    attrs = {
+        "period": attr.label(allow_single_file = True, doc = "File with the clock period in ps, as PERIOD."),
+        "srcs": attr.label_list(allow_files = True, mandatory = True),
+        "_iverilog": attr.label(default = "@iverilog//:iverilog", executable = True, cfg = "exec"),
+        "_ivl_base": attr.label(default = "@iverilog//:ivl_base", allow_single_file = True),
+        "_vvp": attr.label(default = "@iverilog//:vvp", executable = True, cfg = "exec"),
+    },
+)
+
+def _period_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name + ".txt")
+    script = ctx.actions.declare_file(ctx.label.name + ".tcl")
+
+    def pick(name):
+        found = [f for f in ctx.files.final if f.basename == name]
+        if len(found) != 1:
+            fail("{}: expected one {}".format(ctx.label, name))
+        return found[0]
+
+    netlist, spef, sdc = pick("6_final.v"), pick("6_final.spef"), pick("6_final.sdc")
+    ctx.actions.write(script, "\n".join(
+        ["read_liberty " + f.path for f in ctx.files.liberty] + [
+            "read_verilog " + netlist.path,
+            "link_design " + ctx.attr.top,
+            "read_spef " + spef.path,
+            "read_sdc " + sdc.path,
+            "set_cmd_units -time ps",
+            "set clk [lindex [all_clocks] 0]",
+            "set period [get_property $clk period]",
+            "set slack [sta::time_sta_ui [sta::worst_slack_cmd max]]",
+            "set f [open " + out.path + " w]",
+            "puts $f [format %.1f [expr {$period - $slack}]]",
+            "close $f",
+            "",
+        ],
+    ))
+    ctx.actions.run(
+        executable = ctx.executable._sta,
+        arguments = ["-no_splash", "-exit", script.path],
+        inputs = [netlist, spef, sdc, script] + ctx.files.liberty,
+        outputs = [out],
+        mnemonic = "MinimumPeriod",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+minimum_period = rule(
+    implementation = _period_impl,
+    doc = "The minimum clock period a routed synchronous design reaches at a corner, in ps: period - worst slack.",
+    attrs = {
+        "final": attr.label(mandatory = True),
+        "liberty": attr.label_list(allow_files = True, mandatory = True),
+        "top": attr.string(mandatory = True),
+        "_sta": attr.label(default = "@openroad//src/sta:opensta", executable = True, cfg = "exec"),
+    },
+)
+
+def _idle_power_impl(ctx):
+    out = ctx.actions.declare_file(ctx.label.name + ".json")
+    script = ctx.actions.declare_file(ctx.label.name + ".tcl")
+
+    def pick(name, required = True):
+        found = [f for f in ctx.files.final if f.basename == name]
+        if len(found) != 1 and required:
+            fail("{}: expected one {}".format(ctx.label, name))
+        return found[0] if found else None
+
+    netlist, spef = pick("6_final.v"), pick("6_final.spef")
+    sdc = pick("6_final.sdc") if ctx.attr.clocked else None
+    ctx.actions.write(script, "\n".join(
+        ["read_liberty " + f.path for f in ctx.files.liberty] + [
+            "read_verilog " + netlist.path,
+            "link_design " + ctx.attr.top,
+            "read_spef " + spef.path,
+        ] + (["read_sdc " + sdc.path] if sdc else []) + [
+            # Waiting: no data input moves. A clock, if there is one, keeps running.
+            "set_power_activity -input -density 0",
+            "report_power -format json > " + out.path,
+            "",
+        ],
+    ))
+    ctx.actions.run(
+        executable = ctx.executable._sta,
+        arguments = ["-no_splash", "-exit", script.path],
+        inputs = [netlist, spef, script] + ([sdc] if sdc else []) + ctx.files.liberty,
+        outputs = [out],
+        mnemonic = "IdlePower",
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+idle_power = rule(
+    implementation = _idle_power_impl,
+    doc = "report_power (W, JSON) of a routed design that is waiting: inputs still, clock (if any) running.",
+    attrs = {
+        "clocked": attr.bool(default = False),
+        "final": attr.label(mandatory = True),
+        "liberty": attr.label_list(allow_files = True, mandatory = True),
+        "top": attr.string(mandatory = True),
+        "_sta": attr.label(default = "@openroad//src/sta:opensta", executable = True, cfg = "exec"),
     },
 )

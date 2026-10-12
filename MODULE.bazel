@@ -216,6 +216,29 @@ git_override(
 bazel_dep(name = "sv-elab", version = "2026-07-07")
 bazel_dep(name = "yosys", version = "0.68.bcr.1")
 
+# GF180MCU 7-track functional cell models (Apache-2.0), to simulate routed
+# gf180 netlists. Fetched only by the comparison's gf180 simulations.
+http_archive(
+    name = "gf180mcu_fd_sc_mcu7t5v0",
+    build_file_content = """filegroup(
+    name = "functional",
+    srcs = glob(["cells/*/*.functional.v", "models/*/*.v"]),
+    visibility = ["//visibility:public"],
+)
+filegroup(
+    name = "udps",
+    srcs = glob(["models/*/*.v"]),
+    visibility = ["//visibility:public"],
+)""",
+    sha256 = "60e10f61330a8eda1544489da5d6b36b3f720f4b147558fa4df2fca1cf4537eb",
+    strip_prefix = "globalfoundries-pdk-libs-gf180mcu_fd_sc_mcu7t5v0-0ef8889a8df0acf959683fbe73013f342a2206a2",
+    urls = ["https://github.com/fossi-foundation/globalfoundries-pdk-libs-gf180mcu_fd_sc_mcu7t5v0/archive/0ef8889a8df0acf959683fbe73013f342a2206a2.tar.gz"],
+)
+
+# Icarus Verilog, the event simulator chisel-async tests with, for timed
+# gate-level simulation of the routed netlists.
+bazel_dep(name = "iverilog", version = "13.0.bcr.1")
+
 orfs = use_extension("@bazel-orfs//:extension.bzl", "orfs_repositories")
 orfs.source(
     commit = "3451ca1f56902a49baf50bb8eba345eb709cf9c8",
