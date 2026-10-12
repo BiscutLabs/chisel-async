@@ -87,6 +87,22 @@ four-phase long-hold family or native two-phase Click storage. See the [terminol
 for operation, storage, and implementation differences. Classes under `experimental` retain a known failing controller
 for regression and must not be used in designs.
 
+## Place and route
+
+The quickstart designs go from Chisel to routed layouts on GF180MCU and ASAP7
+with OpenROAD, and their timing contract is checked on the layout with
+extracted parasitics by the library's own `OpenSta.check`. Bazelisk is the
+only install:
+
+```text
+bazelisk test //examples/quickstart:all
+```
+
+<img src="docs/images/gcd_gf180_primitives.png" alt="The quickstart Gcd placed on GF180MCU" width="420">
+
+See [Place and route with OpenROAD](docs/physical-flow.md) for what runs,
+the measurements it produces, and the open questions.
+
 ## Contributing
 
 After installing the [platform prerequisites](docs/contributing.md#prerequisites),
