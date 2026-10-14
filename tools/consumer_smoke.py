@@ -43,6 +43,8 @@ def main():
                 consumer / "src/main/scala/EmitQdi.scala")
     shutil.copy(ROOT / "examples/src/main/scala/chiselasync/examples/EmitBoundaries.scala",
                 consumer / "src/main/scala/EmitBoundaries.scala")
+    shutil.copy(ROOT / "examples/src/main/scala/chiselasync/examples/EmitCaptureReceipts.scala",
+                consumer / "src/main/scala/EmitCaptureReceipts.scala")
     (consumer / "project").mkdir()
     shutil.copy(ROOT / "project/build.properties", consumer / "project/build.properties")
     environment = dict(os.environ)
@@ -102,6 +104,9 @@ def main():
                     "--output", str(consumer / "verification/qdi-sequences")], cwd=ROOT, check=True, timeout=180)
     subprocess.run([sys.executable, str(ROOT / "verification/run_boundaries.py"), "--quick",
                     "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/boundaries")],
+                   cwd=ROOT, check=True, timeout=180)
+    subprocess.run([sys.executable, str(ROOT / "verification/run_capture_receipts.py"),
+                    "--generated", str(consumer / "generated"), "--output", str(consumer / "verification/capture-receipts")],
                    cwd=ROOT, check=True, timeout=180)
     print(f"Published artifact consumed and simulated successfully: {consumer}")
 

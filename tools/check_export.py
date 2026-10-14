@@ -542,6 +542,28 @@ def source_path(node, target):
     return node["rtl_path"] + "." + field.replace(".", "_").replace("[", "_").replace("]", "")
 
 
+def paired_probe_values(a_width, b_width):
+    """Exercise every one-hot/one-cold value beside compact active backgrounds.
+
+    Keep the historical {1, all-ones} cross product. Sweeping both full value
+    sets together would be quadratic in wide payload widths; this union has at
+    most 4 * (a_width + b_width) samples for one driver pair.
+    """
+    require(type(a_width) is int and type(b_width) is int and a_width > 0 and b_width > 0,
+            "INVALID_PROBE_DRIVER_WIDTH")
+
+    def values(width):
+        mask = (1 << width) - 1
+        compact = {1, mask}
+        expanded = compact | {1 << bit for bit in range(width)} | {mask ^ (1 << bit) for bit in range(width)}
+        return compact, expanded
+
+    a_compact, a_expanded = values(a_width)
+    b_compact, b_expanded = values(b_width)
+    return sorted({(a, b) for a in a_expanded for b in b_compact} |
+                  {(a, b) for a in a_compact for b in b_expanded})
+
+
 def probe_source(manifest, scopes, paired=False):
     top = manifest["top"]
     lines = ["module ContractProbe; timeunit 1fs; timeprecision 1fs;"]
@@ -689,10 +711,9 @@ def probe_source(manifest, scopes, paired=False):
             lines.append(f"force {src} = {width}'h0;")
         for first, (a, aw) in enumerate(drivers):
             for b, bw in drivers[first+1:]:
-                for av in sorted({1, (1 << aw)-1}):
-                    for bv in sorted({1, (1 << bw)-1}):
-                        lines += [f"force {a} = {aw}'h{av:x};", f"force {b} = {bw}'h{bv:x};", "#1; check;"]
-                        checks += len(coverage)
+                for av, bv in paired_probe_values(aw, bw):
+                    lines += [f"force {a} = {aw}'h{av:x};", f"force {b} = {bw}'h{bv:x};", "#1; check;"]
+                    checks += len(coverage)
                 lines += [f"force {a} = {aw}'h0;", f"force {b} = {bw}'h0;"]
     lines += coverage
     lines += [f'$display("CONTRACT_PROBES_PASS:{checks}"); $finish; end endmodule']

@@ -257,3 +257,17 @@ python tools/sbt.py simulation/test
 These commands have different scopes. Running only API tests does not qualify
 protocol, delay, export, or packaging changes. The contributor guide maps each
 change to the corresponding runner and explains how to keep evidence from failures.
+
+For retained-payload capture receipts, emit the fixtures and choose a fresh
+campaign directory on every attempt:
+
+```text
+python tools/sbt.py "testOnly chiselasync.CaptureReceiptSpec" "examples/runMain chiselasync.examples.EmitCaptureReceipts target/generated"
+python verification/run_capture_receipts.py --output build/capture-receipts-attempt-1
+```
+
+The campaign validates 24 exports, runs 48 functional clock/join cases, and rejects
+eight actual RTL mutations at specific assertion sites. The Scala suite includes
+a scoped consumer-structure negative control for reading receipt bits without
+valid qualification. This is not a general whole-design valid-fanout audit.
+The complete qualification wrapper includes the receiver campaign too.

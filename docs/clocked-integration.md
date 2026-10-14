@@ -35,6 +35,86 @@ local release before sending work. A stopped clock may stall progress indefinite
 and must run again for release. The bridges do not support independently resetting
 one endpoint while the other retains protocol state.
 
+## Retained-payload capture receipts
+
+`FourPhaseCaptureReceipt[T]` and `ClickCaptureReceipt[T]` connect a native source
+that already holds its payload to a clocked consumer without a second payload
+register. Their constructors take `gen`, `stages = 2`, `settlingCycles = 1`,
+`maskInvalid = false`, and `domain`. Click uses native request/acknowledgement
+parity in both directions; it contains no four-phase converter.
+
+The producer owns the payload. The consumer captures `out.bits` on `out.fire`;
+that edge also updates the receipt ACK. A stalled consumer or stopped receipt
+clock leaves the offer pending. BD retains its payload through full return to
+zero. Click retains its payload through acknowledgement and the physical
+post-capture hold interval described below. Neither receipt contains payload
+storage. With the defaults, each contains seven control bits: two reset-release
+bits, two synchronizer bits, two state bits and one ACK bit.
+
+### Valid and the consumer clock
+
+Only valid-qualified logic may use `out.bits`. With the default direct connection,
+the bus may change asynchronously whenever valid is low. A register that loads
+it merely because `ready` is high is unsafe. Use `when(receipt.out.fire)` for
+consumer capture, not `when(receipt.out.ready)`.
+
+`maskInvalid = true` selects a typed zero while valid is low. It adds combinational
+masking, not storage. It can isolate idle bus activity, but does not authorize
+invalid-cycle transactions or replace valid qualification. Its propagation and
+hold paths must also be qualified.
+
+Run the receipt on the consumer's actual clock. If the receipt instead runs on
+the parent clock while the consumer uses a gated subset of those edges, qualify
+`out.ready` with the effective clock-gate enable so that every receipt fire has
+a real consumer capture edge. Use the gate's retained running/enable state,
+stable across that edge, not an unsynchronized request to start the clock.
+Unrelated or phase-shifted clocks need another explicit crossing; qualifying
+ready is not a general clock-domain converter.
+
+### Synchronization, settling and hold
+
+`stages` must be at least two. `settlingCycles` must be nonnegative. Let E be the
+clock edge on which the receiver state machine detects the synchronized pending
+request. Valid becomes asserted after E plus `settlingCycles` additional edges;
+the earliest acceptance is the following edge. The default one-cycle setting
+preserves the MCU receipt sequence. Values zero and one need no additional
+counter; larger values add a control counter. These are counts of actual
+receipt-clock edges, including any gating, not a time guarantee.
+
+Select these parameters from the worst source-to-consumer data route and the
+minimum control-to-capture interval. Synchronizer latency is not a substitute
+for synchronizer placement/MTBF analysis or a bundled-data setup check.
+
+The earliest data change after capture must satisfy the consumer's hold time
+plus clock-skew and uncertainty allowances. In particular, the minimum ACK
+clock-to-Q, ACK route, source release, and returning data-path delay must provide
+that interval. Click may release immediately upon seeing ACK: the receipt does
+not add a post-ACK hold guard. If masking is enabled, the minimum valid-deassertion
+and mask path must satisfy hold too. Increasing settling cycles affects setup,
+not these post-capture paths. Qualify both minimum and maximum physical paths.
+
+### Multiple sinks and reset
+
+One receipt ACK represents only its own consumer. When a source feeds a native
+store and a receipt, connect the source ACK to a native C-element join of both
+sink ACKs. Retain the source data until that aggregate handshake completes. For
+BD the join must cover both assertion and return; for Click it joins both phase
+polarities. A clocked copy of a native sink's ACK must not be inserted into that
+join. This is a bundled-data fork obligation, including its physical distribution
+timing, rather than an extra function inside the receipt.
+
+V1 supports POR-owned transport, or a coordinated reset of the entire connected
+transport domain. It has **no independent application-reset close/rebase option**.
+Do not reset a producer and withdraw its data while this receiver can still
+capture. Independently resetting applications require a separately verified
+quiescing boundary; the MCU's close/rebase bridges remain separate. Reset aborts
+unaccepted transport but cannot undo a consumer effect already committed.
+
+The [receipt test runner](../verification/run_capture_receipts.py) exercises
+clock gating, both completion orders of a native multi-sink join, reset, stalls,
+and actual RTL fault controls. Digital tests do not qualify physical setup/hold
+or reset distribution.
+
 ## Memory transactions
 
 `AsyncMemoryPort(MemoryShape(addressBits, dataBits), stages = 2, domain)` connects

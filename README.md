@@ -50,6 +50,7 @@ emission warns on drift and records the actual versions.
 | Library | Scala | Chisel | Chisel compiler plugin | firtool | Java |
 | --- | --- | --- | --- | --- | --- |
 | `0.1.0-RC1` | `2.13.18` | `7.16.0` | `7.16.0`, full Scala cross-version | `1.160.0` | JDK `21.0.12.1+1` tested |
+| `0.1.0-RC2-SNAPSHOT` development | `2.13.18` | `7.16.0` | `7.16.0`, full Scala cross-version | `1.160.0` | JDK `21.0.12.1+1` |
 
 | Tool or host | Tested configuration | Scope |
 | --- | --- | --- |
@@ -77,6 +78,7 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Native two-phase storage | [Standard and phase-decoupled Click stages, buffers and FIFOs](docs/click.md) |
 | Return-to-zero dual-rail logic | Strong storage, bounded DIMS functions, fork/join, demux, exclusive merge |
 | Clocked Chisel integration | `DecoupledToFourPhase`, `FourPhaseToDecoupled` |
+| Capture an already held native payload | [`FourPhaseCaptureReceipt`, `ClickCaptureReceipt`](docs/clocked-integration.md#retained-payload-capture-receipts), explicit clock and no duplicate payload register (development) |
 | Memory transactions and events | `AsyncMemoryPort`, `PendingEventBridge` |
 | Consumer async tests | `AsyncTest`: typed four-phase, two-phase and dual-rail tests, optional pin skew; ScalaTest plus Icarus, no Python |
 | Digital timing and compiler inspection | `BundledTiming.Simulation`, primitive models, `ExportDesign` |

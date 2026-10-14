@@ -85,6 +85,14 @@ consumer check. Both hosts must pass before the release can be published.
 
 ## Evidence
 
+The development version `0.1.0-RC2-SNAPSHOT` adds retained-payload capture
+receipts. They do not change the existing buffered bridges, primitive model
+identifiers, contract v3, or port ABI v2. Their clock, valid, timing and reset
+requirements are in [clocked integration](clocked-integration.md#retained-payload-capture-receipts).
+These APIs are not present in the published RC1 artifacts. The snapshot does not
+inherit RC1's complete multi-host release qualification; a subsequent release
+requires the release workflow's own evidence.
+
 The [RC1 release page](https://github.com/BiscutLabs/chisel-async/releases/tag/v0.1.0-RC1)
 includes the source commit, artifact hashes and Windows/Linux consumer reports.
 Publication requires the complete native campaigns and consumption of the same
