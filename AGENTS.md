@@ -6,6 +6,7 @@
 - Keep behavioral simulation views clearly identified. Passing functional tests must not be described as physical timing, QDI or metastability qualification.
 - Keep Scala payload types intact except at documented external primitive boundaries. Reject implicit resizing and unsupported payload types.
 - Capture receipts retain payload ownership at the native source. Preserve valid-qualified consumer use, actual consumer-clock acceptance, native multi-sink ACK joins, explicit settling, post-ACK hold obligations, and coordinated reset. Do not substitute them for independent-reset quiescing bridges. Run CaptureReceiptSpec and the capture-receipt event/structural controls after changes.
+- Export extensions add read-only checks. Keep mandatory stimulus, comparisons and polarity coverage library-owned and report extension counts separately. Run test_export_extensions.py, test_export_pairing.py and existing export controls after changes; do not add raw testbench or reset-override hooks without a separately reviewed contract.
 - Use the existing Scala, Python and cocotb tests. Run the README commands relevant to a change; update contracts and negative controls with behavioral changes. Offer tests/docs when a new feature lacks them.
 - Tests must check meaningful activity and specific failure reasons. Never turn required missing tools, empty suites or failed negative controls into a pass.
 - Use portable Python/JVM tooling and native Windows/Linux/macOS targets. Do not add Yosys, a PDK, Linux-only runtime assumptions or a Chiselator dependency.

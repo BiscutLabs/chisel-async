@@ -93,6 +93,11 @@ These APIs are not present in the published RC1 artifacts. The snapshot does not
 inherit RC1's complete multi-host release qualification; a subsequent release
 requires the release workflow's own evidence.
 
+Python export extension API v1 is also a development addition. It versions the
+downstream validator interface independently of the emitted schemas. The default
+CLI retains its checks; required coverage and extension results are reported
+separately. See [additive export validators](timing-and-export.md#additive-export-validators).
+
 The [RC1 release page](https://github.com/BiscutLabs/chisel-async/releases/tag/v0.1.0-RC1)
 includes the source commit, artifact hashes and Windows/Linux consumer reports.
 Publication requires the complete native campaigns and consumption of the same

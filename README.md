@@ -82,6 +82,7 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Memory transactions and events | `AsyncMemoryPort`, `PendingEventBridge` |
 | Consumer async tests | `AsyncTest`: typed four-phase, two-phase and dual-rail tests, optional pin skew; ScalaTest plus Icarus, no Python |
 | Digital timing and compiler inspection | `BundledTiming.Simulation`, primitive models, `ExportDesign` |
+| Additional export checks | [Python validator API v1](docs/timing-and-export.md#additive-export-validators): resolved endpoint slices and additive validators (development) |
 | ASIC integration | `AsicMapping`, `TimingConstraints`, `OpenSta`; optional partial GF180 reference, no physical qualification |
 
 `FourPhaseBuffer` is a behavioral reference model. Structural designs can use the
