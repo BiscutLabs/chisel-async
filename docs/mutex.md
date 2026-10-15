@@ -30,6 +30,10 @@ must complete its capture, hold and return obligations before releasing the
 request. A stop contender must remain pending through closure/rebase. Capturing
 a stop level does not promise detection of an arbitrarily short input pulse.
 
+`FourPhaseArbiter` already enforces rule 3: its input acknowledgement falls only
+after the corresponding grant falls, so a conforming four-phase producer cannot
+reuse that request before grant release.
+
 ## Reset and rearm
 
 Reset aborts the model's current decision; it cannot undo a delivered effect.
@@ -67,6 +71,11 @@ python -m unittest discover -s verification -p test_mutex_contract_runner.py
 The campaign uses the packaged model directly, all four policies, seeded ties,
 held winners, zero-grant handover, reset/rearm and a long unresolved interval.
 Deliberate owner and output faults must fail at their exact diagnostic IDs.
+The unresolved-interval assertion checks the behavioral model's configured delay;
+it does not specify a physical resolution bound. The sampled winner-retention
+control corrupts the saved reference; separate output-fault controls exercise the
+continuous held-grant monitor. Full qualification runs this campaign and the
+GF180 waveform-checker unit tests without requiring a PDK or ngspice.
 These finite checks establish digital behavior and check the harness. They do
 not prove analog exclusion or a maximum resolution time. Existing randomized
 model stress remains in `verification/run_mutex.py`.

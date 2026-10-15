@@ -5,12 +5,19 @@ import hashlib
 import json
 from pathlib import Path
 
-from characterize import data, edge
+from characterize import CORNERS, data, edge
 from waveform import check_held, validate_transient
 
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def corner_voltage(name):
+    matches = [corner[3] for corner in CORNERS if corner[0] == name]
+    if len(matches) != 1:
+        raise ValueError(f"MUTEX_UNKNOWN_OR_DUPLICATE_CORNER: {name}")
+    return matches[0]
 
 
 def main():
@@ -33,7 +40,7 @@ def main():
         names, rows = data(wave)
         validate_transient(names, rows, 60 if case['kind'] == 'contention' else 230,
                            min(case['slew0_ns'], case['slew1_ns'], .2)/20)
-        voltage = {"3v30": 3.3, "3v00": 3.0, "3v60": 3.6}[case["corner"][-4:]]
+        voltage = corner_voltage(case["corner"])
         errors = check_held(rows, voltage)
         # A threshold-crossing grant must become a valid high while the request
         # remains asserted. A last-sample transition is inconclusive, not a pass.

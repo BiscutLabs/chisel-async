@@ -1,6 +1,38 @@
 # SPDX-License-Identifier: Apache-2.0
 import unittest
-from run_mutex_contract import accepts_log
+from pathlib import Path
+from run_mutex_contract import DIAGNOSTICS, accepts_log, fault_kind
+
+
+class MutexControlInventory(unittest.TestCase):
+    def test_every_contract_diagnostic_has_one_exact_control(self):
+        expected = {
+            1: "MUTEX_REQUEST_WITHDRAWN_BEFORE_SERVICE",
+            2: "MUTEX_GRANT_NOT_RELEASED_BEFORE_REUSE",
+            3: "MUTEX_STALE_REQUEST_AT_REARM",
+            4: "MUTEX_RESET_WITHOUT_QUIESCENCE",
+            5: "MUTEX_GRANT_EXCLUSION",
+            6: "MUTEX_HELD_GRANT_REVOKED",
+            7: "MUTEX_MISSING_ZERO_HANDOVER",
+            8: "MUTEX_GRANT_WITHOUT_REQUEST",
+            9: "MUTEX_RESET_DID_NOT_CLEAR",
+            10: "MUTEX_WINNER_NOT_RETAINED",
+            11: "MUTEX_MODEL_RESOLUTION_DELAY_VIOLATED",
+        }
+        self.assertEqual(DIAGNOSTICS, expected)
+        bench = Path(__file__).with_name("mutex_contract.sv").read_text()
+        for diagnostic in expected.values():
+            self.assertEqual(bench.count(f'$fatal(1,"{diagnostic}")'), 1)
+
+    def test_reference_corruption_is_distinct_from_owner_and_output_faults(self):
+        self.assertEqual(fault_kind(0), "none")
+        self.assertEqual(fault_kind(10), "sampled_reference_corruption")
+        for fault in (1, 2, 3, 4):
+            self.assertEqual(fault_kind(fault), "owner_protocol_fault")
+        for fault in (5, 6, 7, 8, 9, 11):
+            self.assertEqual(fault_kind(fault), "injected_output_fault")
+        with self.assertRaisesRegex(ValueError, "MUTEX_UNKNOWN_FAULT"):
+            fault_kind(12)
 
 
 class MutexLogVerdict(unittest.TestCase):

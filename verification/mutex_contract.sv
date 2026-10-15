@@ -11,7 +11,9 @@ module MutexContract;
   reg inject=0;
   wire [1:0] grant = (FAULT==5 && inject) ? 2'b11 :
                      (FAULT==6 && inject) ? 2'b00 :
-                     (FAULT==7 && inject) ? 2'b10 : physical_model_grant;
+                     (FAULT==7 && inject) ? 2'b10 :
+                     ((FAULT==8 || FAULT==9 || FAULT==11) && inject) ? 2'b01 :
+                     physical_model_grant;
   ChiselAsyncMutex_v1 #(.POLICY(POLICY), .SEED(SEED),
     .RESOLVE_FS(RESOLUTION), .RESOLVE_MAX_FS(RESOLUTION))
     dut(reset,request,physical_model_grant);
@@ -56,6 +58,7 @@ module MutexContract;
   task automatic cold_reset;
     begin
       reset_permitted=1; reset=1; request=0;
+      if (FAULT==9) inject=1;
       #(2*RESOLUTION+1);
       if (grant!==0) $fatal(1,"MUTEX_RESET_DID_NOT_CLEAR");
       reset=0; #1;
@@ -77,22 +80,27 @@ module MutexContract;
     if (FAULT==4) begin
       request=1; wait(grant==1); #1; reset_permitted=0; reset=1;
     end
-    if (FAULT>=5) begin
+    if (FAULT>=5 && FAULT<=7) begin
       request=1; wait(grant==1); #1;
       if (FAULT==7) request=2;
       inject=1;
     end
-    if (FAULT!=0) begin #(4*RESOLUTION); $fatal(1,"MUTEX_FAULT_ESCAPED"); end
+    if (FAULT==8) inject=1; // Grant while both requests are idle.
+    if (FAULT>0 && FAULT<=9) begin #(4*RESOLUTION); $fatal(1,"MUTEX_FAULT_ESCAPED"); end
     for (round=0;round<3;round=round+1) begin
-      // A contender can be unresolved for the entire sampled interval. There
-      // is no side effect to count or timeout-based forced grant in this owner.
+      // Check the finite model's configured delay, not a physical resolution
+      // bound or an owner obligation. No grant-controlled effect occurs here.
       request=3;
+      if (FAULT==11) inject=1;
       for (integer i=0;i<5;i=i+1) begin
         #(RESOLUTION/10);
-        if (grant!==0) $fatal(1,"MUTEX_UNRESOLVED_SIDE_EFFECT");
+        if (grant!==0) $fatal(1,"MUTEX_MODEL_RESOLUTION_DELAY_VIOLATED");
         unresolved_checks=unresolved_checks+1;
       end
       wait(grant!=0); winner=grant; loser=3-winner; #1;
+      // A changed grant already trips the continuous held-grant monitor.
+      // Corrupt its independent sampled reference to exercise this check too.
+      if (FAULT==10) winner=loser;
       #(2*RESOLUTION);
       if (grant!==winner) $fatal(1,"MUTEX_WINNER_NOT_RETAINED");
       held_checks=held_checks+1;

@@ -9,6 +9,31 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+DIAGNOSTICS = {
+    1: "MUTEX_REQUEST_WITHDRAWN_BEFORE_SERVICE",
+    2: "MUTEX_GRANT_NOT_RELEASED_BEFORE_REUSE",
+    3: "MUTEX_STALE_REQUEST_AT_REARM",
+    4: "MUTEX_RESET_WITHOUT_QUIESCENCE",
+    5: "MUTEX_GRANT_EXCLUSION",
+    6: "MUTEX_HELD_GRANT_REVOKED",
+    7: "MUTEX_MISSING_ZERO_HANDOVER",
+    8: "MUTEX_GRANT_WITHOUT_REQUEST",
+    9: "MUTEX_RESET_DID_NOT_CLEAR",
+    10: "MUTEX_WINNER_NOT_RETAINED",
+    11: "MUTEX_MODEL_RESOLUTION_DELAY_VIOLATED",
+}
+
+
+def fault_kind(fault):
+    if fault == 0:
+        return "none"
+    if fault == 10:
+        return "sampled_reference_corruption"
+    if fault in range(1, 5):
+        return "owner_protocol_fault"
+    if fault in DIAGNOSTICS:
+        return "injected_output_fault"
+    raise ValueError(f"MUTEX_UNKNOWN_FAULT: {fault}")
 
 
 def sha(path):
@@ -43,17 +68,8 @@ def main():
     positives = [(p, 1, 100, 0, None) for p in range(4)]
     positives += [(3, seed, 100, 0, None) for seed in (2, 19, 0xffffffff)]
     positives += [(p, 19, 1000000, 0, None) for p in range(4)]
-    diagnostics = {
-        1: "MUTEX_REQUEST_WITHDRAWN_BEFORE_SERVICE",
-        2: "MUTEX_GRANT_NOT_RELEASED_BEFORE_REUSE",
-        3: "MUTEX_STALE_REQUEST_AT_REARM",
-        4: "MUTEX_RESET_WITHOUT_QUIESCENCE",
-        5: "MUTEX_GRANT_EXCLUSION",
-        6: "MUTEX_HELD_GRANT_REVOKED",
-        7: "MUTEX_MISSING_ZERO_HANDOVER",
-    }
     negatives = [(p, 19, 100, fault, diagnostic) for p in range(4)
-                 for fault, diagnostic in diagnostics.items()]
+                 for fault, diagnostic in DIAGNOSTICS.items()]
     try:
         for index, (policy, seed, resolution, fault, expected) in enumerate(positives + negatives):
             case = output / f"case-{index:02d}-policy{policy}-fault{fault}"
@@ -84,7 +100,8 @@ def main():
             if sha(binary) != binary_before:
                 raise AssertionError("MUTEX_SIMULATION_BINARY_CHANGED")
             report["cases"].append({"policy": policy, "seed": seed, "resolution_fs": resolution,
-                "fault": fault, "expected": expected, "command": command, "returncode": result.returncode,
+                "fault": fault, "fault_kind": fault_kind(fault), "expected": expected,
+                "command": command, "returncode": result.returncode,
                 "binary_sha256": sha(binary), "log_sha256": sha(case / "simulation.log")})
         report["inputs_unchanged"] = all(sha(path) == digest for path, digest in report["input_sha256"].items())
         if not report["inputs_unchanged"]:

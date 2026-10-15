@@ -82,6 +82,6 @@ Before a physical binding is accepted, review the circuit, complete load/slew,
 release/handover and reset characterization with receiver thresholds, establish
 the system reliability target and variation methodology, implement matching and
 well/layout constraints, run DRC/LVS, and repeat checks on the extracted netlist.
-The initial nominal-corner sweep deliberately does not claim Monte Carlo, aging,
+The five-corner schematic sweep deliberately does not claim Monte Carlo, aging,
 noise, supply-collapse behavior or post-layout qualification. A finite successful
 sweep cannot prove zero metastability risk.
