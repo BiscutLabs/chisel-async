@@ -81,12 +81,29 @@ through both acknowledgement phases. `FourPhaseToDecoupled` synchronizes request
 captures the held bus, and acknowledges the async producer only after the clocked
 consumer commits. Synchronizer depth is at least two.
 
+`FourPhaseCaptureReceipt` and `ClickCaptureReceipt` leave payload storage with
+the native producer and acknowledge only at consumer fire. `out.bits` may change
+asynchronously when invalid; only valid-qualified consumer logic may use it.
+Optional invalid masking supplies typed zero, not an additional token or register.
+Receipt fire must coincide with a real consumer clock edge. Multi-sink sources
+require a native aggregate ACK outside the receipt. Explicit synchronization and
+settling counts establish digital latency; source release after ACK and optional
+mask deassertion must still meet the consumer's physical hold time. These receipts
+support coordinated common reset, not independently resetting application
+crossings. See the [full receipt contract](clocked-integration.md#retained-payload-capture-receipts).
+
 The memory backend must hold response valid/data until fire and produce one
 response per accepted request unless coordinated reset intervenes. See
 [memory integration](clocked-integration.md#memory-transactions) for commit and
 reset responsibilities.
 
 ## Reset and composition
+
+Mutex requesters keep each request high through granted service, lower it, then
+observe its grant low before reuse. Local reset requires coordinated electrical
+quiescence or the binding's bootstrap condition; owners clear/rebase old requests
+before release. A Mutex has no epoch memory, bounded physical resolution time or
+fairness guarantee. See the [complete Mutex contract](mutex.md).
 
 Reset aborts pending transport state and restores idle; it does not reverse
 delivered fork branches or committed backend effects. Drivers must assert reset

@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import click_contract
+import export_extensions
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "verification"))
@@ -542,7 +543,31 @@ def source_path(node, target):
     return node["rtl_path"] + "." + field.replace(".", "_").replace("[", "_").replace("]", "")
 
 
-def probe_source(manifest, scopes, paired=False):
+def paired_probe_values(a_width, b_width):
+    """Exercise every one-hot/one-cold value beside compact active backgrounds.
+
+    Keep the historical {1, all-ones} cross product. Sweeping both full value
+    sets together would be quadratic in wide payload widths; this union has at
+    most 4 * (a_width + b_width) samples for one driver pair. The fallback still
+    visits every driver pair: for D drivers of width at most W it is O(D^2 * W),
+    before accounting for the endpoint comparisons at each sample.
+    """
+    require(type(a_width) is int and type(b_width) is int and a_width > 0 and b_width > 0,
+            "INVALID_PROBE_DRIVER_WIDTH")
+
+    def values(width):
+        mask = (1 << width) - 1
+        compact = {1, mask}
+        expanded = compact | {1 << bit for bit in range(width)} | {mask ^ (1 << bit) for bit in range(width)}
+        return compact, expanded
+
+    a_compact, a_expanded = values(a_width)
+    b_compact, b_expanded = values(b_width)
+    return sorted({(a, b) for a in a_expanded for b in b_compact} |
+                  {(a, b) for a in a_compact for b in b_expanded})
+
+
+def probe_source(manifest, scopes, paired=False, *, endpoint_equalities=()):
     top = manifest["top"]
     lines = ["module ContractProbe; timeunit 1fs; timeprecision 1fs;"]
     comparisons, timing_bindings, coverage, drivers = [], [], [], []
@@ -666,7 +691,8 @@ def probe_source(manifest, scopes, paired=False):
                                '$fatal(1, "RESET_BINDING_MISMATCH");')
     # Establish each probe's source mapping before comparing it across a child
     # boundary, so a bad child alias retains its precise mapping diagnostic.
-    lines += ["task check; begin", *comparisons, *timing_bindings, "end endtask", "initial begin",
+    lines += ["task check; begin", *comparisons, *timing_bindings,
+              *export_extensions.equality_statements(endpoint_equalities), "end endtask", "initial begin",
               f"force {top}.reset = 1'b1; #1;"]
     checks = 0
     # A mux needs simultaneous control and data activity. Independent uninitialized
@@ -689,10 +715,9 @@ def probe_source(manifest, scopes, paired=False):
             lines.append(f"force {src} = {width}'h0;")
         for first, (a, aw) in enumerate(drivers):
             for b, bw in drivers[first+1:]:
-                for av in sorted({1, (1 << aw)-1}):
-                    for bv in sorted({1, (1 << bw)-1}):
-                        lines += [f"force {a} = {aw}'h{av:x};", f"force {b} = {bw}'h{bv:x};", "#1; check;"]
-                        checks += len(coverage)
+                for av, bv in paired_probe_values(aw, bw):
+                    lines += [f"force {a} = {aw}'h{av:x};", f"force {b} = {bw}'h{bv:x};", "#1; check;"]
+                    checks += len(coverage)
                 lines += [f"force {a} = {aw}'h0;", f"force {b} = {bw}'h0;"]
     lines += coverage
     lines += [f'$display("CONTRACT_PROBES_PASS:{checks}"); $finish; end endmodule']
@@ -821,10 +846,15 @@ def validate_memories(directory, node, scopes):
     return result
 
 
-def validate_export(directory: Path):
+def validate_export(directory: Path, *, validators=(), extension_api_version=None):
     directory = directory.resolve()
     output = directory / "resolved.json"
     output.write_text('{"status":"RUNNING"}\n', encoding="utf-8")
+    require(type(validators) in (tuple, list), "EXTENSION_INVALID_VALIDATORS")
+    require(not validators or extension_api_version is not None, "EXPORT_EXTENSION_API_REQUIRED")
+    if extension_api_version is not None:
+        require(type(extension_api_version) is int and extension_api_version == export_extensions.API_VERSION,
+                "UNSUPPORTED_EXPORT_EXTENSION_API")
     document = json.loads((directory / "contract.json").read_text(), object_pairs_hook=unique_json)
     manifest = validate_manifest(document)
     sources = read_sources(directory)
@@ -879,7 +909,16 @@ def validate_export(directory: Path):
             require(actual["ports"] == {p["name"]: p for p in primitive["ports"]}, "PRIMITIVE_PORT_MISMATCH")
     require(set(scopes) == expected_scopes, "UNREGISTERED_MODULE_OR_PRIMITIVE")
     validate_port_abi(directory, manifest, scopes)
-    probe, checks = probe_source(manifest, scopes)
+    required = None
+    endpoint_equalities, structural_validators = (), ()
+    if validators:
+        required = export_extensions.required_coverage(manifest)
+        endpoint_equalities, structural_validators = export_extensions.prepare_validators(
+            validators, export_extensions.resolved_export(manifest, scopes))
+    # No extension controls stimulus, mandatory comparisons or polarity activity.
+    # Keep the legacy generator call unchanged when no equality is requested.
+    extension_args = {"endpoint_equalities": endpoint_equalities} if endpoint_equalities else {}
+    probe, checks = probe_source(manifest, scopes, **extension_args)
     (directory / "contract_probe.sv").write_text(probe, encoding="utf-8")
     built = subprocess.run(command[:1] + ["-s", "ContractProbe"] + command[1:] + ["contract_probe.sv"], cwd=directory,
                            text=True, capture_output=True, timeout=60)
@@ -887,7 +926,7 @@ def validate_export(directory: Path):
     require(built.returncode == 0, "RTL_PROBE_ELABORATION_FAILED")
     simulation = subprocess.run(["vvp", "contract_probe.vvp"], cwd=directory, text=True, capture_output=True, timeout=60)
     if "INACTIVE_ENDPOINT:" in simulation.stdout:
-        probe, checks = probe_source(manifest, scopes, paired=True)
+        probe, checks = probe_source(manifest, scopes, paired=True, **extension_args)
         (directory / "contract_probe.sv").write_text(probe, encoding="utf-8")
         built = subprocess.run(command[:1] + ["-s", "ContractProbe"] + command[1:] + ["contract_probe.sv"], cwd=directory,
                                text=True, capture_output=True, timeout=60)
@@ -899,8 +938,33 @@ def validate_export(directory: Path):
                        "PHASE_RETURN_BINDING_MISMATCH", "DATA_PATH_BINDING_MISMATCH", "HOLD_FORK_BINDING_MISMATCH",
                        "QDI_MARKER_BINDING_MISMATCH", "CLICK_BINDING_MISMATCH"):
         require(diagnostic not in simulation.stdout, diagnostic)
+    for diagnostic, _, _ in endpoint_equalities:
+        failure = f"EXPORT_EXTENSION_FAILED:{diagnostic}"
+        require(not re.search(re.escape(failure) + r"(?:\r?\n|$)", simulation.stdout), failure)
     require(simulation.returncode == 0 and f"CONTRACT_PROBES_PASS:{checks}" in simulation.stdout,
             "ENDPOINT_MAPPING_MISMATCH")
+    if required is not None:
+        required.update(mapping_checks=checks)
+    # Snapshot file evidence before local callbacks; a changed input or proof
+    # cannot acquire PASS from a callback that validated the earlier contents.
+    evidence_paths = ({*sources, directory / "contract.json", directory / "ports.json", abi_path,
+                       directory / "design.hw.mlir", directory / "contract_probe.sv",
+                       directory / "contract_probe.vvp", directory / "contract_build.log",
+                       directory / "contract_simulation.log", directory / "filelist.f", output}
+                      if structural_validators else set())
+    evidence_hashes = {path: sha(path.read_bytes()) for path in evidence_paths}
+    try:
+        structural_results = export_extensions.validate_structural(structural_validators, manifest, scopes)
+        require(all(path.is_file() and sha(path.read_bytes()) == digest for path, digest in evidence_hashes.items()),
+                "EXPORT_EXTENSION_MODIFIED_EVIDENCE")
+    except Exception:
+        # Do not retain a success report written by a failing callback.
+        output.write_text('{"status":"FAIL"}\n', encoding="utf-8")
+        raise
+    samples = checks // required["endpoint_count"] if required is not None else 0
+    equality_results = [{"diagnostic_id": diagnostic, "kind": "endpoint-equality", "checks": samples,
+                         "status": "PASS", "left": left.rtl_expression, "right": right.rtl_expression}
+                        for diagnostic, left, right in endpoint_equalities]
     result = {"status": "PASS", "semantic_sha256": document["semantic_sha256"], "endpoints": resolved,
               "mapping_checks": checks,
               "module_definitions": sorted({s["model"] for s in scopes.values()}),
@@ -910,8 +974,15 @@ def validate_export(directory: Path):
               "probe_paths": {e["probe"]: e["rtl_path"] for n in nodes(manifest["design"]) for e in n["endpoints"]}, "source_sha256": {s.name: sha(s.read_bytes()) for s in sources},
               "hw_ir_sha256": sha((directory / "design.hw.mlir").read_bytes()),
               "resolver_sha256": sha(Path(__file__).read_bytes()),
-              "resolver_dependencies": {"click_contract.py": sha(Path(click_contract.__file__).read_bytes())},
+              "resolver_dependencies": {"click_contract.py": sha(Path(click_contract.__file__).read_bytes()),
+                                        "export_extensions.py": sha(Path(export_extensions.__file__).read_bytes())},
               "simulator": "Icarus 13.0"}
+    if validators:
+        result.update(required_coverage=required,
+                      extension_validation={"api_version": extension_api_version,
+                                            "mapping_checks": samples * len(endpoint_equalities),
+                                            "structural_checks": len(structural_results),
+                                            "validators": equality_results + structural_results})
     output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result
 

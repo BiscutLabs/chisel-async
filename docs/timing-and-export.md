@@ -98,6 +98,104 @@ checkout paths. Exact file/checker hashes are separately recorded in evidence.
 Do not edit generated files and keep an old success report. Re-emit and revalidate
 after a design, model, compiler or schema change.
 
+## Additive export validators
+
+Python extension API **v1** supports resolved endpoint/slice references and extra
+validators. This is a supported **source-distributed Python API**, separate from
+the Scala JAR. Obtain the complete repository at a pinned Git commit (or a release
+tag containing the API), and put that checkout's `tools` directory on `PYTHONPATH`.
+Keep its `tools`, `verification` and resources together; copying just two Python
+files is not a supported distribution. It is not currently a PyPI package or part
+of the Maven artifact. Record the source commit and checker hashes with results.
+
+Import `check_export` and `export_extensions`, then pass validators and an explicit
+`extension_api_version=1` to `validate_export`. A nonempty validator list without
+that version is rejected. This API version is independent of contract v3 and port
+ABI v2; no emitted schema migration is required. Incompatible API changes require
+a new API version and migration notes; the version does not pin implementation
+bytes, so consumers still pin the repository revision.
+
+Without validators, the checker retains its existing validation path and result
+fields. It does not resolve extension references or compute extension coverage.
+Existing core rejection rules also remain: an empty probe ABI fails with
+`EMPTY_PROBE_ABI`, even though the manifest schema permits no endpoints. Schema
+acceptance alone is not full export validation. With validators, the additional
+required-inventory calculation rejects empty coverage explicitly; extra checks
+cannot turn it into coverage of a design.
+
+For the exported `PipelineExample` fixture, this checks the lower four input bits
+against the first child's input and inspects the compiled child's input-port shape:
+
+```python
+from pathlib import Path
+from check_export import validate_export
+from export_extensions import EndpointEquality, EndpointSelector, ExportValidator
+
+def first_input_port(context):
+    endpoint = context.endpoint(("first",), "in_data")
+    port = context.scope(("first",))["ports"]["in_bits"]
+    return endpoint.width == 8 and port == {
+        "name": "in_bits", "direction": "input", "width": 8
+    }
+
+result = validate_export(
+    Path("target/generated/pipeline"),
+    extension_api_version=1,
+    validators=[
+        EndpointEquality(
+            "FIRST_INPUT_BINDING",
+            EndpointSelector((), "in_data", lsb=0, width=4),
+            EndpointSelector(("first",), "in_data", lsb=0, width=4),
+        ),
+        ExportValidator("FIRST_INPUT_PORT", first_input_port),
+    ],
+)
+```
+
+An instance selector is a tuple of registered **child IDs**, not generated module
+names; `()` selects the root. Compiler deduplication may share module definitions
+without merging these identities. `context.endpoint(instance, id)` returns the
+resolved RTL path, endpoint width, instance path and actual compiled module name.
+Its `slice(lsb, width)` method returns a checked packed slice. Omitting a selector's
+width selects the remainder of the endpoint starting at `lsb`.
+`context.scope(instance)` exposes a read-only compiled scope with port, net,
+register, parameter and memory inventories. `context.contracts[instance]` exposes
+the read-only registered contract. These observations do not infer arbitrary RTL
+connectivity or prove physical timing.
+
+`EndpointEquality` adds a read-only comparison at every existing mapping-probe
+sample. The references must resolve, slices must fit, widths must match, and an
+equality comparing the same resolved slice to itself is rejected. No raw Verilog,
+additional forcing, stimulus backgrounds or clock/reset scenarios are accepted.
+An equality failure reports `EXPORT_EXTENSION_FAILED:<diagnostic_id>` in both the
+checker error and the simulator's precise fatal location. This checks the sampled
+mapping relation, not functional equivalence over all circuit states.
+
+`ExportValidator` runs after all mandatory mapping probes and equality checks pass.
+It must return exactly `True` or `False`; truthy non-booleans are rejected. False
+reports `EXPORT_EXTENSION_FAILED:<diagnostic_id>`; an exception reports
+`EXPORT_EXTENSION_ERROR:<diagnostic_id>` with its cause retained. Diagnostic IDs
+must be unique uppercase identifiers of at most 96 characters. Unknown API
+versions, references and validator types fail closed.
+
+When validators are supplied, the library computes the required endpoint and
+both-polarity inventory independently of their declarations. `resolved.json` reports it under
+`required_coverage`; `extension_validation` separately records API version,
+validator IDs, comparison expressions and check counts. Extra successes cannot
+replace a missing mandatory check or inactive endpoint bit. The existing
+`mapping_checks` field remains the mandatory count. The required bit-polarity
+count is an obligation discharged by the mandatory probe's success; it is not
+reported as a separately measured observed count. Callback results cannot edit
+the probe plan or coverage, and callbacks receive a fresh, detached read-only
+snapshot. Input and probe evidence hashes are checked again after callbacks.
+
+Callbacks execute trusted local Python; the API is not a security sandbox. Record
+the downstream validation script and its hash alongside a project's evidence.
+Do not mutate or monkey-patch the checker from callbacks. Structural reset-crossing
+and valid-qualified-use audits, new probe backgrounds and clock/reset scenarios
+are outside v1. They require separate contracts and tests before becoming public
+extension points.
+
 ## Compiler scope
 
 Strict export validation requires Chisel 7.16.0, Scala 2.13.18 and firtool 1.160.0.

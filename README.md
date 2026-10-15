@@ -13,6 +13,9 @@ is distributed through GitHub with binary, sources and Scaladoc JARs and a local
 Maven repository ZIP. Maven Central publication is deferred. The library includes
 digital simulation models and tested compiler exports; it does not supply mapped
 physical cells or establish physical timing, QDI, or metastability closure.
+The [Mutex guide](docs/mutex.md) documents persistent ownership and reset/rearm;
+an optional [GF180 schematic candidate](integrations/gf180/mutex/README.md)
+provides reproducible analog experiments while remaining physically unqualified.
 
 ## Start here
 
@@ -50,6 +53,7 @@ emission warns on drift and records the actual versions.
 | Library | Scala | Chisel | Chisel compiler plugin | firtool | Java |
 | --- | --- | --- | --- | --- | --- |
 | `0.1.0-RC1` | `2.13.18` | `7.16.0` | `7.16.0`, full Scala cross-version | `1.160.0` | JDK `21.0.12.1+1` tested |
+| `0.1.0-RC2-SNAPSHOT` development | `2.13.18` | `7.16.0` | `7.16.0`, full Scala cross-version | `1.160.0` | JDK `21.0.12.1+1` |
 
 | Tool or host | Tested configuration | Scope |
 | --- | --- | --- |
@@ -57,6 +61,7 @@ emission warns on drift and records the actual versions.
 | Icarus Verilog | `13.0` | Event simulation, delays, four-state checks, export validation |
 | Verilator | `5.046` | Clocked ChiselSim tests |
 | OpenSTA (optional) | `2.7.0` | Mapped path/arc checker tested on Linux; separate from native JAR qualification |
+| ngspice (optional) | `42` | GF180 Mutex schematic experiments on Linux; no layout or metastability qualification |
 | Native Linux | Ubuntu `24.04`, Python `3.12.13` | Complete existing library campaign and clean-JAR consumer passed |
 | Native Windows | Windows `2025`, Python `3.12.10`, MSYS2 UCRT64 | Same campaign; ChiselSim requires the documented build adapter |
 | macOS | Deferred | No qualification claim |
@@ -77,9 +82,11 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Native two-phase storage | [Standard and phase-decoupled Click stages, buffers and FIFOs](docs/click.md) |
 | Return-to-zero dual-rail logic | Strong storage, bounded DIMS functions, fork/join, demux, exclusive merge |
 | Clocked Chisel integration | `DecoupledToFourPhase`, `FourPhaseToDecoupled` |
+| Capture an already held native payload | [`FourPhaseCaptureReceipt`, `ClickCaptureReceipt`](docs/clocked-integration.md#retained-payload-capture-receipts), explicit clock and no duplicate payload register (development) |
 | Memory transactions and events | `AsyncMemoryPort`, `PendingEventBridge` |
 | Consumer async tests | `AsyncTest`: typed four-phase, two-phase and dual-rail tests, optional pin skew; ScalaTest plus Icarus, no Python |
 | Digital timing and compiler inspection | `BundledTiming.Simulation`, primitive models, `ExportDesign` |
+| Additional export checks | [Python validator API v1](docs/timing-and-export.md#additive-export-validators): resolved endpoint slices and additive validators (development) |
 | ASIC integration | `AsicMapping`, `TimingConstraints`, `OpenSta`; optional partial GF180 reference, no physical qualification |
 
 `FourPhaseBuffer` is a behavioral reference model. Structural designs can use the

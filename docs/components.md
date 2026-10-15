@@ -96,11 +96,13 @@ See [dual-rail logic](dual-rail.md) for packing, indication and assumptions.
 | [`FourPhaseToTwoPhase`, `TwoPhaseToFourPhase`](../src/main/scala/chiselasync/interop/PhaseAdapters.scala) | Between bundled protocols | Buffered conversion; phase state, return guards and history closure |
 | [`FourPhaseToDualRail`, `DualRailToFourPhase`](../src/main/scala/chiselasync/interop/DualRailConverters.scala) | Bundled ↔ RTZ rails | One buffered token; valid/spacer completion and held decode |
 | [`DecoupledToFourPhase`, `FourPhaseToDecoupled`](../src/main/scala/chiselasync/clocked/Bridges.scala) | Clocked ↔ four-phase | Explicit clock, held data bus, synchronized controls, local reset release |
+| [`FourPhaseCaptureReceipt`, `ClickCaptureReceipt`](../src/main/scala/chiselasync/clocked/CaptureReceipts.scala) | Native held payload → clocked consumer | No payload copy; explicit settling, optional invalid mask, ACK at actual consumer capture |
 | [`AsyncMemoryPort`](../src/main/scala/chiselasync/clocked/MemoryPort.scala) | Async request/response ↔ Decoupled backend | One outstanding transaction through full response return; no storage or rollback |
 | `MemoryShape`, `MemoryRequest`, `MemoryResponse` | Typed memory interface | Byte addresses, little-endian byte enables, response data/error |
 | [`PendingEventBridge`](../src/main/scala/chiselasync/clocked/PendingEventBridge.scala) | Clock-sampled external levels → four-phase bit sets | Rising-edge capture and coalescing; not an arbitrary pulse catcher |
 
-For two-phase or dual-rail clocked integration, compose the explicit encoding
+For a retained native two-phase source, use `ClickCaptureReceipt` directly.
+Other two-phase or dual-rail clocked integration can compose an explicit encoding
 converter with a four-phase clock bridge. There is no automatic CDC insertion.
 
 ## Primitives and timing support

@@ -6,7 +6,20 @@ import sys
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
-from qualify import run_steps
+from qualify import ROOT, mutex_steps, run_steps
+
+
+def test_mutex_lanes_require_checkers_and_a_fresh_exact_campaign(tmp_path):
+    first = mutex_steps(sys.executable, tmp_path)
+    second = mutex_steps(sys.executable, tmp_path)
+    assert first[0] == ("mutex-checkers", [sys.executable, "-m", "pytest",
+                        str(ROOT / "integrations/gf180/mutex"), "-q"])
+    assert first[1][0] == "mutex-contract"
+    assert first[1][1][:3] == [sys.executable, str(ROOT / "verification/run_mutex_contract.py"), "--output"]
+    first_output, second_output = (Path(steps[1][1][3]) for steps in (first, second))
+    assert first_output != second_output
+    assert first_output.parent.is_dir() and second_output.parent.is_dir()
+    assert not first_output.exists() and not second_output.exists()
 
 
 def test_wrapper_stops_on_failure_and_invalidates_previous_success(tmp_path):

@@ -16,6 +16,16 @@ import venv
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def mutex_steps(python, output):
+    # Pytest rejects an empty checker suite. Neither lane needs ngspice or a PDK.
+    output.mkdir(parents=True, exist_ok=True)
+    attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=output)) / "campaign"
+    return [("mutex-checkers", [python, "-m", "pytest",
+                               str(ROOT / "integrations/gf180/mutex"), "-q"]),
+            ("mutex-contract", [python, str(ROOT / "verification/run_mutex_contract.py"),
+                                "--output", str(attempt)])]
+
+
 def run_steps(steps, environment, output):
     output.mkdir(parents=True, exist_ok=True)
     report = output / "report.json"
@@ -122,6 +132,7 @@ def main():
                  "examples/runMain chiselasync.examples.EmitReference target/generated",
                  "examples/runMain chiselasync.examples.EmitQdi target/generated",
                  "examples/runMain chiselasync.examples.EmitBoundaries target/generated",
+                 "examples/runMain chiselasync.examples.EmitCaptureReceipts target/generated",
                  "examples/runMain chiselasync.examples.EmitClick target/generated"]
         steps = setup + [("docs", [python, str(ROOT / "tools/check_docs.py")]),
             ("build", build), ("export", [python, str(ROOT / "tools/check_export.py")]),
@@ -146,6 +157,12 @@ def main():
         boundary_parent.mkdir(parents=True, exist_ok=True)
         boundary_attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=boundary_parent)) / "campaign"
         steps += [("boundaries", [python, str(ROOT / "verification/run_boundaries.py"), "--output", str(boundary_attempt)])]
+        capture_parent = ROOT / "target/verification/capture-receipts"
+        capture_parent.mkdir(parents=True, exist_ok=True)
+        capture_attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=capture_parent)) / "campaign"
+        steps += [("capture-receipts", [python, str(ROOT / "verification/run_capture_receipts.py"),
+                                        "--output", str(capture_attempt)])]
+        steps += mutex_steps(python, ROOT / "target/verification/mutex-contract")
         steps += [("chiselsim", [python, str(ROOT / "verification/run_chiselsim.py")]),
                   ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")]),
                   ("quickstart", [python, str(ROOT / "tools/check_quickstart.py")])]

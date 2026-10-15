@@ -42,6 +42,10 @@ library qualification; no native Windows OpenSTA support is claimed. GF180 trial
 adapters have [limited functional/Liberty evidence](gf180-reference.md#what-the-current-experiments-establish),
 not complete hardware qualification. An Icarus 12.0 consumer replay encountered
 runtime failures in history-closure cases, so Icarus 13 remains the tested choice.
+The optional [Mutex schematic experiments](../integrations/gf180/mutex/README.md)
+use ngspice 42 on Linux with externally supplied GF180 models. They preserve the
+public primitive's pins and finite digital model and do not add a qualified
+physical binding or a mandatory runtime dependency.
 
 ## Versioning
 
@@ -84,6 +88,19 @@ that native workflow with the candidate artifact for an additional hash-bound
 consumer check. Both hosts must pass before the release can be published.
 
 ## Evidence
+
+The development version `0.1.0-RC2-SNAPSHOT` adds retained-payload capture
+receipts. They do not change the existing buffered bridges, primitive model
+identifiers, contract v3, or port ABI v2. Their clock, valid, timing and reset
+requirements are in [clocked integration](clocked-integration.md#retained-payload-capture-receipts).
+These APIs are not present in the published RC1 artifacts. The snapshot does not
+inherit RC1's complete multi-host release qualification; a subsequent release
+requires the release workflow's own evidence.
+
+Python export extension API v1 is also a development addition. It versions the
+downstream validator interface independently of the emitted schemas. The default
+CLI retains its checks; required coverage and extension results are reported
+separately. See [additive export validators](timing-and-export.md#additive-export-validators).
 
 The [RC1 release page](https://github.com/BiscutLabs/chisel-async/releases/tag/v0.1.0-RC1)
 includes the source commit, artifact hashes and Windows/Linux consumer reports.
