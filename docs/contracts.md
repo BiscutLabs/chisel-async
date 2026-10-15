@@ -99,6 +99,12 @@ reset responsibilities.
 
 ## Reset and composition
 
+Mutex requesters keep each request high through granted service, lower it, then
+observe its grant low before reuse. Local reset requires coordinated electrical
+quiescence or the binding's bootstrap condition; owners clear/rebase old requests
+before release. A Mutex has no epoch memory, bounded physical resolution time or
+fairness guarantee. See the [complete Mutex contract](mutex.md).
+
 Reset aborts pending transport state and restores idle; it does not reverse
 delivered fork branches or committed backend effects. Drivers must assert reset
 before releasing held signals and restart the entire connected domain together.

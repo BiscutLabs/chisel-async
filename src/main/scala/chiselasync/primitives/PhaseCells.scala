@@ -29,6 +29,14 @@ class Toggle(val delay: ModelTime) extends ExtModule(Map("DELAY_FS" -> IntParam(
 object MutexPolicy extends Enumeration {
   val PreferFirst, PreferSecond, Alternate, SeededRandom = Value
 }
+/** Two persistent requests and mutually exclusive, retained grants.
+  * Keep a request high through service, then observe its grant low before reuse.
+  * Owners clear/rebase old requests before coordinated local-reset release; this
+  * cell has no epoch memory. Unresolved arbitration may stall indefinitely in
+  * physical hardware. Resolution, policy and seed configure only the finite
+  * simulation model, not a physical bound or fairness guarantee. See docs/mutex.md
+  * for ownership, electrical reset and technology-binding obligations.
+  */
 class Mutex(val resolution: ModelTime, val policy: MutexPolicy.Value,
     val seed: Long = 1L, val resolutionJitter: ModelTime = ModelTime(0)) extends ExtModule(Map(
     "RESOLVE_FS" -> IntParam(resolution.fs), "POLICY" -> IntParam(policy.id),
