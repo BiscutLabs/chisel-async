@@ -13,6 +13,9 @@ is distributed through GitHub with binary, sources and Scaladoc JARs and a local
 Maven repository ZIP. Maven Central publication is deferred. The library includes
 digital simulation models and tested compiler exports; it does not supply mapped
 physical cells or establish physical timing, QDI, or metastability closure.
+The [Mutex guide](docs/mutex.md) documents persistent ownership and reset/rearm;
+an optional [GF180 schematic candidate](integrations/gf180/mutex/README.md)
+provides reproducible analog experiments while remaining physically unqualified.
 
 ## Start here
 
@@ -58,6 +61,7 @@ emission warns on drift and records the actual versions.
 | Icarus Verilog | `13.0` | Event simulation, delays, four-state checks, export validation |
 | Verilator | `5.046` | Clocked ChiselSim tests |
 | OpenSTA (optional) | `2.7.0` | Mapped path/arc checker tested on Linux; separate from native JAR qualification |
+| ngspice (optional) | `42` | GF180 Mutex schematic experiments on Linux; no layout or metastability qualification |
 | Native Linux | Ubuntu `24.04`, Python `3.12.13` | Complete existing library campaign and clean-JAR consumer passed |
 | Native Windows | Windows `2025`, Python `3.12.10`, MSYS2 UCRT64 | Same campaign; ChiselSim requires the documented build adapter |
 | macOS | Deferred | No qualification claim |

@@ -42,6 +42,10 @@ library qualification; no native Windows OpenSTA support is claimed. GF180 trial
 adapters have [limited functional/Liberty evidence](gf180-reference.md#what-the-current-experiments-establish),
 not complete hardware qualification. An Icarus 12.0 consumer replay encountered
 runtime failures in history-closure cases, so Icarus 13 remains the tested choice.
+The optional [Mutex schematic experiments](../integrations/gf180/mutex/README.md)
+use ngspice 42 on Linux with externally supplied GF180 models. They preserve the
+public primitive's pins and finite digital model and do not add a qualified
+physical binding or a mandatory runtime dependency.
 
 ## Versioning
 

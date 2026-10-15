@@ -92,3 +92,9 @@ accepting either hardware design, supply the missing custom cells and real data
 paths, characterize the complete adapters, bind the [mapped timing checks](asic-mapping.md#check-the-mapped-timing-paths),
 and complete implementation, extraction and timing-aware functional verification.
 MUTEX characterization is a separate requirement for designs using arbitration.
+
+The optional [Mutex schematic candidate](../integrations/gf180/mutex/README.md)
+adds a full-custom arbitration core and differential filter experiment. It does
+not change the preparer's unsupported-Mutex result. Layout, extraction, receiver
+and reliability qualification are still required before a physical binding can
+be accepted. Its [owner contract](mutex.md) also applies to digital prototypes.

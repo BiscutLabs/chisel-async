@@ -104,6 +104,11 @@ Run the
 structural export validator separately to check timing metadata and probe bindings.
 Physical timing verification also requires the mapped cells and wires.
 
+For the raw Mutex, `python verification/run_mutex_contract.py` runs persistent
+request, grant-release and reset/rearm tests with exact owner/output fault
+diagnostics. It complements the finite randomized model campaign; see the
+[Mutex contract](mutex.md) for its physical limits.
+
 Run `sbt "testOnly AsyncDesignSpec"` in the standalone quickstart to test the
 adder and GCD. `RoutingSpec` adds 300 configurations each for mux and registered
 fork, independent payload oracles, unselected-input checks, reset recovery and

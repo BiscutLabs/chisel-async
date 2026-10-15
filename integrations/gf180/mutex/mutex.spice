@@ -1,0 +1,63 @@
+* SPDX-License-Identifier: Apache-2.0
+* Experimental GF180 3.3 V full-custom Mutex, schematic revision 3.
+* NOT QUALIFIED: no layout, extraction, reliability or production timing model.
+* Core/filter topology: Zhang et al., ASYNC 2015, figure 3 (Seitz-style filter).
+* Reset qualification, dimensions and output buffers are this trial's adaptation.
+* GF180 nfet_03v3/pfet_03v3 subcircuits must be supplied by the caller.
+
+.subckt ca_mutex_inv A Z VDD VSS params: WN=1u WP=2u
+XP Z A VDD VDD pfet_03v3 w={WP} l=0.28u
+XN Z A VSS VSS nfet_03v3 w={WN} l=0.28u
+.ends ca_mutex_inv
+
+.subckt ca_mutex_nand3 A B ENABLE Z VDD VSS
+XP0 Z A VDD VDD pfet_03v3 w=2u l=0.28u
+XP1 Z B VDD VDD pfet_03v3 w=2u l=0.28u
+XP2 Z ENABLE VDD VDD pfet_03v3 w=2u l=0.28u
+XN0 Z A N0 VSS nfet_03v3 w=3u l=0.28u
+XN1 N0 B N1 VSS nfet_03v3 w=3u l=0.28u
+XN2 N1 ENABLE VSS VSS nfet_03v3 w=3u l=0.28u
+.ends ca_mutex_nand3
+
+* PMOS sources use the opposite decision node, not VDD. When the nodes
+* are close together their VSG is below threshold; the NMOS devices pull
+* both filtered nodes low. The decision nodes never drive ordinary outputs.
+.subckt ca_mutex_filter N0 N1 F0 F1 VDD VSS
+XP0 F0 N0 N1 VDD pfet_03v3 w=2u l=0.28u
+XN0 F0 N0 VSS VSS nfet_03v3 w=1u l=0.28u
+XP1 F1 N1 N0 VDD pfet_03v3 w=2u l=0.28u
+XN1 F1 N1 VSS VSS nfet_03v3 w=1u l=0.28u
+.ends ca_mutex_filter
+
+* Low-threshold sense inverter: four-input NOR with all inputs tied together.
+* It must recognize the OTHER loaded grant as low before admitting this grant.
+* Its transfer curve and the full loaded handover are characterization gates.
+.subckt ca_mutex_clear G CLEAR VDD VSS
+XP0 P0 G VDD VDD pfet_03v3 w=1u l=0.28u
+XP1 P1 G P0 VDD pfet_03v3 w=1u l=0.28u
+XP2 P2 G P1 VDD pfet_03v3 w=1u l=0.28u
+XP3 CLEAR G P2 VDD pfet_03v3 w=1u l=0.28u
+XN0 CLEAR G VSS VSS nfet_03v3 w=2u l=0.28u
+XN1 CLEAR G VSS VSS nfet_03v3 w=2u l=0.28u
+XN2 CLEAR G VSS VSS nfet_03v3 w=2u l=0.28u
+XN3 CLEAR G VSS VSS nfet_03v3 w=2u l=0.28u
+.ends ca_mutex_clear
+
+.subckt ca_mutex_output F CLEAR B G VDD VSS
+XP0 B F VDD VDD pfet_03v3 w=2u l=0.28u
+XP1 B CLEAR VDD VDD pfet_03v3 w=2u l=0.28u
+XN0 B F N0 VSS nfet_03v3 w=2u l=0.28u
+XN1 N0 CLEAR VSS VSS nfet_03v3 w=2u l=0.28u
+XDRIVE B G VDD VSS ca_mutex_inv WN=2u WP=4u
+.ends ca_mutex_output
+
+.subckt ca_mutex_gf180_candidate RESET R0 R1 G0 G1 VDD VSS
+XRESET RESET ENABLE VDD VSS ca_mutex_inv
+XCORE0 R0 N1 ENABLE N0 VDD VSS ca_mutex_nand3
+XCORE1 R1 N0 ENABLE N1 VDD VSS ca_mutex_nand3
+XFILTER N0 N1 F0 F1 VDD VSS ca_mutex_filter
+XCLEAR0 G0 CLEAR0 VDD VSS ca_mutex_clear
+XCLEAR1 G1 CLEAR1 VDD VSS ca_mutex_clear
+XOUT0 F0 CLEAR1 B0 G0 VDD VSS ca_mutex_output
+XOUT1 F1 CLEAR0 B1 G1 VDD VSS ca_mutex_output
+.ends ca_mutex_gf180_candidate
