@@ -29,7 +29,7 @@ def sha(path):
 def fixtures():
     for click in (0, 1):
         for stages in (2, 3):
-            for settling, width in ((0, 1), (1, 8), (3, 337)):
+            for settling, width in ((0, 1), (1, 8), (2, 17), (3, 337)):
                 for mask in (0, 1):
                     yield dict(id=f"capture_{'click' if click else 'bd'}_{stages}_{settling}_{mask}",
                                click=click, stages=stages, settling=settling, width=width, mask=mask)
@@ -113,6 +113,11 @@ def mutate(sources, top, output, name, signal, expression):
     return [path if source == original else source for source in sources]
 
 
+def payload_fault(rhs, width):
+    require(type(width) is int and width > 0, "CAPTURE_FAULT_WIDTH")
+    return f"({rhs}) ^ (out_valid ? {width}'h1 : {width}'h0)"
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--generated", type=Path, default=ROOT / "target/generated")
@@ -142,9 +147,9 @@ def main():
                 report["cases"].append(execute(fixture["id"] + f"_clock{qualified}", sources,
                                                 text, output, fixture, qualified))
                 save()
-            if fixture["stages"] == 2 and fixture["settling"] == 1:
+            if fixture["stages"] == 2 and fixture["settling"] in (1, 2):
                 faults = [("invalid_mask", "out_bits", lambda _: "in_bits", "CAPTURE_INVALID_MASK_INITIAL")] if fixture["mask"] else [
-                    ("payload", "out_bits", lambda rhs: f"({rhs}) ^ (out_valid ? 8'h1 : 8'h0)", "CAPTURE_CONSUMER_PAYLOAD"),
+                    ("payload", "out_bits", lambda rhs: payload_fault(rhs, fixture["width"]), "CAPTURE_CONSUMER_PAYLOAD"),
                     ("early_ack", "in_ack", lambda _: "in_req", "CAPTURE_ACK_EARLY"),
                     ("missing_valid", "out_valid", lambda _: "1'b0", "CAPTURE_LATENCY"),
                 ]
@@ -153,7 +158,7 @@ def main():
                     changed = mutate(sources, top, output, name, signal, expression)
                     report["cases"].append(execute(name, changed, text, output, fixture, diagnostic=diagnostic))
                     save()
-        require(len(report["cases"]) == 56 and len(report["exports"]) == 24, "CAPTURE_CASE_INVENTORY")
+        require(len(report["cases"]) == 80 and len(report["exports"]) == 32, "CAPTURE_CASE_INVENTORY")
         report["status"] = "PASS"
     except BaseException as error:
         report.update(status="ERROR", error=str(error))
