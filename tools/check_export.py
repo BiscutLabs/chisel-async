@@ -548,7 +548,9 @@ def paired_probe_values(a_width, b_width):
 
     Keep the historical {1, all-ones} cross product. Sweeping both full value
     sets together would be quadratic in wide payload widths; this union has at
-    most 4 * (a_width + b_width) samples for one driver pair.
+    most 4 * (a_width + b_width) samples for one driver pair. The fallback still
+    visits every driver pair: for D drivers of width at most W it is O(D^2 * W),
+    before accounting for the endpoint comparisons at each sample.
     """
     require(type(a_width) is int and type(b_width) is int and a_width > 0 and b_width > 0,
             "INVALID_PROBE_DRIVER_WIDTH")

@@ -44,7 +44,7 @@ def test_invalid_width_is_rejected(a_width, b_width):
 
 
 @pytest.mark.parametrize("protocol", ["bd", "click"])
-@pytest.mark.parametrize("settling,width", [(0, 1), (1, 8), (3, 337)])
+@pytest.mark.parametrize("settling,width", [(0, 1), (1, 8), (2, 17), (3, 337)])
 def test_masked_receipt_reaches_every_required_bit_polarity(tmp_path, protocol, settling, width):
     fixture = f"capture_{protocol}_2_{settling}_1"
     source = ROOT / "target/generated" / fixture

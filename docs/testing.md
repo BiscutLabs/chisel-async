@@ -266,8 +266,26 @@ python tools/sbt.py "testOnly chiselasync.CaptureReceiptSpec" "examples/runMain 
 python verification/run_capture_receipts.py --output build/capture-receipts-attempt-1
 ```
 
-The campaign validates 24 exports, runs 48 functional clock/join cases, and rejects
-eight actual RTL mutations at specific assertion sites. The Scala suite includes
+The campaign validates 32 exports, runs 64 functional clock/join cases, and rejects
+16 actual RTL mutations at specific assertion sites. Settling counts 0, 1, 2 and 3
+include the smallest counter-backed configuration; faults run at widths 8 and 17.
+The Scala suite includes
 a scoped consumer-structure negative control for reading receipt bits without
 valid qualification. This is not a general whole-design valid-fanout audit.
 The complete qualification wrapper includes the receiver campaign too.
+
+The export checker's paired fallback preserves the earlier active backgrounds
+and adds walking-bit coverage beside them. Growth is linear in width **per driver
+pair**, but the complete fallback visits every pair: O(D² × W) samples for D
+drivers of maximum width W, each with the mandatory endpoint comparisons.
+It runs only when the initial campaign reports inactive endpoints.
+
+A 2026-10-15 Windows/Icarus 13 comparison with the RC1 checker used the same
+exports and two runs in alternating order. The five existing 65-bit fixtures
+(`wide`, `structural_wide`, `longhold_wide`, `two_wide`, `initial_wide`) needed no
+fallback: their check counts were unchanged and each run stayed below 0.44 s.
+`memory_port` used the fallback: 55,008 → 530,144 comparisons and mean wall time
+0.50 → 1.94 s. Forcing the fallback on `longhold_wide` measured 9,180 → 60,750
+comparisons and 0.27 → 1.03 s. These host measurements expose the extra coverage
+cost; they are not a bound for larger exports. Evidence is retained locally in
+`target/review-pr2-feedback/pairing-runtime/`.

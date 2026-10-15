@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Independent receiver trace oracle: empty, changed, duplicated and lost data fail."""
 import pytest
-from run_capture_receipts import audit, fixtures
+from run_capture_receipts import audit, fixtures, payload_fault
 
 
 def transcript(click, width=8):
@@ -38,7 +38,19 @@ def test_oracle_rejects_faults(fault):
 
 def test_fixture_inventory_is_closed():
     cases = list(fixtures())
-    assert len(cases) == len({case["id"] for case in cases}) == 24
+    assert len(cases) == len({case["id"] for case in cases}) == 32
     assert {(case["click"], case["stages"], case["settling"], case["mask"]) for case in cases} == {
         (click, stages, settling, mask) for click in (0, 1) for stages in (2, 3)
-        for settling in (0, 1, 3) for mask in (0, 1)}
+        for settling in (0, 1, 2, 3) for mask in (0, 1)}
+    assert {case["width"] for case in cases if case["settling"] == 2} == {17}
+
+
+@pytest.mark.parametrize("width", (1, 8, 17, 337))
+def test_payload_fault_uses_the_fixture_width(width):
+    assert payload_fault("in_bits", width) == f"(in_bits) ^ (out_valid ? {width}'h1 : {width}'h0)"
+
+
+@pytest.mark.parametrize("width", (0, -1, True, 1.5))
+def test_payload_fault_rejects_invalid_width(width):
+    with pytest.raises(ValueError, match="^CAPTURE_FAULT_WIDTH$"):
+        payload_fault("in_bits", width)
