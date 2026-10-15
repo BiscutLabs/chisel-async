@@ -283,7 +283,7 @@ It runs only when the initial campaign reports inactive endpoints.
 A 2026-10-15 Windows/Icarus 13 comparison with the RC1 checker used the same
 exports and two runs in alternating order. The five existing 65-bit fixtures
 (`wide`, `structural_wide`, `longhold_wide`, `two_wide`, `initial_wide`) needed no
-fallback: their check counts were unchanged and each run stayed below 0.43 s.
+fallback: their check counts were unchanged and each run stayed below 0.44 s.
 `memory_port` used the fallback: 55,008 → 530,144 comparisons and mean wall time
 0.50 → 1.94 s. Forcing the fallback on `longhold_wide` measured 9,180 → 60,750
 comparisons and 0.27 → 1.03 s. These host measurements expose the extra coverage
