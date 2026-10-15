@@ -548,7 +548,9 @@ def paired_probe_values(a_width, b_width):
 
     Keep the historical {1, all-ones} cross product. Sweeping both full value
     sets together would be quadratic in wide payload widths; this union has at
-    most 4 * (a_width + b_width) samples for one driver pair.
+    most 4 * (a_width + b_width) samples for one driver pair. The fallback still
+    visits every driver pair: for D drivers of width at most W it is O(D^2 * W),
+    before accounting for the endpoint comparisons at each sample.
     """
     require(type(a_width) is int and type(b_width) is int and a_width > 0 and b_width > 0,
             "INVALID_PROBE_DRIVER_WIDTH")
@@ -844,12 +846,15 @@ def validate_memories(directory, node, scopes):
     return result
 
 
-def validate_export(directory: Path, *, validators=(), extension_api_version=export_extensions.API_VERSION):
+def validate_export(directory: Path, *, validators=(), extension_api_version=None):
     directory = directory.resolve()
     output = directory / "resolved.json"
     output.write_text('{"status":"RUNNING"}\n', encoding="utf-8")
-    require(type(extension_api_version) is int and extension_api_version == export_extensions.API_VERSION,
-            "UNSUPPORTED_EXPORT_EXTENSION_API")
+    require(type(validators) in (tuple, list), "EXTENSION_INVALID_VALIDATORS")
+    require(not validators or extension_api_version is not None, "EXPORT_EXTENSION_API_REQUIRED")
+    if extension_api_version is not None:
+        require(type(extension_api_version) is int and extension_api_version == export_extensions.API_VERSION,
+                "UNSUPPORTED_EXPORT_EXTENSION_API")
     document = json.loads((directory / "contract.json").read_text(), object_pairs_hook=unique_json)
     manifest = validate_manifest(document)
     sources = read_sources(directory)
@@ -904,9 +909,12 @@ def validate_export(directory: Path, *, validators=(), extension_api_version=exp
             require(actual["ports"] == {p["name"]: p for p in primitive["ports"]}, "PRIMITIVE_PORT_MISMATCH")
     require(set(scopes) == expected_scopes, "UNREGISTERED_MODULE_OR_PRIMITIVE")
     validate_port_abi(directory, manifest, scopes)
-    required = export_extensions.required_coverage(manifest)
-    endpoint_equalities, structural_validators = export_extensions.prepare_validators(
-        validators, export_extensions.resolved_export(manifest, scopes))
+    required = None
+    endpoint_equalities, structural_validators = (), ()
+    if validators:
+        required = export_extensions.required_coverage(manifest)
+        endpoint_equalities, structural_validators = export_extensions.prepare_validators(
+            validators, export_extensions.resolved_export(manifest, scopes))
     # No extension controls stimulus, mandatory comparisons or polarity activity.
     # Keep the legacy generator call unchanged when no equality is requested.
     extension_args = {"endpoint_equalities": endpoint_equalities} if endpoint_equalities else {}
@@ -935,7 +943,8 @@ def validate_export(directory: Path, *, validators=(), extension_api_version=exp
         require(not re.search(re.escape(failure) + r"(?:\r?\n|$)", simulation.stdout), failure)
     require(simulation.returncode == 0 and f"CONTRACT_PROBES_PASS:{checks}" in simulation.stdout,
             "ENDPOINT_MAPPING_MISMATCH")
-    required.update(observed_bit_polarities=required["required_bit_polarities"], mapping_checks=checks)
+    if required is not None:
+        required.update(mapping_checks=checks)
     # Snapshot file evidence before local callbacks; a changed input or proof
     # cannot acquire PASS from a callback that validated the earlier contents.
     evidence_paths = ({*sources, directory / "contract.json", directory / "ports.json", abi_path,
@@ -952,17 +961,12 @@ def validate_export(directory: Path, *, validators=(), extension_api_version=exp
         # Do not retain a success report written by a failing callback.
         output.write_text('{"status":"FAIL"}\n', encoding="utf-8")
         raise
-    samples = checks // required["endpoint_count"]
+    samples = checks // required["endpoint_count"] if required is not None else 0
     equality_results = [{"diagnostic_id": diagnostic, "kind": "endpoint-equality", "checks": samples,
                          "status": "PASS", "left": left.rtl_expression, "right": right.rtl_expression}
                         for diagnostic, left, right in endpoint_equalities]
     result = {"status": "PASS", "semantic_sha256": document["semantic_sha256"], "endpoints": resolved,
               "mapping_checks": checks,
-              "required_coverage": required,
-              "extension_validation": {"api_version": export_extensions.API_VERSION,
-                                       "mapping_checks": samples * len(endpoint_equalities),
-                                       "structural_checks": len(structural_results),
-                                       "validators": equality_results + structural_results},
               "module_definitions": sorted({s["model"] for s in scopes.values()}),
               "instances": {path: scope["model"] for path, scope in scopes.items()},
               "probe_abi_sha256": abi["sha256"],
@@ -973,6 +977,12 @@ def validate_export(directory: Path, *, validators=(), extension_api_version=exp
               "resolver_dependencies": {"click_contract.py": sha(Path(click_contract.__file__).read_bytes()),
                                         "export_extensions.py": sha(Path(export_extensions.__file__).read_bytes())},
               "simulator": "Icarus 13.0"}
+    if validators:
+        result.update(required_coverage=required,
+                      extension_validation={"api_version": extension_api_version,
+                                            "mapping_checks": samples * len(endpoint_equalities),
+                                            "structural_checks": len(structural_results),
+                                            "validators": equality_results + structural_results})
     output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     return result
 
