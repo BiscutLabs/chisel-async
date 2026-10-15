@@ -101,10 +101,27 @@ after a design, model, compiler or schema change.
 ## Additive export validators
 
 Python extension API **v1** supports resolved endpoint/slice references and extra
-validators. Import `check_export` and `export_extensions` from the repository's
-`tools` directory. Pass validators to `validate_export`; the CLI without validators
-keeps its existing behavior. This Python API version is independent of contract v3
-and port ABI v2; no emitted schema migration is required.
+validators. This is a supported **source-distributed Python API**, separate from
+the Scala JAR. Obtain the complete repository at a pinned Git commit (or a release
+tag containing the API), and put that checkout's `tools` directory on `PYTHONPATH`.
+Keep its `tools`, `verification` and resources together; copying just two Python
+files is not a supported distribution. It is not currently a PyPI package or part
+of the Maven artifact. Record the source commit and checker hashes with results.
+
+Import `check_export` and `export_extensions`, then pass validators and an explicit
+`extension_api_version=1` to `validate_export`. A nonempty validator list without
+that version is rejected. This API version is independent of contract v3 and port
+ABI v2; no emitted schema migration is required. Incompatible API changes require
+a new API version and migration notes; the version does not pin implementation
+bytes, so consumers still pin the repository revision.
+
+Without validators, the checker retains its existing validation path and result
+fields. It does not resolve extension references or compute extension coverage.
+Existing core rejection rules also remain: an empty probe ABI fails with
+`EMPTY_PROBE_ABI`, even though the manifest schema permits no endpoints. Schema
+acceptance alone is not full export validation. With validators, the additional
+required-inventory calculation rejects empty coverage explicitly; extra checks
+cannot turn it into coverage of a design.
 
 For the exported `PipelineExample` fixture, this checks the lower four input bits
 against the first child's input and inspects the compiled child's input-port shape:
@@ -161,12 +178,14 @@ reports `EXPORT_EXTENSION_FAILED:<diagnostic_id>`; an exception reports
 must be unique uppercase identifiers of at most 96 characters. Unknown API
 versions, references and validator types fail closed.
 
-The library computes required endpoint inventory and both-polarity coverage
-independently of validators. `resolved.json` reports these under
+When validators are supplied, the library computes the required endpoint and
+both-polarity inventory independently of their declarations. `resolved.json` reports it under
 `required_coverage`; `extension_validation` separately records API version,
 validator IDs, comparison expressions and check counts. Extra successes cannot
 replace a missing mandatory check or inactive endpoint bit. The existing
-`mapping_checks` field remains the mandatory count. Callback results cannot edit
+`mapping_checks` field remains the mandatory count. The required bit-polarity
+count is an obligation discharged by the mandatory probe's success; it is not
+reported as a separately measured observed count. Callback results cannot edit
 the probe plan or coverage, and callbacks receive a fresh, detached read-only
 snapshot. Input and probe evidence hashes are checked again after callbacks.
 

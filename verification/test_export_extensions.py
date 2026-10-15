@@ -12,6 +12,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 from check_export import semantic_hash, validate_export, validate_manifest
+import export_extensions
 from export_extensions import EndpointEquality, EndpointSelector, ExportValidator, required_coverage
 from test_export import edit_manifest
 
@@ -28,6 +29,46 @@ def pipeline(tmp_path):
 def input_binding(width=None):
     return EndpointEquality("FIRST_INPUT_BINDING", EndpointSelector((), "in_data", width=width),
                             EndpointSelector(("first",), "in_data", width=width))
+
+
+def test_default_path_does_not_construct_extension_context(pipeline, monkeypatch):
+    def unexpected(*_):
+        raise AssertionError("Default validation entered the extension API")
+
+    for name in ("required_coverage", "resolved_export", "prepare_validators"):
+        monkeypatch.setattr(export_extensions, name, unexpected)
+    result = validate_export(pipeline)
+    assert result["status"] == "PASS" and result["mapping_checks"] > 0
+    assert "required_coverage" not in result and "extension_validation" not in result
+
+
+def test_empty_probe_abi_preserves_the_existing_core_rejection(pipeline):
+    def empty(manifest):
+        for field in ("endpoints", "channels", "primitives", "timing", "children"):
+            manifest["design"][field] = []
+        manifest["resources"] = {}
+
+    document = json.loads((pipeline / "contract.json").read_text())
+    (pipeline / document["manifest"]["probe_abi"]["file"]).write_text("// no probe references\n")
+    edit_manifest(pipeline, empty, refresh_rtl=True)
+    assert validate_manifest(json.loads((pipeline / "contract.json").read_text()))
+    # The legacy core rejects this before any extension inventory/context exists.
+    # Do not turn schema-level acceptance into a vacuous successful export.
+    with pytest.raises(ValueError, match="^EMPTY_PROBE_ABI$"):
+        validate_export(pipeline)
+    assert json.loads((pipeline / "resolved.json").read_text())["status"] != "PASS"
+
+
+def test_nonempty_validators_require_an_explicit_api_version(pipeline):
+    with pytest.raises(ValueError, match="^EXPORT_EXTENSION_API_REQUIRED$"):
+        validate_export(pipeline, validators=[input_binding()])
+    assert json.loads((pipeline / "resolved.json").read_text())["status"] != "PASS"
+
+
+@pytest.mark.parametrize("validators", (None, {}, "", False))
+def test_invalid_empty_validator_containers_fail_closed(pipeline, validators):
+    with pytest.raises(ValueError, match="^EXTENSION_INVALID_VALIDATORS$"):
+        validate_export(pipeline, validators=validators, extension_api_version=1)
 
 
 def test_empty_required_inventory_has_explicit_failure(pipeline):
@@ -60,11 +101,14 @@ def test_equalities_and_structural_validator_preserve_required_coverage(pipeline
         return (endpoint.width == 8 and context.scope(("first",))["ports"]["in_bits"] ==
                 {"name": "in_bits", "direction": "input", "width": 8})
 
-    result = validate_export(pipeline, validators=[input_binding(4), ExportValidator("FIRST_PORT", check_port)])
-    assert result["required_coverage"] == baseline["required_coverage"]
+    result = validate_export(pipeline, extension_api_version=1, validators=[input_binding(4), ExportValidator("FIRST_PORT", check_port)])
+    assert "required_coverage" not in baseline and "extension_validation" not in baseline
     assert result["mapping_checks"] == baseline["mapping_checks"]
     required = result["required_coverage"]
-    assert required["observed_bit_polarities"] == required["required_bit_polarities"] == 2 * required["endpoint_bits"]
+    assert "observed_bit_polarities" not in required
+    assert required["required_bit_polarities"] == 2 * required["endpoint_bits"]
+    inventory = required_coverage(json.loads((pipeline / "contract.json").read_text())["manifest"])
+    assert required == {**inventory, "mapping_checks": baseline["mapping_checks"]}
     extension = result["extension_validation"]
     assert extension["api_version"] == 1 and extension["structural_checks"] == 1
     assert extension["mapping_checks"] == result["mapping_checks"] // required["endpoint_count"] > 0
@@ -76,7 +120,7 @@ def test_equalities_and_structural_validator_preserve_required_coverage(pipeline
 
 
 def test_connection_mutation_fails_only_the_specific_extra_binding(pipeline):
-    validate_export(pipeline, validators=[input_binding()])
+    validate_export(pipeline, extension_api_version=1, validators=[input_binding()])
     source = pipeline / "PipelineExample.sv"
     text = source.read_text()
     assert text.count(".in_bits  (in_bits)") == 1
@@ -86,7 +130,7 @@ def test_connection_mutation_fails_only_the_specific_extra_binding(pipeline):
     # extra application connection obligation deliberately goes beyond it.
     assert validate_export(pipeline)["status"] == "PASS"
     with pytest.raises(ValueError, match="^EXPORT_EXTENSION_FAILED:FIRST_INPUT_BINDING$"):
-        validate_export(pipeline, validators=[input_binding()])
+        validate_export(pipeline, extension_api_version=1, validators=[input_binding()])
     log = (pipeline / "contract_simulation.log").read_text()
     probe = (pipeline / "contract_probe.sv").read_text().splitlines()
     line = next(i for i, text in enumerate(probe, 1) if "EXPORT_EXTENSION_FAILED:FIRST_INPUT_BINDING" in text)
@@ -102,7 +146,7 @@ def test_failure_id_is_exact_when_diagnostic_names_share_a_prefix(pipeline):
     passing = EndpointEquality("BINDING", EndpointSelector((), "out_data"), EndpointSelector(("second",), "out_data"))
     failing = EndpointEquality("BINDING_INPUT", EndpointSelector((), "in_data"), EndpointSelector(("first",), "in_data"))
     with pytest.raises(ValueError, match="^EXPORT_EXTENSION_FAILED:BINDING_INPUT$"):
-        validate_export(pipeline, validators=[passing, failing])
+        validate_export(pipeline, extension_api_version=1, validators=[passing, failing])
 
 
 def test_extra_successes_cannot_replace_mandatory_polarity_activity(pipeline):
@@ -117,7 +161,7 @@ def test_extra_successes_cannot_replace_mandatory_polarity_activity(pipeline):
     comparison = EndpointEquality("CONSTANT_BITS_MATCH", EndpointSelector(("first",), "in_data", 0, 1),
                                    EndpointSelector(("first",), "in_data", 1, 1))
     with pytest.raises(ValueError, match="^ENDPOINT_MAPPING_MISMATCH$"):
-        validate_export(pipeline, validators=[comparison, ExportValidator("CANNOT_OVERRIDE", lambda _: called.append(1) or True)])
+        validate_export(pipeline, extension_api_version=1, validators=[comparison, ExportValidator("CANNOT_OVERRIDE", lambda _: called.append(1) or True)])
     assert not called
     assert "INACTIVE_ENDPOINT:PipelineExample.ca_child_first.in_bits" in (pipeline / "contract_simulation.log").read_text()
     assert json.loads((pipeline / "resolved.json").read_text())["status"] != "PASS"
@@ -136,7 +180,7 @@ def test_deduplicated_instances_keep_semantic_identity(tmp_path):
                 a.instance_path != b.instance_path and a.rtl_path != b.rtl_path and
                 context.scope(("lane0",))["model"] == context.scope(("lane2",))["model"])
 
-    result = validate_export(directory, validators=[ExportValidator("DEDUP_IDENTITIES", inspect)])
+    result = validate_export(directory, extension_api_version=1, validators=[ExportValidator("DEDUP_IDENTITIES", inspect)])
     assert result["extension_validation"]["structural_checks"] == 1 and len(observed) == 2
 
 
@@ -151,14 +195,14 @@ def test_deduplicated_instances_keep_semantic_identity(tmp_path):
 ])
 def test_invalid_extensions_fail_closed(pipeline, validator, diagnostic):
     with pytest.raises(ValueError, match=f"^{re.escape(diagnostic)}$"):
-        validate_export(pipeline, validators=[validator])
+        validate_export(pipeline, extension_api_version=1, validators=[validator])
 
 
 @pytest.mark.parametrize("result,diagnostic", [(False, "EXPORT_EXTENSION_FAILED"), (1, "EXPORT_EXTENSION_INVALID_RESULT"),
                                               (None, "EXPORT_EXTENSION_INVALID_RESULT"), ({"status": "PASS"}, "EXPORT_EXTENSION_INVALID_RESULT")])
 def test_strict_structural_results(pipeline, result, diagnostic):
     with pytest.raises(ValueError, match=f"^{diagnostic}:LOCAL_CHECK$"):
-        validate_export(pipeline, validators=[ExportValidator("LOCAL_CHECK", lambda _: result)])
+        validate_export(pipeline, extension_api_version=1, validators=[ExportValidator("LOCAL_CHECK", lambda _: result)])
     assert json.loads((pipeline / "resolved.json").read_text())["status"] != "PASS"
 
 
@@ -175,7 +219,7 @@ def test_callback_observations_are_detached_and_read_only(pipeline):
         object.__setattr__(context.endpoint((), "in_data"), "width", 0)
         return True
 
-    result = validate_export(pipeline, validators=[ExportValidator("READ_ONLY", attempt_changes),
+    result = validate_export(pipeline, extension_api_version=1, validators=[ExportValidator("READ_ONLY", attempt_changes),
         ExportValidator("FRESH_VIEW", lambda c: c.endpoint((), "in_data").width == 8)])
     assert result["extension_validation"]["structural_checks"] == 2
 
@@ -187,7 +231,7 @@ def test_callback_cannot_rewrite_validated_evidence(pipeline):
         return True
 
     with pytest.raises(ValueError, match="^EXPORT_EXTENSION_MODIFIED_EVIDENCE$"):
-        validate_export(pipeline, validators=[ExportValidator("BAD_WRITER", change_source)])
+        validate_export(pipeline, extension_api_version=1, validators=[ExportValidator("BAD_WRITER", change_source)])
 
 
 def test_callback_cannot_install_a_success_report(pipeline):
@@ -196,7 +240,7 @@ def test_callback_cannot_install_a_success_report(pipeline):
         return True
 
     with pytest.raises(ValueError, match="^EXPORT_EXTENSION_MODIFIED_EVIDENCE$"):
-        validate_export(pipeline, validators=[ExportValidator("BAD_REPORT", fake_report)])
+        validate_export(pipeline, extension_api_version=1, validators=[ExportValidator("BAD_REPORT", fake_report)])
     assert json.loads((pipeline / "resolved.json").read_text())["status"] == "FAIL"
 
 
@@ -205,13 +249,13 @@ def test_callback_exception_has_named_diagnostic(pipeline):
         raise RuntimeError("validator bug")
 
     with pytest.raises(ValueError, match="^EXPORT_EXTENSION_ERROR:BROKEN$") as error:
-        validate_export(pipeline, validators=[ExportValidator("BROKEN", broken)])
+        validate_export(pipeline, extension_api_version=1, validators=[ExportValidator("BROKEN", broken)])
     assert isinstance(error.value.__cause__, RuntimeError)
 
 
 def test_duplicate_ids_and_unknown_api_are_rejected(pipeline):
     with pytest.raises(ValueError, match="^EXTENSION_DUPLICATE_DIAGNOSTIC$"):
-        validate_export(pipeline, validators=[input_binding(), input_binding()])
+        validate_export(pipeline, extension_api_version=1, validators=[input_binding(), input_binding()])
     for version in (0, 2, True, "1"):
         with pytest.raises(ValueError, match="^UNSUPPORTED_EXPORT_EXTENSION_API$"):
             validate_export(pipeline, extension_api_version=version)
