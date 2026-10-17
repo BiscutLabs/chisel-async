@@ -85,6 +85,7 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Capture an already held native payload | [`FourPhaseCaptureReceipt`, `ClickCaptureReceipt`](docs/clocked-integration.md#retained-payload-capture-receipts), explicit clock and no duplicate payload register (development) |
 | Memory transactions and events | `AsyncMemoryPort`, `PendingEventBridge` |
 | Consumer async tests | `AsyncTest`: typed four-phase, two-phase and dual-rail tests, optional pin skew; ScalaTest plus Icarus, no Python |
+| Payload allowances without per-bit physical cells | [`DataAllowance.Passive`](docs/passive-data-allowance.md): opt-in unmasked model, physical wire (RC2 development) |
 | Digital timing and compiler inspection | `BundledTiming.Simulation`, primitive models, `ExportDesign` |
 | Additional export checks | [Python validator API v1](docs/timing-and-export.md#additive-export-validators): resolved endpoint slices and additive validators (development) |
 | ASIC integration | `AsicMapping`, `TimingConstraints`, `OpenSta`; optional partial GF180 reference, no physical qualification |

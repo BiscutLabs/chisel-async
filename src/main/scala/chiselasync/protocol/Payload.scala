@@ -6,9 +6,9 @@ import chisel3.reflect.DataMirror
 
 /** Validation at the typed channel boundary. No implicit resizing or field coercion. */
 private[chiselasync] object Payload {
-  def validateType(data: Data): Unit = {
+  def validateType(data: Data, allowDirections: Boolean = false): Unit = {
     def visit(value: Data, path: String): Unit = {
-      require(DataMirror.specifiedDirectionOf(value) == SpecifiedDirection.Unspecified,
+      require(allowDirections || DataMirror.specifiedDirectionOf(value) == SpecifiedDirection.Unspecified,
         s"payload $path must not contain explicit directions")
       require(!DataMirror.hasProbeTypeModifier(value), s"payload $path cannot contain probes")
       value match {

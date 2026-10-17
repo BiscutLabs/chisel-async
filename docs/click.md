@@ -173,3 +173,10 @@ The packaged models and simulation preset do not provide physical timing closure
 Native Click routing components—fork, join, mux, demux and arbiter—are not included
 in this initial stage/FIFO family. Existing `TwoPhase*` routing remains usable
 with its documented adapter overhead and timing policy.
+
+## Passive payload simulation policy
+
+Set `dataAllowance = DataAllowance.Passive` in the timing policy to use the
+[reset-free whole-transform allowance](passive-data-allowance.md). The default
+retains the legacy reset-masked data model. Audit invalid data and physical
+setup/hold before opting in; request and ACK guards are unchanged.

@@ -52,6 +52,15 @@ stage blocks its initial offer until `start` rises after coordinated reset settl
 Keep `start` high until the next reset; resetting reinstalls the initial token.
 See [Click timing and initialization](click.md).
 
+## Passive payload allowances
+
+`DataAllowance.Passive` propagates payload changes and X/Z during idle and reset;
+only the owning handshake establishes validity. The whole-transform inertial
+model becomes an unmasked wire in physical export. It supplies no physical hold
+credit. Qualify every side effect/capture, audit fanout, and check actual transform
+max/min, capture/ACK ordering and reset before adoption. Storage/reset seeds and
+all control guards retain their contracts. See [passive allowances](passive-data-allowance.md).
+
 ## Return-to-zero dual rail
 
 For each bit, the pair **`(zero, one)`** is `00` for spacer, `10` for logical zero,

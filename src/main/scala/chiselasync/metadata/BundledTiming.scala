@@ -24,6 +24,7 @@ sealed trait BundledTiming {
   def latchDelay: DelayBounds
   def outputDelay: ModelTime
   def mode: String
+  def dataAllowance: DataAllowance = DataAllowance.Resettable
 }
 object BundledTiming {
   /** Ready-to-use digital experiment (1..10 ns cells, 10 ns data budget).
@@ -65,7 +66,8 @@ object BundledTiming {
     */
   final case class Digital(matchedDelay: ModelTime, dataDelay: DelayBounds,
                            controls: ControlDelays, latchDelay: DelayBounds,
-                           outputDelay: ModelTime) extends BundledTiming {
+                           outputDelay: ModelTime,
+                           override val dataAllowance: DataAllowance = DataAllowance.Resettable) extends BundledTiming {
     require((controls.values :+ latchDelay).forall(_.min.fs > 0), "digital cell/latch lower bounds must be positive")
     require(matchedDelay.fs > dataDelay.max.fs, "matched delay must exceed maximum modeled data delay")
     val minimumOutputGuard: ModelTime = controls.worst + controls.worst + latchDelay.max

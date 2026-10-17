@@ -162,6 +162,11 @@ def main():
         capture_attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=capture_parent)) / "campaign"
         steps += [("capture-receipts", [python, str(ROOT / "verification/run_capture_receipts.py"),
                                         "--output", str(capture_attempt)])]
+        passive_parent = ROOT / "target/verification/passive-allowance"
+        passive_parent.mkdir(parents=True, exist_ok=True)
+        passive_attempt = Path(tempfile.mkdtemp(prefix="attempt-", dir=passive_parent)) / "campaign"
+        steps += [("passive-allowance", [python, str(ROOT / "verification/run_passive_allowance.py"),
+                                        "--output", str(passive_attempt)])]
         steps += mutex_steps(python, ROOT / "target/verification/mutex-contract")
         steps += [("chiselsim", [python, str(ROOT / "verification/run_chiselsim.py")]),
                   ("consumer", [python, str(ROOT / "tools/consumer_smoke.py")]),

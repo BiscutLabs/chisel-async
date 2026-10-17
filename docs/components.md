@@ -114,6 +114,7 @@ blocks with explicit atomic-cell assumptions, not a technology cell library.
 | --- | --- |
 | [`CElement`](../src/main/scala/chiselasync/primitives/CElement.scala) | Two-input unanimity changes output; disagreement holds it; reset clears |
 | [`AsymmetricCElement`](../src/main/scala/chiselasync/primitives/ControlCells.scala) | N common inputs plus rise-only/fall-only groups; inversion masks remain inside the atomic boundary |
+| `PassiveDataAllowance` | Reset-free whole-transform simulation allowance; physical wire, [explicit validity/timing contract](passive-data-allowance.md) |
 | `ControlGate`, `GateOperation` | Resettable delayed buffer, invert, or OR view |
 | `ClosingLatch` | Transparent when `closed = 0`; inertial output propagation; internal model aperture is zero |
 | [`Latch`](../src/main/scala/chiselasync/primitives/Latch.scala) | Transparent when `enable = 1`; explicit reset value and four-state diagnostic behavior |

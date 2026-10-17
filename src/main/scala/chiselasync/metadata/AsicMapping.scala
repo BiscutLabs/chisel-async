@@ -33,7 +33,7 @@ object AsicMapping {
     .map(b => f"${b & 0xff}%02x").mkString
   private def nodes(n: ujson.Value): Seq[ujson.Value] = Seq(n) ++ n("children").arr.toSeq.flatMap(c => nodes(c("contract")))
   private def key(p: ujson.Value): Key = Key(p("model").str, p("parameters").obj.toMap.map { case (k,v) => k -> BigInt(v.str) })
-  private def passive(p: ujson.Value): Boolean = p("view").str == "constraint-marker" || p("model").str == "ChiselAsyncProtocolGuard_v1"
+  private def passive(p: ujson.Value): Boolean = p("view").str == "constraint-marker" || Set("ChiselAsyncProtocolGuard_v1", "ChiselAsyncPassiveDataAllowance_v1").contains(p("model").str)
   private def jsonKey(k: Key): ujson.Value = ujson.Obj("model" -> k.model,
     "parameters" -> ujson.Obj.from(k.parameters.toSeq.sortBy(_._1).map { case (n,v) => n -> ujson.Str(v.toString) }))
 
@@ -144,7 +144,9 @@ object AsicMapping {
         val end = resource.indexOf(");", start)
         require(start >= 0 && end > start, "UNSUPPORTED_PRIMITIVE_HEADER")
         val header = resource.substring(start, end+2)
-        val implementation = if (passive(cells.head)) "// Passive marker or simulation-only protocol diagnostic.\n" else {
+        val implementation = if (model == "ChiselAsyncPassiveDataAllowance_v1")
+          "// Reset-free payload alias; transform max/min timing remains an external obligation.\nassign q = a;\n"
+        else if (passive(cells.head)) "// Passive marker or simulation-only protocol diagnostic.\n" else {
           val variants = bindings.filter(_.key.model == model)
           variants.zipWithIndex.map { case (b,i) =>
             val condition = b.key.parameters.toSeq.sortBy(_._1).map { case (n,v) =>

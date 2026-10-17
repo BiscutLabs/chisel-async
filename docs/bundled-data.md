@@ -137,3 +137,10 @@ The two-argument convenience constructor uses the cell envelope for history
 closure and the return delay for the request guard. Use all four arguments when
 the closure path has a different bound. See [timing and export](timing-and-export.md)
 for how these obligations are carried and checked.
+
+## Passive payload simulation policy
+
+Set `dataAllowance = DataAllowance.Passive` in the timing policy to use the
+[reset-free whole-transform allowance](passive-data-allowance.md). The default
+retains the legacy reset-masked data model. Audit invalid data and physical
+setup/hold before opting in; request and ACK guards are unchanged.

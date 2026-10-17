@@ -144,7 +144,11 @@ class InitialTokens[T <: Data](gen: T, val initial: Seq[T], timing: BundledTimin
     finished(i) := cells.c(s"finished$i", Seq(accepted, out.ack), sticky = true, invert = 2)
   }
   private val data = Mux1H(initial.indices.map(i => starts(i) && !finished(i)), initial)
-  out.bits := cells.buffer("data", data.asUInt, timing.dataDelay.model).asTypeOf(gen)
+  out.bits := (timing.dataAllowance match {
+    case chiselasync.metadata.DataAllowance.Passive =>
+      chiselasync.primitives.PassiveDataAllowance(this, "data", data, timing.dataDelay.model, "reset")
+    case chiselasync.metadata.DataAllowance.Resettable => cells.buffer("data", data.asUInt, timing.dataDelay.model).asTypeOf(gen)
+  })
   out.req := cells.buffer("request_delay", cells.or("request", active.toSeq).asUInt, timing.matchedDelay).asBool
   done := finished.last
   contract.capacity(initial.size); contract.channel("out", out, "output"); contract.endpoint("done", done)

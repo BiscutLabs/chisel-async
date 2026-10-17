@@ -79,7 +79,7 @@ object TimingConstraints {
             t("cells")("min_fs").str.toLong,Some(t("cells")("max_fs").str.toLong),arc))
         }
       }
-      cells.values.filter(_("view").str == "behavioral").filterNot(_("model").str == "ChiselAsyncProtocolGuard_v1")
+      cells.values.filter(_("view").str == "behavioral").filterNot(p => Set("ChiselAsyncProtocolGuard_v1", "ChiselAsyncPassiveDataAllowance_v1").contains(p("model").str))
         .foreach(p => preserved += p("rtl_path").str.split('.').drop(1).mkString("/"))
       node("timing").arr.foreach { t =>
         val id = prefix + t("id").str

@@ -70,6 +70,8 @@ def validate(t, node, endpoints):
             value=params.get('RESET_VALUE','-1')
             require(re.fullmatch(r'0|[1-9][0-9]*',value) and int(value)<2**width and (seeded or value=='0'), 'CLICK_INITIAL_PAYLOAD')
             base.update(WIDTH=str(width),RESET_VALUE=value)
+        elif name=='data_delay' and p['model']=='ChiselAsyncPassiveDataAllowance_v1':
+            model='ChiselAsyncPassiveDataAllowance_v1'; base['WIDTH']=str(endpoints['out_data']['width'])
         else:
             model='ChiselAsyncControlGate_v1'
             base.update(WIDTH=str(endpoints['out_data']['width'] if name=='data_delay' else 1), OP='0',

@@ -47,6 +47,13 @@ use ngspice 42 on Linux with externally supplied GF180 models. They preserve the
 public primitive's pins and finite digital model and do not add a qualified
 physical binding or a mandatory runtime dependency.
 
+The RC2 development API adds opt-in `DataAllowance.Passive` and the separately
+versioned `ChiselAsyncPassiveDataAllowance_v1`. Existing `ControlGate` behavior
+and default timing policies remain unchanged. Source constructors accept the
+new trailing policy field with a default; rebuild consumers when updating the
+mutable snapshot. Primitive model/schema versioning stays separate from the JAR.
+See the [passive contract and tests](passive-data-allowance.md).
+
 ## Versioning
 
 Use independent library versions under `io.github.biscutlabs:chisel-async_2.13`.

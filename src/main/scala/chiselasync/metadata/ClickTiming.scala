@@ -41,7 +41,7 @@ final case class ClickControlDelays(inputCompare: DelayBounds, outputCompare: De
 final case class ClickTiming(controls: ClickControlDelays, payload: DelayBounds, data: DelayBounds,
     requestDelay: ModelTime, acknowledgeDelay: ModelTime, outputDelay: ModelTime,
     setup: ModelTime, hold: ModelTime, pulseHigh: ModelTime, pulseLow: ModelTime,
-    clockSkew: ModelTime) {
+    clockSkew: ModelTime, dataAllowance: DataAllowance = DataAllowance.Resettable) {
   /** Semantic primitive identifiers and their bounds, used by export and delay campaigns. */
   val cells: Map[String, DelayBounds] = Map("input_compare" -> controls.inputCompare,
     "output_compare" -> controls.outputCompare, "fire" -> controls.fire,

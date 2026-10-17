@@ -197,6 +197,15 @@ def validate_manifest(document):
                         "INVALID_PRIMITIVE_PORT")
             require(all(type(v) is str and re.fullmatch(r"-?[0-9]+", v) for v in primitive["parameters"].values()),
                     "INVALID_PRIMITIVE_PARAMETER")
+            if primitive["model"] == "ChiselAsyncPassiveDataAllowance_v1":
+                params = primitive["parameters"]
+                require(set(params) == {"WIDTH", "DELAY_FS"} and re.fullmatch(r"[1-9][0-9]*", params["WIDTH"])
+                        and re.fullmatch(r"0|[1-9][0-9]*", params["DELAY_FS"])
+                        and int(params["DELAY_FS"]) <= 2**63-1, "PASSIVE_ALLOWANCE_PARAMETERS")
+                require(primitive["view"] == "behavioral" and
+                        {p["name"]: (p["width"], p["direction"]) for p in primitive["ports"]} ==
+                        {"a": (int(params["WIDTH"]), "input"), "q": (int(params["WIDTH"]), "output")},
+                        "PASSIVE_ALLOWANCE_PORTS")
             require(primitive["reset_domain"] == domain, "RESET_DOMAIN_MISMATCH")
             require(primitive["reset"] in endpoints and endpoints[primitive["reset"]]["width"] == 1,
                     "MISSING_RESET_ENDPOINT")
@@ -326,8 +335,9 @@ def validate_manifest(document):
                 require(int(budget["min_fs"]) <= int(budget["model_fs"]) <= int(budget["max_fs"]), "INVALID_DELAY_BOUNDS")
                 cell = next((p for p in budget_owner["primitives"] if p["id"] == timing["delay_cell"]), None)
                 require(cell and cell["parameters"].get("DELAY_FS") == budget["model_fs"], "DATA_PATH_PARAMETER_MISMATCH")
-                require(cell["model"] == "ChiselAsyncControlGate_v1" and
-                        all(cell["parameters"].get(k) == v for k, v in {"OP": "0", "RESET_VALUE": "0"}.items()),
+                require((cell["model"] == "ChiselAsyncControlGate_v1" and
+                         all(cell["parameters"].get(k) == v for k, v in {"OP": "0", "RESET_VALUE": "0"}.items())) or
+                        cell["model"] == "ChiselAsyncPassiveDataAllowance_v1",
                         "DATA_PATH_CELL_MISMATCH")
                 owner_policy = next((t for t in budget_owner["timing"] if t["kind"] == "long-hold-bundling-v2"), None)
                 if owner_policy:
@@ -686,9 +696,13 @@ def probe_source(manifest, scopes, paired=False, *, endpoint_equalities=()):
             drivers += [(primitive["rtl_path"] + "." + p["name"], p["width"])
                         for p in primitive["ports"] if p["direction"] == "output"]
             reset_endpoint = next(e for e in node["endpoints"] if e["id"] == primitive["reset"])
-            comparisons.append(f'if ({primitive["rtl_path"]}.reset !== {reset_endpoint["rtl_path"]} || '
-                               f'{reset_endpoint["rtl_path"]} !== {node["rtl_path"]}.reset) '
-                               '$fatal(1, "RESET_BINDING_MISMATCH");')
+            if primitive["model"] == "ChiselAsyncPassiveDataAllowance_v1":
+                comparisons.append(f'if ({reset_endpoint["rtl_path"]} !== {node["rtl_path"]}.reset) '
+                                   '$fatal(1, "RESET_BINDING_MISMATCH");')
+            else:
+                comparisons.append(f'if ({primitive["rtl_path"]}.reset !== {reset_endpoint["rtl_path"]} || '
+                                   f'{reset_endpoint["rtl_path"]} !== {node["rtl_path"]}.reset) '
+                                   '$fatal(1, "RESET_BINDING_MISMATCH");')
     # Establish each probe's source mapping before comparing it across a child
     # boundary, so a bad child alias retains its precise mapping diagnostic.
     lines += ["task check; begin", *comparisons, *timing_bindings,

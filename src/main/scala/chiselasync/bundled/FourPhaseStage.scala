@@ -3,8 +3,8 @@ package chiselasync.bundled
 
 import chisel3._
 import chiselasync.core.{AsyncModule, ResetDomain}
-import chiselasync.metadata.{BundledTiming, ModelTime}
-import chiselasync.primitives.{AsymmetricCElement, ClosingLatch, ControlGate, GateOperation}
+import chiselasync.metadata.{BundledTiming, DataAllowance, ModelTime}
+import chiselasync.primitives.{AsymmetricCElement, ClosingLatch, ControlGate, GateOperation, PassiveDataAllowance}
 import chiselasync.protocol.{Channel, Payload}
 
 /** Furber-Day section 7, Fig. 15, with explicit request/data/output model delays.
@@ -51,13 +51,19 @@ class FourPhaseStage[A <: Data, B <: Data](inGen: A, outGen: B, transform: A => 
   }
 
   private val request = gate("request_delay", GateOperation.Buffer, timing.matchedDelay)
-  private val data = gate("data_delay", GateOperation.Buffer, timing.dataDelay.model, outGen.getWidth)
+  private val data = chisel3.experimental.noPrefix { timing.dataAllowance match {
+    case DataAllowance.Passive => PassiveDataAllowance(this, "data_delay", transformed, timing.dataDelay.model, resetRef).asUInt
+    case DataAllowance.Resettable =>
+      val cell = gate("data_delay", GateOperation.Buffer, timing.dataDelay.model, outGen.getWidth)
+      cell.a := transformed.asUInt
+      cell.q
+  }}
   private val closed = gate("long_hold", GateOperation.Or, timing.controls.longHold.model)
   private val offered = gate("output_delay", GateOperation.Buffer, timing.outputDelay)
   private val a = state("a", timing.controls.a.model, 1, 1, commonInvert = 1, fallingInvert = 1)
   private val b = state("b", timing.controls.b.model, 0, 1)
   private val acknowledge = state("acknowledge", timing.controls.acknowledge.model, 1, 1, commonInvert = 1)
-  private val latchData = WireDefault(UInt(outGen.getWidth.W), data.q)
+  private val latchData = WireDefault(UInt(outGen.getWidth.W), data)
   private val latchClosed = WireDefault(Bool(), closed.q.asBool)
   private val storage = Module(new ClosingLatch(outGen.getWidth, timing.latchDelay.model))
   storage.reset := reset
@@ -66,7 +72,6 @@ class FourPhaseStage[A <: Data, B <: Data](inGen: A, outGen: B, transform: A => 
     s"${timing.mode}; transparent while closed=0; zero model aperture; inertial q propagation")
 
   request.a := in.req.asUInt
-  data.a := transformed.asUInt
   a.common := b.q.asUInt
   a.rising := request.q
   a.falling := out.ack.asUInt

@@ -4,8 +4,8 @@ package chiselasync.bundled
 import chisel3._
 import chisel3.util.Cat
 import chiselasync.core.{AsyncModule, ResetDomain}
-import chiselasync.metadata.{ClickTiming, ModelTime}
-import chiselasync.primitives.{ControlGate, EventRegister, GateOperation, PhaseRegister, XorGate}
+import chiselasync.metadata.{ClickTiming, DataAllowance, ModelTime}
+import chiselasync.primitives.{ControlGate, EventRegister, GateOperation, PassiveDataAllowance, PhaseRegister, XorGate}
 import chiselasync.protocol.{Payload, TwoPhase}
 
 /** Common ports and state for [[ClickStage]] and [[PhaseDecoupledClickStage]].
@@ -65,7 +65,13 @@ abstract class NativeClickStage[A <: Data, B <: Data] private[bundled] (
     c
   }
   private val request = buffer("request_delay",timing.requestDelay)
-  private val data = buffer("data_delay",timing.data.model,outGen.getWidth)
+  private val data = chisel3.experimental.noPrefix { timing.dataAllowance match {
+    case DataAllowance.Passive => PassiveDataAllowance(this, "data_delay", transformed, timing.data.model, resetRef).asUInt
+    case DataAllowance.Resettable =>
+      val cell = buffer("data_delay", timing.data.model, outGen.getWidth)
+      cell.a := transformed.asUInt
+      cell.q
+  }}
   private val inputPhase = phase("input_phase",false)
   private val outputPhase = if(phaseDecoupled) phase("output_phase",initial.nonEmpty) else inputPhase
   private val pending = compare("input_compare")
@@ -80,13 +86,13 @@ abstract class NativeClickStage[A <: Data, B <: Data] private[bundled] (
     "RESET_VALUE"->resetBits),resetRef,"positive-edge local-pulse capture; initialized literal when seeded")
   private val acknowledge=buffer("acknowledge_guard",timing.acknowledgeDelay)
   private val offer=buffer("output_guard",timing.outputDelay, value=if(initial.nonEmpty) BigInt(1) else BigInt(0))
-  request.a:=in.req.asUInt; data.a:=transformed.asUInt
+  request.a:=in.req.asUInt
   pending.a:=request.q.asBool; pending.b:=inputPhase.q
   occupied.a:=outputPhase.q; occupied.b:=out.ack
   fire.d:=Cat(occupied.q,pending.q)
   inputPhase.trigger:=fire.q
   if(phaseDecoupled) outputPhase.trigger:=fire.q
-  payload.trigger:=fire.q; payload.d:=data.q
+  payload.trigger:=fire.q; payload.d:=data
   acknowledge.a:=inputPhase.q.asUInt; in.ack:=acknowledge.q.asBool
   offer.a:=outputPhase.q.asUInt
   out.req:=offer.q.asBool
@@ -99,7 +105,7 @@ abstract class NativeClickStage[A <: Data, B <: Data] private[bundled] (
   }
   out.bits:=payload.q.asTypeOf(outGen)
   private val capture=WireDefault(fire.q)
-  private val registerData=WireDefault(UInt(outGen.getWidth.W),data.q)
+  private val registerData=WireDefault(UInt(outGen.getWidth.W),data)
   contract.endpoint("capture",capture); contract.endpoint("register_data",registerData)
   contract.clickTiming("click",timing,phaseDecoupled,initial.nonEmpty)
 }
