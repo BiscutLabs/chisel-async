@@ -79,7 +79,33 @@ For exact registration signatures see
 | `ports.json` | Port ABI v2: independently reflected payload types, directions and protocol identity |
 | `contract.json` | Contract v3: hierarchy, reset domains, capacities, primitives, timing intent and hashes |
 | `design.hw.mlir` | Retained compiler IR for the supported lowering and inspection |
+| `structure.json` | Generation audit: primitive inventory, driven values and periodic-clock reachability |
 | `resolved.json` | Produced by successful validation, not by emission alone |
+
+`ExportDesign.emit` runs `StructureAudit` on the typed HW IR before publishing
+the contract. It checks the registered native primitive paths, models, parameters
+and ports; rejects missing drivers and unknown value-producing operations; and
+rejects a combinational path from a top-level `Clock` input to any native storage
+input, including transparent-latch data. Clock-free registered owners cannot
+contain ordinary clocked registers. Clocked crossings are explicit modules with
+clock inputs; their sequential Q outputs end combinational propagation.
+
+Clock roots propagate through hierarchy and gates. A child's `Clock` type alone
+does not reclassify a native event as periodic. The audit does not infer periodic
+behavior from a divider's Q or a Boolean input: clock generators must remain
+explicit integration boundaries, with their periodic outputs exposed as clock
+inputs to the audited design. Opaque external modules conservatively connect all
+inputs to all outputs for reachability. Their internals remain an integration
+obligation. Output-free compiler assertion observers are accepted only through a
+closed diagnostic vocabulary; arbitrary Verilog text and functional side effects
+are rejected.
+
+These checks use the pinned CIRCT HW/Comb/Seq vocabulary. An unsupported producer
+fails generation and needs a reviewed extension, rather than a guessed driver.
+They do not replace the dynamic checker below, protocol simulations, reset-domain
+crossing analysis or physical timing. Protected mapped cells, reviewed keeper-arc
+cuts and unused added cells are checked after technology mapping; generation
+cannot claim results for transformations that have not happened.
 
 With repository Python dependencies and Icarus available, run from the repository:
 

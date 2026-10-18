@@ -29,6 +29,7 @@ object ExportDesign {
     Files.createDirectories(destination)
     Files.deleteIfExists(destination.resolve("contract.json"))
     Files.deleteIfExists(destination.resolve("resolved.json"))
+    Files.deleteIfExists(destination.resolve("structure.json"))
     val chiselVersion = chisel3.BuildInfo.version
     val scalaVersion = scala.util.Properties.versionNumberString
     def qualification(condition: Boolean, message: String): Unit = if (!condition) {
@@ -81,6 +82,11 @@ object ExportDesign {
     // Hash compact insertion-ordered JSON. No filesystem paths or timestamps enter this identity.
     val semantic = ujson.write(manifest)
     val result = ujson.Obj("semantic_sha256" -> sha(semantic.getBytes(UTF_8)), "manifest" -> manifest)
+    val hw = Files.readString(destination.resolve("design.hw.mlir"), UTF_8)
+    val structure = StructureAudit.check(hw, module.name, contract)
+    structure("hw_sha256") = sha(hw.getBytes(UTF_8))
+    structure("contract_semantic_sha256") = result("semantic_sha256")
+    Files.writeString(destination.resolve("structure.json"), ujson.write(structure, indent = 2) + "\n", UTF_8)
     Files.writeString(destination.resolve("contract.json"), ujson.write(result, indent = 2) + "\n", UTF_8)
   }
 }
