@@ -206,6 +206,14 @@ def validate_manifest(document):
                         {p["name"]: (p["width"], p["direction"]) for p in primitive["ports"]} ==
                         {"a": (int(params["WIDTH"]), "input"), "q": (int(params["WIDTH"]), "output")},
                         "PASSIVE_ALLOWANCE_PORTS")
+            if primitive['model'] == 'ChiselAsyncResetlessClosingLatch_v1':
+                params=primitive['parameters']
+                require(set(params)=={'WIDTH','DELAY_FS'} and int(params['WIDTH'])>0 and
+                        0<=int(params['DELAY_FS'])<=2**63-1, 'RESETLESS_PAYLOAD_PARAMETERS')
+                require(primitive['view']=='behavioral' and
+                        {p['name']:(p['width'],p['direction']) for p in primitive['ports']}==
+                        {'closed':(1,'input'),'d':(int(params['WIDTH']),'input'),
+                         'q':(int(params['WIDTH']),'output')}, 'RESETLESS_PAYLOAD_PORTS')
             require(primitive["reset_domain"] == domain, "RESET_DOMAIN_MISMATCH")
             require(primitive["reset"] in endpoints and endpoints[primitive["reset"]]["width"] == 1,
                     "MISSING_RESET_ENDPOINT")
@@ -696,7 +704,7 @@ def probe_source(manifest, scopes, paired=False, *, endpoint_equalities=()):
             drivers += [(primitive["rtl_path"] + "." + p["name"], p["width"])
                         for p in primitive["ports"] if p["direction"] == "output"]
             reset_endpoint = next(e for e in node["endpoints"] if e["id"] == primitive["reset"])
-            if primitive["model"] == "ChiselAsyncPassiveDataAllowance_v1":
+            if primitive["model"] in ("ChiselAsyncPassiveDataAllowance_v1", "ChiselAsyncResetlessClosingLatch_v1"):
                 comparisons.append(f'if ({reset_endpoint["rtl_path"]} !== {node["rtl_path"]}.reset) '
                                    '$fatal(1, "RESET_BINDING_MISMATCH");')
             else:

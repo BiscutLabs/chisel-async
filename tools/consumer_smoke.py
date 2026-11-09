@@ -22,6 +22,7 @@ def main():
                      "chiselasync/sv/ChiselAsyncLatch_v1.sv", "chiselasync/sv/ChiselAsyncDelayLine_v1.sv",
                      "chiselasync/sv/ChiselAsyncAsymmetricC_v1.sv", "chiselasync/sv/ChiselAsyncControlGate_v1.sv",
                      "chiselasync/sv/ChiselAsyncClosingLatch_v1.sv", "chiselasync/sv/ChiselAsyncTimingMarker_v1.sv",
+                     "chiselasync/sv/ChiselAsyncResetlessClosingLatch_v1.sv",
                      "chiselasync/sv/ChiselAsyncAnd_v1.sv", "chiselasync/sv/ChiselAsyncProtocolGuard_v1.sv",
                      "chiselasync/sv/ChiselAsyncXor_v1.sv", "chiselasync/sv/ChiselAsyncToggle_v1.sv",
                      "chiselasync/sv/ChiselAsyncMutex_v1.sv", "chiselasync/sv/ChiselAsyncQdiMarker_v1.sv",

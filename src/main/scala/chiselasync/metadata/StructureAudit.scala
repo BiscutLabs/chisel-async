@@ -23,6 +23,7 @@ object StructureAudit {
     "comb.mods", "comb.replicate", "comb.shru", "comb.shrs", "comb.shl", "seq.to_clock", "seq.from_clock")
   private val constants = Set("hw.constant", "hw.aggregate_constant")
   private val storagePins = Map("ChiselAsyncLatch_v1" -> Set("enable"),
+    "ChiselAsyncResetlessClosingLatch_v1" -> Set("closed"),
     "ChiselAsyncClosingLatch_v1" -> Set("closed"), "ChiselAsyncEventRegister_v1" -> Set("trigger"),
     "ChiselAsyncPhaseRegister_v1" -> Set("trigger"), "ChiselAsyncToggle_v1" -> Set("trigger"),
     "ChiselAsyncCElement_v1" -> Set("a", "b"), "ChiselAsyncAsymmetricC_v1" -> Set("common", "rising", "falling"),

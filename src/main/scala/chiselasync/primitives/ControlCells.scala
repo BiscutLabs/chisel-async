@@ -61,3 +61,17 @@ class ClosingLatch(val width: Int, val delay: ModelTime) extends ExtModule(Map(
   val q = IO(Output(UInt(width.W)))
   addResource("/chiselasync/sv/ChiselAsyncClosingLatch_v1.sv")
 }
+
+/** Uninitialized payload storage; validity belongs to the owning handshake.
+  * No reset pin or implicit initialization. The enable/aperture and propagation
+  * obligations are the same as ClosingLatch, with a separate mapping identity.
+  */
+class ResetlessClosingLatch(val width: Int, val delay: ModelTime) extends ExtModule(Map(
+    "WIDTH" -> IntParam(width), "DELAY_FS" -> IntParam(delay.fs))) {
+  require(width > 0, "invalid resetless closing-latch width")
+  override def desiredName: String = "ChiselAsyncResetlessClosingLatch_v1"
+  val closed = IO(Input(Bool()))
+  val d = IO(Input(UInt(width.W)))
+  val q = IO(Output(UInt(width.W)))
+  addResource("/chiselasync/sv/ChiselAsyncResetlessClosingLatch_v1.sv")
+}

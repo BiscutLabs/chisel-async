@@ -76,6 +76,7 @@ limits, release policy, and the distinction between JAR and compiler compatibili
 | Need | Components |
 | --- | --- |
 | Typed transform or pipeline storage | `FourPhaseStage[A, B]`, `LongHoldBuffer`, `FourPhaseFifo` |
+| Transient BD payload without reset | [Opt-in stage/LongHold storage](docs/resetless-payload.md); control still resets (development) |
 | Broadcast, pairing, routing | `FourPhaseFork`, `FourPhaseRegFork`, `FourPhaseJoin`, controlled `FourPhaseMux`, `FourPhaseDemux`, exclusive `FourPhaseMerge` |
 | Competing producers | `FourPhaseArbiter` and its finite digital MUTEX model |
 | Transition-signalling interfaces | `TwoPhase` components and explicit phase converters |

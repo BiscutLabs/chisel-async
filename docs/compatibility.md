@@ -100,6 +100,11 @@ The development version `0.1.0-RC2-SNAPSHOT` adds retained-payload capture
 receipts. They do not change the existing buffered bridges, primitive model
 identifiers, contract v3, or port ABI v2. Their clock, valid, timing and reset
 requirements are in [clocked integration](clocked-integration.md#retained-payload-capture-receipts).
+
+Development also supports opt-in [resetless BD payload](resetless-payload.md)
+with the distinct `ChiselAsyncResetlessClosingLatch_v1` model identity. Existing
+constructors default to resettable storage. Downstream mappers must explicitly
+support the new identity before adopting it; no old binding is silently reused.
 These APIs are not present in the published RC1 artifacts. The snapshot does not
 inherit RC1's complete multi-host release qualification; a subsequent release
 requires the release workflow's own evidence.

@@ -69,7 +69,7 @@ object TimingConstraints {
       def phaseCells(t: ujson.Value, skip: Set[String]): Unit = {
         cells.toSeq.sortBy(_._1).filter { case(id,p) => p("view").str=="behavioral" && !skip(id) }.foreach { case(id,p) =>
           val (ports,arc) = p("model").str match {
-            case "ChiselAsyncClosingLatch_v1" => (Seq("d"),true)
+            case "ChiselAsyncClosingLatch_v1" | "ChiselAsyncResetlessClosingLatch_v1" => (Seq("d"),true)
             case "ChiselAsyncToggle_v1" => (Seq("trigger"),true)
             case "ChiselAsyncControlGate_v1" => (if(p("parameters")("OP").str=="2") Seq("a","b") else Seq("a"),false)
             case "ChiselAsyncXor_v1" => (Seq("a","b"),false)

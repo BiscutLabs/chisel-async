@@ -4,7 +4,7 @@ package chiselasync.bundled
 import chisel3._
 import chiselasync.core.{AsyncModule, ResetDomain}
 import chiselasync.metadata.{BundledTiming, DataAllowance, ModelTime}
-import chiselasync.primitives.{AsymmetricCElement, ClosingLatch, ControlGate, GateOperation, PassiveDataAllowance}
+import chiselasync.primitives.{AsymmetricCElement, ClosingLatch, ResetlessClosingLatch, ControlGate, GateOperation, PassiveDataAllowance}
 import chiselasync.protocol.{Channel, Payload}
 
 /** Furber-Day section 7, Fig. 15, with explicit request/data/output model delays.
@@ -13,7 +13,8 @@ import chiselasync.protocol.{Channel, Payload}
   */
 class FourPhaseStage[A <: Data, B <: Data](inGen: A, outGen: B, transform: A => B,
                                          val timing: BundledTiming,
-                                         domain: ResetDomain = new ResetDomain("root")) extends AsyncModule(domain) {
+                                         domain: ResetDomain = new ResetDomain("root"),
+                                         payloadStorage: PayloadStorage = PayloadStorage.Resettable) extends AsyncModule(domain) {
   val inputChannel = new Channel(inGen, resetDomain)
   val outputChannel = new Channel(outGen, resetDomain)
   val in = IO(Flipped(inputChannel.bundled))
@@ -65,11 +66,22 @@ class FourPhaseStage[A <: Data, B <: Data](inGen: A, outGen: B, transform: A => 
   private val acknowledge = state("acknowledge", timing.controls.acknowledge.model, 1, 1, commonInvert = 1)
   private val latchData = WireDefault(UInt(outGen.getWidth.W), data)
   private val latchClosed = WireDefault(Bool(), closed.q.asBool)
-  private val storage = Module(new ClosingLatch(outGen.getWidth, timing.latchDelay.model))
-  storage.reset := reset
-  contract.primitive("payload", storage, Map("WIDTH" -> BigInt(outGen.getWidth),
-    "DELAY_FS" -> BigInt(timing.latchDelay.model.fs)), resetRef,
-    s"${timing.mode}; transparent while closed=0; zero model aperture; inertial q propagation")
+  private val payload = chisel3.experimental.noPrefix { payloadStorage match {
+    case PayloadStorage.Resettable =>
+      val storage = Module(new ClosingLatch(outGen.getWidth, timing.latchDelay.model))
+      storage.reset := reset; storage.closed := latchClosed; storage.d := latchData
+      contract.primitive("payload", storage, Map("WIDTH" -> BigInt(outGen.getWidth),
+        "DELAY_FS" -> BigInt(timing.latchDelay.model.fs)), resetRef,
+        s"${timing.mode}; transparent while closed=0; zero model aperture; inertial q propagation")
+      storage.q
+    case PayloadStorage.Resetless =>
+      val storage = Module(new ResetlessClosingLatch(outGen.getWidth, timing.latchDelay.model))
+      storage.closed := latchClosed; storage.d := latchData
+      contract.primitive("payload", storage, Map("WIDTH" -> BigInt(outGen.getWidth),
+        "DELAY_FS" -> BigInt(timing.latchDelay.model.fs)), resetRef,
+        s"${timing.mode}; uninitialized/resetless payload; owning control resets; valid-qualified use only; zero model aperture; inertial q propagation")
+      storage.q
+  }}
 
   request.a := in.req.asUInt
   a.common := b.q.asUInt
@@ -82,12 +94,10 @@ class FourPhaseStage[A <: Data, B <: Data](inGen: A, outGen: B, transform: A => 
   acknowledge.falling := request.q
   b.common := acknowledge.q.asUInt
   b.falling := closed.q
-  storage.closed := latchClosed
-  storage.d := latchData
   offered.a := a.q.asUInt
   in.ack := acknowledge.q
   out.req := offered.q.asBool
-  out.bits := storage.q.asTypeOf(outGen)
+  out.bits := payload.asTypeOf(outGen)
 
   // Actual timing intent also resides in the preserved primitive parameters.
   contract.endpoint("latch_data", latchData)
@@ -101,5 +111,6 @@ class FourPhaseStage[A <: Data, B <: Data](inGen: A, outGen: B, transform: A => 
 }
 
 class LongHoldBuffer[T <: Data](gen: T, timing: BundledTiming,
-                                domain: ResetDomain = new ResetDomain("root"))
-    extends FourPhaseStage(gen, gen, (value: T) => value, timing, domain)
+                                domain: ResetDomain = new ResetDomain("root"),
+                                payloadStorage: PayloadStorage = PayloadStorage.Resettable)
+    extends FourPhaseStage(gen, gen, (value: T) => value, timing, domain, payloadStorage)

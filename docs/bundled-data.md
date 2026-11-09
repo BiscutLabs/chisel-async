@@ -140,6 +140,10 @@ for how these obligations are carried and checked.
 
 ## Passive payload simulation policy
 
+Transient `FourPhaseStage` and `LongHoldBuffer` payloads can independently select
+`payloadStorage = PayloadStorage.Resetless`. Defaults and control reset are
+unchanged; see [validity and mapping obligations](resetless-payload.md).
+
 Set `dataAllowance = DataAllowance.Passive` in the timing policy to use the
 [reset-free whole-transform allowance](passive-data-allowance.md). The default
 retains the legacy reset-masked data model. Audit invalid data and physical

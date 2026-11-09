@@ -28,6 +28,7 @@ components, connect different protocols and check your design's timing assumptio
 | [Mutex ownership and physical use](mutex.md) | Persistent requests, grant release, reset/rearm and analog binding obligations |
 | [Timing and export](timing-and-export.md) | Delay bounds, strict inequalities, compiler configuration, metadata and validation |
 | [Passive payload allowances](passive-data-allowance.md) | Opt-in reset-free simulation allowance, physical alias, invalid-data and setup/hold obligations |
+| [Resetless payload storage](resetless-payload.md) | Opt-in transient BD latches, invalid-data qualification and separate mapping identity |
 | [ASIC mapping](asic-mapping.md) | Bind every primitive to a technology adapter and emit a separate synthesis input set |
 | [GF180 reference](gf180-reference.md) | Prepare trial adapters and measure supplied Liberty corners; identify the missing custom cells |
 | [Trace formats](trace-format.md) | Interpret retained observations without confusing campaign formats |

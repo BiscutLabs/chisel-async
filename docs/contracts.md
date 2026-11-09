@@ -27,6 +27,12 @@ old request cannot be accepted twice. Idle latch data can track inputs and has n
 validity until offered. `FourPhaseBuffer` implements a separate zero-delay
 behavioral storage contract.
 
+Opt-in `PayloadStorage.Resetless` leaves stage payload uninitialized and does not
+clear it on reset. Control still resets empty; invalid data may be stale, unknown
+or changing. Every consumer must qualify captures and effects with the handshake.
+Default storage and initialized tokens retain their existing semantics. See the
+[resetless payload contract](resetless-payload.md) before opting in.
+
 ## Two-phase bundled data
 
 Either request edge offers a token. The consumer acknowledges by matching request

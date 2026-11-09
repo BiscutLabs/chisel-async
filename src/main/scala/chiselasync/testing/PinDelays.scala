@@ -24,7 +24,8 @@ private[testing] object PinDelays {
       require(p("view").str == "behavioral", "PIN_DELAY_REQUIRES_ACTIVE_CELL")
       require(s.pin != "reset" && p("ports").arr.exists(v => v("name").str == s.pin && v("direction").str == "input"),
         s"PIN_DELAY_REQUIRES_INPUT: ${s.cell}.${s.pin}")
-      if (s.closure) require(p("model").str == "ChiselAsyncClosingLatch_v1" && s.pin == "closed", "CLOSURE_REQUIRES_CLOSING_LATCH")
+      if (s.closure) require(Set("ChiselAsyncClosingLatch_v1", "ChiselAsyncResetlessClosingLatch_v1")(p("model").str) &&
+        s.pin == "closed", "CLOSURE_REQUIRES_CLOSING_LATCH")
       Target(s, p)
     }
   }
