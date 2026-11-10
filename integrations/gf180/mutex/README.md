@@ -1,6 +1,6 @@
 # Experimental GF180 Mutex
 
-This directory provides a **schematic candidate**, not a qualified ASIC cell.
+This directory provides an **experimental schematic and layout**, not a qualified ASIC cell.
 `mutex.spice` has a reset-qualified cross-coupled NAND core, a differential
 metastability filter, and a loaded-output interlock. The filter topology
 follows [Zhang et al., ASYNC 2015, figure 3](https://www.inf.pucrs.br/~calazans/publications/2015-ASYNC-Mutex.pdf).
@@ -74,9 +74,10 @@ result from the same fault.
 
 The generic GF180 preparer continues to list Mutex as missing. This candidate is
 not yet available as a supported binding and must not be silently selected by a
-mapper. There is no layout, LEF, GDS, extraction or Liberty deliverable; therefore
-there are no layout hashes to report. The SPICE subcircuit is the authoritative
-schematic connectivity. All transistor sizing is experimental.
+mapper. The optional layout flow below generates GDS and distributed RC, with hashes in
+its run receipt. LEF and conditional Liberty characterization remain open. The
+SPICE subcircuit is the authoritative schematic connectivity. All transistor
+sizing is experimental.
 
 Before a physical binding is accepted, review the circuit, complete load/slew,
 release/handover and reset characterization with receiver thresholds, establish
@@ -85,3 +86,68 @@ well/layout constraints, run DRC/LVS, and repeat checks on the extracted netlist
 The five-corner schematic sweep deliberately does not claim Monte Carlo, aging,
 noise, supply-collapse behavior or post-layout qualification. A finite successful
 sweep cannot prove zero metastability risk.
+
+
+## Exploratory layout
+
+`layout.py` places the unchanged 46-transistor circuit with shared well contacts
+and routes it on Metal2–4. Its 28 × 35.28 µm integration outline costs
+**987.84 µm² (0.00098784 mm²)**. Device halves are mirrored; routes are not
+assumed electrically matched. Internal net labels make extraction auditable.
+No generated binary or PDK is shipped, and no mapping binding is enabled.
+
+The external-tool flow uses GF180D (5LM, 11K top metal). Reproduced inputs:
+
+| Input | Revision |
+|---|---|
+| [open_pdks](https://github.com/fossi-foundation/open-pdks) | `a7f707ac58e5c55cf8d6f461aea63449c20a4f06` |
+| [GF180 physical-verification decks](https://github.com/efabless/globalfoundries-pdk-libs-gf180mcu_fd_pv) | `05e7b6adf19edf942969c1c9625f02fd87874f06` |
+| Magic / Netgen / KLayout | 8.3.623 / 1.5.316 / 0.30.7 |
+
+Prepare `gf180mcuD.tech`, `gf180mcuD.tcl`, `common.tcl` and the Netgen setup
+from that open_pdks revision. Preprocessor definitions: `TECHNAME=gf180mcuD`,
+`METALS5`, `MIM`, `THICKMET1P1`, `HRPOLY1K`; use the installation's actual
+`STAGING_PATH`. Run in the native environment containing the external tools:
+
+```text
+python integrations/gf180/mutex/check_layout.py --magic-pdk /path/to/prepared/magic --pv-pdk /path/to/gf180-pv --netgen-setup /path/to/gf180mcu_setup.tcl --magic /path/to/magic --klayout /path/to/klayout --netgen /path/to/netgen --output build/mutex-layout
+python integrations/gf180/mutex/layout_samples.py --model-dir /path/to/models --circuit build/mutex-layout/extracted-rc.spice --lvs-circuit build/mutex-layout/ca_mutex_gf180_candidate.spice --output build/mutex-rc --jobs 8
+```
+
+`check_layout.py` checks exported GDS with the foundry FEOL, BEOL, off-grid and
+connectivity rules, and uses both KLayout and Netgen LVS. KLayout receives an
+equivalent MOS-element schematic view and simplifies parallel devices on both
+sides for LVS only. The analog view retains every transistor. A thin wire and a
+wrong transistor gate must fail their respective checks. RC collapse must preserve
+device terminals, dimensions and diffusion geometry. One receipt hashes the run's
+inputs, tools and outputs.
+
+The foundry check reports 649 rule categories with zero violations. It caught
+20 implant-width errors at the initial well edges that Magic missed; expanding
+the well within the existing outline fixes them. Extraction contains 46 MOS,
+303 resistors and 451 capacitors. The largest 1.93 Mohm branch belongs to the
+substrate network and remains in simulation. RC values are nominal, not corner
+bounds; density/fill, antenna and latch-up signoff are still excluded.
+
+`layout_samples.py` uses the existing grant-safety and sequence oracles on the
+external pins with 5/50 fF loads and 50 ps/5 ns input slews. It tests both
+handover directions, contention, reset/rearm, and a half-timestep repeat.
+Asserting reset on a live grant is a destructive POR test, never a legal way
+to stop an operational handshake. Finite samples do not establish reliability,
+a maximum arbitration time, mismatch tolerance or immunity to coupled noise.
+LEF, conditional uncontended/reset/release Liberty arcs, min/max RC, variation,
+noise and the system reliability target remain required before adoption.
+
+
+The first reviewed run passed 462 extracted-RC samples across the five PVT
+corners, including two half-timestep repeats. Sampled uncontended propagation
+was 0.334–1.325 ns, handover quiet time was at least 0.891 ns, and active-reset
+clearance was at most 2.094 ns. The half-step timing changes were below 0.041 ps.
+These are sample ranges with nominal RC, not guaranteed timing bounds.
+All 20 simultaneous-request reset cases had resolved before reset assertion;
+reset from an unresolved metastable state therefore remains untested.
+
+After changing a checker, `layout_samples.py --replay /path/to/report.json
+--output /path/to/fresh-output` rechecks the saved waves without new SPICE runs.
+It verifies the complete case inventory, original execution, source/deck/log/wave
+hashes and reconstructed stimulus, then recomputes the half-step comparison.
