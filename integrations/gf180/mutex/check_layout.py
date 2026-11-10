@@ -30,6 +30,8 @@ def main():
     hashes = {str(p): sha(p) for p in inputs}
     before = {p: (p.stat().st_size,p.stat().st_mtime_ns) for p in inputs}
     generate(out, pdk)
+    empty_rc=out/'empty.magicrc'
+    empty_rc.write_text('')
     receipt = dict(status='running', physical_qualification=False, inputs_sha256=hashes,
                    commands=[], results={}, exclusions=['density/fill', 'antenna',
                    'latch-up signoff', 'RC corners', 'electrical qualification'])
@@ -43,7 +45,7 @@ def main():
             if r.returncode:
                 raise ValueError('MUTEX_TOOL_FAILED:'+name)
             return log
-        log = run('magic','magic',['-dnull','-noconsole','-rcfile','/dev/null',out/'layout.tcl'])
+        log = run('magic','magic',['-dnull','-noconsole','-rcfile',empty_rc,out/'layout.tcl'])
         text = log.read_text()
         if 'No errors found.' not in text or 'DRC_ERRORS \n' not in text:
             raise ValueError('MUTEX_MAGIC_DRC')
@@ -108,7 +110,7 @@ layout.write(mutant_gds)
         (out/'rc.tcl').write_text(head + f'\nload {TOP}\nselect top cell\nextract all\n'
             'extresist all\next2spice lvs\next2spice hierarchy off\next2spice subcircuit top on\n'
             'ext2spice extresist on\next2spice cthresh 0\next2spice -o extracted-rc.spice\nquit -noprompt\n')
-        run('rc','magic',['-dnull','-noconsole','-rcfile','/dev/null',out/'rc.tcl'])
+        run('rc','magic',['-dnull','-noconsole','-rcfile',empty_rc,out/'rc.tcl'])
         receipt['results']['rc_connectivity'] = rc_connectivity(out/(TOP+'.spice'),out/'extracted-rc.spice')
         receipt['results']['negative_controls'] = ['M1.1 thin wire', 'wrong MOS gate']
         receipt['results']['geometry'] = json.loads((out/'gds-geometry.json').read_text())
