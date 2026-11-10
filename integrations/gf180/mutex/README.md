@@ -75,7 +75,8 @@ result from the same fault.
 The generic GF180 preparer continues to list Mutex as missing. This candidate is
 not yet available as a supported binding and must not be silently selected by a
 mapper. The optional layout flow below generates GDS and distributed RC, with hashes in
-its run receipt. LEF and conditional Liberty characterization remain open. The
+its run receipt. Experimental LEF and scenario-only Liberty views are available;
+production qualification remains open. The
 SPICE subcircuit is the authoritative schematic connectivity. All transistor
 sizing is experimental.
 
@@ -91,7 +92,7 @@ sweep cannot prove zero metastability risk.
 ## Exploratory layout
 
 `layout.py` places the unchanged 46-transistor circuit with shared well contacts
-and routes it on Metal2–4. Its 28 × 35.28 µm integration outline costs
+and routes it on Metal2–4, with seven Metal5 port landings. Its 28 × 35.28 µm integration outline costs
 **987.84 µm² (0.00098784 mm²)**. Device halves are mirrored; routes are not
 assumed electrically matched. Internal net labels make extraction auditable.
 No generated binary or PDK is shipped, and no mapping binding is enabled.
@@ -122,7 +123,7 @@ wrong transistor gate must fail their respective checks. RC collapse must preser
 device terminals, dimensions and diffusion geometry. One receipt hashes the run's
 inputs, tools and outputs.
 
-The foundry check reports 649 rule categories with zero violations. It caught
+The first foundry check reports 649 rule categories with zero violations. It caught
 20 implant-width errors at the initial well edges that Magic missed; expanding
 the well within the existing outline fixes them. Extraction contains 46 MOS,
 303 resistors and 451 capacitors. The largest 1.93 Mohm branch belongs to the
@@ -135,8 +136,9 @@ handover directions, contention, reset/rearm, and a half-timestep repeat.
 Asserting reset on a live grant is a destructive POR test, never a legal way
 to stop an operational handshake. Finite samples do not establish reliability,
 a maximum arbitration time, mismatch tolerance or immunity to coupled noise.
-LEF, conditional uncontended/reset/release Liberty arcs, min/max RC, variation,
-noise and the system reliability target remain required before adoption.
+Accepted timing views, min/max RC, variation, noise and a demonstrated system
+reliability target remain required before adoption. The experimental views below do not
+enable a mapper binding.
 
 
 The first reviewed run passed 462 extracted-RC samples across the five PVT
@@ -151,3 +153,62 @@ After changing a checker, `layout_samples.py --replay /path/to/report.json
 --output /path/to/fresh-output` rechecks the saved waves without new SPICE runs.
 It verifies the complete case inventory, original execution, source/deck/log/wave
 hashes and reconstructed stimulus, then recomputes the half-step comparison.
+
+## Experimental physical views
+
+The original 0.4 µm Metal4 ports failed OpenROAD pin access with conservative
+internal obstructions. Seven Via4 connections and 0.8 µm Metal5 landing pads
+fix access without changing the transistor circuit or the integration outline.
+The old extraction and timing samples above are historical for that earlier
+geometry. Re-extract and rerun the loaded campaign after changing the ports.
+
+```text
+python integrations/gf180/mutex/views.py --layout build/mutex-layout --klayout /path/to/klayout --openroad /path/to/openroad --tech-lef /path/to/gf180mcu_fd_sc_mcu7t5v0__nom.tlef --output build/mutex-views
+python integrations/gf180/mutex/timing_views.py --model-dir /path/to/models --circuit build/mutex-layout/extracted-rc.spice --lvs-circuit build/mutex-layout/ca_mutex_gf180_candidate.spice --output build/mutex-timing --jobs 8
+```
+
+`views.py` requires a successful layout receipt with unchanged GDS/geometry. It
+checks every port against real metal and its label, blocks all Metal1–4, and
+rejects undeclared Metal5 geometry. The macro is `CLASS BLOCK`, without a row
+site or assumed symmetry. The access fixture routes all five signals and adds
+explicit Metal5 VDD/VSS straps. Final detailed-router DRC must be zero; coarse
+global-route congestion in this tiny fixture is not an acceptance result. This
+is a pin-access check, not full-chip routing, supply integrity or antenna signoff.
+
+`timing_views.py` emits **characterization-only scenario libraries**, with no
+Boolean output function or contention bound. The `when` expressions cannot
+establish a prior idle state: the caller must prove that separately. Idle
+request/release requires both grants and requests initially low and the opposite
+request held low. Reset assertion starts from a retained uncontended winner;
+it says nothing about reset from an unresolved state or about reset release.
+Never use these libraries as an ordinary, complete arbiter STA model.
+
+The grid uses five transistor corners and nominal distributed RC. Winning-output
+loads are 5/20/50 fF; the other grant has a fixed 50 fF load. Input ramps are
+0.05/0.5/5 ns, corresponding to 0.03/0.3/3 ns at the declared 20–80% slew
+thresholds. Propagation is measured at 50%; input capacitance comes from edge
+charge after subtracting pre-edge leakage. Every point checks the full sampled
+waveform for held grants, rails and threshold recrossing. Fast-edge/high-load
+cases get a half-step repeat. A first crossing alone is insufficient.
+
+Liberty records maximum slew/load limits. `views.check_timing_point` rejects
+missing scenario state and use outside the actual sampled grid, including a
+different load on the other grant. It does not prove a caller's initial-state
+assertion. Interpolation, extrapolation, minimum pulses, power, mismatch, noise,
+unresolved reset and min/max RC are unqualified. `dont_use` prevents synthesis
+selection; it does not make unrestricted timing use safe.
+
+The revised landing-pad layout passes the same 649-category foundry DRC and both
+LVS checks; its nominal extraction has 46 MOS, 304 resistors and 452 capacitors.
+All 462 loaded-RC cases pass again. The separate timing grid passes 180 cases plus
+four half-step repeats. Isolated request-to-grant propagation at 50% is
+0.299–1.194 ns, and measured effective input capacitance is 10.16–13.86 fF.
+These are observed scenario ranges, not guaranteed bounds. Maximum timing changes
+under timestep refinement are below 0.04 ps.
+
+Add `--timing-report build/mutex-timing/report.json --sta /path/to/sta` to
+`views.py` to check every grid-point lookup in OpenSTA. It binds the timing
+report's extracted circuit to the checked layout, rejects missing/duplicate
+cases or missing refinement, and compares the parsed tables with the measured
+values. The run checks all 180 points; a deliberately shortened table entry fails.
+This validates the tables' transcription, not their unrestricted applicability.

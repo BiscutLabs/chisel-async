@@ -157,8 +157,13 @@ def generate(out, pdk, source=None):
             square(f'metal{z+2}',x*PITCH,y*PITCH,.4)
             lines.append(f'label {net} center metal{z+2}')
     for i,name in enumerate(ports):
-        x,y=pincoords[name];square('metal4',x*PITCH,y*PITCH,.4)
-        lines.extend([f'label {name} center metal4',f'port make {i+1}'])
+        x,y=pincoords[name]
+        # Access from the chip's top-metal routing without entering the internal
+        # M1--M4 obstruction. The original .4 um M4 landings were not routable
+        # under via-in-pin constraints at arbitrary placement/track alignment.
+        via(x*PITCH,y*PITCH,4)
+        square('metal5',x*PITCH,y*PITCH,.8)
+        lines.extend([f'label {name} center metal5',f'port make {i+1}'])
     script=script[:-1]+device_scripts+script[-1:]+lines+[f'flatten {TOP}',f'load {TOP}',f'select top cell',f'save {TOP}','drc check','drc catchup','puts "DRC_ERRORS [drc listall why]"',
         'extract all','ext2spice lvs','ext2spice hierarchy off','ext2spice subcircuit top on','ext2spice',f'gds write {TOP}.gds','quit -noprompt']
     out.mkdir(parents=True,exist_ok=False);(out/'layout.tcl').write_text('\n'.join(script)+'\n')
@@ -167,7 +172,7 @@ def generate(out, pdk, source=None):
     flat += ['X'+d['name']+' '+' '.join(d['nodes'])+' '+d['kind']+f' w={d["w"]}u l={d["l"]}u' for d in devices]
     (out/'schematic.spice').write_text('\n'.join(flat+['.ends','']))
     (out/'schematic-mos.spice').write_text('\n'.join('M'+r[1:] if r.startswith('X') else r for r in flat+['.ends','']))
-    (out/'geometry.json').write_text(json.dumps(dict(status='unqualified', outline_um=OUTLINE, area_mm2=OUTLINE[0]*OUTLINE[1]/1e6, ports=pincoords, pitch_um=PITCH, wire_width_um=.4),indent=2)+'\n')
+    (out/'geometry.json').write_text(json.dumps(dict(status='unqualified', outline_um=OUTLINE, area_mm2=OUTLINE[0]*OUTLINE[1]/1e6, ports=pincoords, pitch_um=PITCH, wire_width_um=.4, pin_width_um=.8, pin_layer=5),indent=2)+'\n')
     return dict(devices=len(placed),nets=len(terminals),edges=sum(map(len,paths.values())))
 
 def main():

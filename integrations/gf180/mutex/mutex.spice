@@ -1,6 +1,7 @@
 * SPDX-License-Identifier: Apache-2.0
 * Experimental GF180 3.3 V full-custom Mutex, schematic revision 3.
-* NOT QUALIFIED: no layout, extraction, reliability or production timing model.
+* NOT QUALIFIED: experimental layout/extraction in this integration; no reliability
+* qualification or production timing model. See README.md for evidence and limits.
 * Core/filter topology: Zhang et al., ASYNC 2015, figure 3 (Seitz-style filter).
 * Reset qualification, dimensions and output buffers are this trial's adaptation.
 * GF180 nfet_03v3/pfet_03v3 subcircuits must be supplied by the caller.
